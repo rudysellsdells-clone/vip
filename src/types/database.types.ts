@@ -13,6 +13,7 @@ export interface Database {
         Row: { id: string; email: string | null; full_name: string | null; timezone: string | null; created_at: string; updated_at: string };
         Insert: { id: string; email?: string | null; full_name?: string | null; timezone?: string | null; created_at?: string; updated_at?: string };
         Update: { email?: string | null; full_name?: string | null; timezone?: string | null; updated_at?: string };
+        Relationships: [];
       };
       campaigns: {
         Row: {
@@ -69,6 +70,7 @@ export interface Database {
           status?: "draft" | "asset_pack_generated" | "in_review" | "approved" | "active" | "archived";
           updated_at?: string;
         };
+        Relationships: [];
       };
       generated_assets: {
         Row: {
@@ -108,16 +110,19 @@ export interface Database {
           parent_asset_id?: string | null;
           updated_at?: string;
         };
+        Relationships: [];
       };
       approvals: {
         Row: { id: string; user_id: string; asset_id: string; status: "pending" | "approved" | "rejected" | "revision_requested"; notes: string | null; approved_at: string | null; created_at: string };
         Insert: { id?: string; user_id: string; asset_id: string; status: "pending" | "approved" | "rejected" | "revision_requested"; notes?: string | null; approved_at?: string | null; created_at?: string };
         Update: { status?: "pending" | "approved" | "rejected" | "revision_requested"; notes?: string | null; approved_at?: string | null };
+        Relationships: [];
       };
       activity_log: {
         Row: { id: string; user_id: string; activity_type: string; title: string; description: string | null; metadata: Json; created_at: string };
         Insert: { id?: string; user_id: string; activity_type: string; title: string; description?: string | null; metadata?: Json; created_at?: string };
         Update: never;
+        Relationships: [];
       };
     };
     Views: Record<string, never>;

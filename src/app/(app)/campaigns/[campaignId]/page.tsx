@@ -2,7 +2,9 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 type PageProps = {
-  params: Promise<{ campaignId: string }>;
+  params: Promise<{
+    campaignId: string;
+  }>;
 };
 
 export default async function CampaignDetailPage({ params }: PageProps) {
@@ -10,19 +12,30 @@ export default async function CampaignDetailPage({ params }: PageProps) {
   const supabase = await createClient();
 
   const {
-    data: { user }
+    data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) redirect("/login");
+  if (!user) {
+    redirect("/login");
+  }
 
   const { data: campaign } = await supabase
     .from("campaigns")
-    .select("*, generated_assets(*)")
+    .select("*")
     .eq("id", campaignId)
     .eq("user_id", user.id)
     .single();
 
-  if (!campaign) redirect("/dashboard");
+  if (!campaign) {
+    redirect("/dashboard");
+  }
+
+  const { data: assets } = await supabase
+    .from("generated_assets")
+    .select("*")
+    .eq("campaign_id", campaign.id)
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: true });
 
   return (
     <main className="mx-auto max-w-5xl space-y-8 p-8">
@@ -33,32 +46,25 @@ export default async function CampaignDetailPage({ params }: PageProps) {
       </section>
 
       <section className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border bg-white p-5">
+        <div className="rounded-2xl border p-5">
           <p className="text-sm text-slate-500">Buyer Segment</p>
           <p className="mt-2 font-semibold">{campaign.buyer_segment}</p>
         </div>
-        <div className="rounded-2xl border bg-white p-5">
+        <div className="rounded-2xl border p-5">
           <p className="text-sm text-slate-500">Goal</p>
           <p className="mt-2 font-semibold">{campaign.goal}</p>
         </div>
-        <div className="rounded-2xl border bg-white p-5">
+        <div className="rounded-2xl border p-5">
           <p className="text-sm text-slate-500">Status</p>
           <p className="mt-2 font-semibold">{campaign.status}</p>
         </div>
       </section>
 
-      <section className="rounded-2xl border bg-white p-6">
-        <h2 className="text-xl font-semibold">Sprint 1 Result</h2>
-        <p className="mt-2 text-sm text-slate-600">
-          This campaign is now saved in Supabase. Sprint 2 will add the Marketing Asset Pack generator.
-        </p>
-      </section>
-
-      <section className="rounded-2xl border bg-white p-6">
+      <section className="rounded-2xl border p-6">
         <h2 className="text-xl font-semibold">Generated Assets</h2>
         <div className="mt-4 space-y-4">
-          {campaign.generated_assets?.length ? (
-            campaign.generated_assets.map((asset) => (
+          {assets?.length ? (
+            assets.map((asset) => (
               <article key={asset.id} className="rounded-xl border p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -76,7 +82,7 @@ export default async function CampaignDetailPage({ params }: PageProps) {
             ))
           ) : (
             <p className="text-sm text-slate-500">
-              No assets generated yet. That is expected in Sprint 1.
+              No assets generated yet. Sprint 2 will activate generation.
             </p>
           )}
         </div>
