@@ -1,14 +1,51 @@
 import { NextResponse } from "next/server";
-import { getGalaxyAiRun } from "@/lib/galaxyai/client";
-import { normalizeGalaxyAiStatus } from "@/lib/galaxyai/types";
 import { createClient } from "@/lib/supabase/server";
+import { getGalaxyAiRun } from "@/lib/galaxyai/client";
 import { logActivity } from "@/lib/security/auditLog";
+import type { Json } from "@/types/database.types";
 
 type RouteContext = {
   params: Promise<{
     runId: string;
   }>;
 };
+
+function toJson(value: unknown): Json {
+  return JSON.parse(JSON.stringify(value)) as Json;
+}
+
+function normalizeGalaxyAiStatus(status: unknown) {
+  if (typeof status !== "string") {
+    return "running";
+  }
+
+  const normalized = status.toLowerCase();
+
+  if (
+    normalized === "queued" ||
+    normalized === "running" ||
+    normalized === "completed" ||
+    normalized === "failed" ||
+    normalized === "canceled"
+  ) {
+    return normalized;
+  }
+
+  return "running";
+}
+
+function getFinishedAt(galaxyRun: Record<string, unknown>) {
+  const possibleValues = [
+    galaxyRun.finishedAt,
+    galaxyRun.finished_at,
+    galaxyRun.completedAt,
+    galaxyRun.completed_at,
+  ];
+
+  const match = possibleValues.find((value) => typeof value === "string");
+
+  return typeof match === "string" ? match : new Date().toISOString();
+}
 
 export async function GET(_request: Request, context: RouteContext) {
   try {
@@ -24,29 +61,49 @@ export async function GET(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data: localRun, error: localError } = await supabase
+    let { data: localRun, error: localRunError } = await supabase
       .from("galaxyai_runs")
       .select("*")
+      .eq("id", runId)
       .eq("user_id", user.id)
-      .or(`id.eq.${runId},galaxy_run_id.eq.${runId}`)
-      .single();
+      .maybeSingle();
 
-    if (localError || !localRun?.galaxy_run_id) {
+    if (!localRun && !localRunError) {
+      const fallbackResult = await supabase
+        .from("galaxyai_runs")
+        .select("*")
+        .eq("galaxy_run_id", runId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      localRun = fallbackResult.data;
+      localRunError = fallbackResult.error;
+    }
+
+    if (localRunError) {
+      return NextResponse.json({ error: localRunError.message }, { status: 400 });
+    }
+
+    if (!localRun || !localRun.galaxy_run_id) {
       return NextResponse.json({ error: "GalaxyAI run not found." }, { status: 404 });
     }
 
     const galaxyRun = await getGalaxyAiRun(localRun.galaxy_run_id);
-    const status = normalizeGalaxyAiStatus(galaxyRun.status);
+    const galaxyRunRecord = galaxyRun as Record<string, unknown>;
+    const status = normalizeGalaxyAiStatus(galaxyRunRecord.status);
+    const isFinished =
+      status === "completed" || status === "failed" || status === "canceled";
 
     const { data: updatedRun, error: updateError } = await supabase
       .from("galaxyai_runs")
       .update({
         status,
-        output: galaxyRun,
-        error: galaxyRun.error ?? null,
-        completed_at: status === "completed" || status === "failed" || status === "canceled"
-          ? galaxyRun.finishedAt ?? new Date().toISOString()
-          : null,
+        output: toJson(galaxyRun),
+        error:
+          typeof galaxyRunRecord.error === "string"
+            ? galaxyRunRecord.error
+            : null,
+        completed_at: isFinished ? getFinishedAt(galaxyRunRecord) : null,
       })
       .eq("id", localRun.id)
       .eq("user_id", user.id)
@@ -61,15 +118,23 @@ export async function GET(_request: Request, context: RouteContext) {
       userId: user.id,
       activityType: "galaxyai_run_status_checked",
       title: "GalaxyAI run status checked",
-      description: `Run ${localRun.galaxy_run_id} is ${status}.`,
-      metadata: { localRunId: localRun.id, galaxyRunId: localRun.galaxy_run_id, status },
+      description: `GalaxyAI run is ${status}.`,
+      metadata: {
+        localRunId: localRun.id,
+        galaxyRunId: localRun.galaxy_run_id,
+        status,
+      },
     });
 
     return NextResponse.json({ run: updatedRun, galaxyRun });
   } catch (error) {
+    if (error instanceof Error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unexpected error checking GalaxyAI run." },
-      { status: 400 }
+      { error: "Unexpected error checking GalaxyAI run." },
+      { status: 500 }
     );
   }
 }
