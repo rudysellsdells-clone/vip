@@ -17,6 +17,13 @@ export type GalaxyAiRunStatus =
   | "failed"
   | "canceled";
 
+export type NormalizedGalaxyAiRunStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "canceled";
+
 export type GalaxyAiNodeRun = {
   id: string;
   nodeId: string;
@@ -63,3 +70,25 @@ export type GalaxyAiMediaItem = {
 export type GalaxyAiWorkflowMediaResponse = {
   items: GalaxyAiMediaItem[];
 };
+
+export function normalizeGalaxyAiStatus(
+  status: unknown
+): NormalizedGalaxyAiRunStatus {
+  if (typeof status !== "string") {
+    return "running";
+  }
+
+  const normalized = status.toLowerCase();
+
+  if (
+    normalized === "queued" ||
+    normalized === "running" ||
+    normalized === "completed" ||
+    normalized === "failed" ||
+    normalized === "canceled"
+  ) {
+    return normalized;
+  }
+
+  return "running";
+}
