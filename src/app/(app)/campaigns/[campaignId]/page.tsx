@@ -1,11 +1,19 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { GenerateAssetPackButton } from "@/components/campaigns/GenerateAssetPackButton";
 
 type PageProps = {
   params: Promise<{
     campaignId: string;
   }>;
 };
+
+function formatAssetType(type: string) {
+  return type
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
 
 export default async function CampaignDetailPage({ params }: PageProps) {
   const { campaignId } = await params;
@@ -60,6 +68,8 @@ export default async function CampaignDetailPage({ params }: PageProps) {
         </div>
       </section>
 
+      <GenerateAssetPackButton campaignId={campaign.id} hasAssets={Boolean(assets?.length)} />
+
       <section className="rounded-2xl border p-6">
         <h2 className="text-xl font-semibold">Generated Assets</h2>
         <div className="mt-4 space-y-4">
@@ -68,21 +78,21 @@ export default async function CampaignDetailPage({ params }: PageProps) {
               <article key={asset.id} className="rounded-xl border p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-sm text-slate-500">{asset.asset_type}</p>
+                    <p className="text-sm text-slate-500">{formatAssetType(asset.asset_type)}</p>
                     <h3 className="font-semibold">{asset.title}</h3>
                   </div>
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs">
                     {asset.status}
                   </span>
                 </div>
-                <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">
+                <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">
                   {asset.content}
                 </p>
               </article>
             ))
           ) : (
             <p className="text-sm text-slate-500">
-              No assets generated yet. Sprint 2 will activate generation.
+              No assets generated yet. Click Generate Asset Pack to create the first set of drafts.
             </p>
           )}
         </div>
