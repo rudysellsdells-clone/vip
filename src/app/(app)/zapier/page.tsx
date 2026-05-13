@@ -63,7 +63,10 @@ function canExecuteGmailDraft(action: {
   action_name: string;
   status: string;
 }) {
-  return action.action_name === "Gmail:draft_v2" && action.status === "waiting_approval";
+  return (
+    action.action_name === "Gmail:draft_v2" &&
+    (action.status === "waiting_approval" || action.status === "failed")
+  );
 }
 
 export default async function ZapierPage() {
@@ -178,7 +181,7 @@ export default async function ZapierPage() {
       <section className="rounded-2xl border bg-white p-6 shadow-sm">
         <h2 className="text-xl font-semibold">Prepared Zapier Actions</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Gmail draft actions can now be executed safely. Other apps remain preparation-only.
+          Gmail draft actions can now be executed safely. Failed Gmail drafts can be retried.
         </p>
 
         <div className="mt-6 space-y-3">
@@ -219,7 +222,10 @@ export default async function ZapierPage() {
                       </div>
 
                       {canExecuteGmailDraft(action) ? (
-                        <ExecuteGmailDraftButton toolRunId={action.id} />
+                        <ExecuteGmailDraftButton
+                          toolRunId={action.id}
+                          isRetry={action.status === "failed"}
+                        />
                       ) : null}
                     </div>
                   </div>

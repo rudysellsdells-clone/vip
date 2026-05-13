@@ -13,6 +13,8 @@ type PreparedAction = {
   params?: unknown;
 };
 
+const RETRIABLE_GMAIL_DRAFT_STATUSES = ["waiting_approval", "failed"] as const;
+
 function toJson(value: unknown): Json {
   return JSON.parse(JSON.stringify(value)) as Json;
 }
@@ -118,9 +120,15 @@ export async function POST(request: Request) {
       );
     }
 
-    if (toolRun.status !== "waiting_approval") {
+    if (
+      !RETRIABLE_GMAIL_DRAFT_STATUSES.includes(
+        toolRun.status as (typeof RETRIABLE_GMAIL_DRAFT_STATUSES)[number]
+      )
+    ) {
       return NextResponse.json(
-        { error: "Only waiting_approval Gmail draft actions can be executed." },
+        {
+          error: `This Gmail draft action cannot be executed from status "${toolRun.status}". Prepare a new action or retry a failed one.`,
+        },
         { status: 400 }
       );
     }
@@ -157,6 +165,7 @@ export async function POST(request: Request) {
       .update({
         status: "running",
         approved_by_user: true,
+        error: null,
       })
       .eq("id", toolRun.id)
       .eq("user_id", user.id);

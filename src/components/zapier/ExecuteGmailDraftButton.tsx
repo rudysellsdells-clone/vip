@@ -5,10 +5,12 @@ import { useState } from "react";
 
 type ExecuteGmailDraftButtonProps = {
   toolRunId: string;
+  isRetry?: boolean;
 };
 
 export function ExecuteGmailDraftButton({
   toolRunId,
+  isRetry = false,
 }: ExecuteGmailDraftButtonProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -17,7 +19,9 @@ export function ExecuteGmailDraftButton({
 
   async function handleExecute() {
     const confirmed = window.confirm(
-      "Create a Gmail draft from this approved VIP asset? This will NOT send the email."
+      isRetry
+        ? "Retry creating this Gmail draft? This will NOT send the email."
+        : "Create a Gmail draft from this approved VIP asset? This will NOT send the email."
     );
 
     if (!confirmed) {
@@ -60,7 +64,11 @@ export function ExecuteGmailDraftButton({
         disabled={loading}
         className="rounded-lg bg-slate-950 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {loading ? "Creating Draft..." : "Create Gmail Draft"}
+        {loading
+          ? "Creating Draft..."
+          : isRetry
+            ? "Retry Gmail Draft"
+            : "Create Gmail Draft"}
       </button>
 
       {message ? <p className="text-xs text-emerald-700">{message}</p> : null}
