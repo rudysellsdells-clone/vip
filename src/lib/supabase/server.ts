@@ -1,13 +1,13 @@
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import type { Database } from "@/types/database.types";
-import { getSupabasePublishableKey } from "@/lib/utils/env";
+import { getSupabasePublishableKey, getSupabaseUrl } from "@/lib/utils/env";
 
 export async function createClient() {
   const cookieStore = await cookies();
 
   return createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    getSupabaseUrl(),
     getSupabasePublishableKey(),
     {
       cookies: {
@@ -21,7 +21,7 @@ export async function createClient() {
             });
           } catch {
             // This can happen when called from a Server Component.
-            // Middleware refreshes sessions when configured.
+            // Proxy refreshes sessions when configured.
           }
         }
       }
