@@ -26,6 +26,10 @@ function getZapierMcpServerUrl() {
   return url;
 }
 
+function getZapierMcpAuthToken() {
+  return process.env.ZAPIER_MCP_AUTH_TOKEN;
+}
+
 function parseMcpResponse(text: string): JsonRpcResponse {
   const trimmed = text.trim();
 
@@ -53,6 +57,17 @@ function parseMcpResponse(text: string): JsonRpcResponse {
   return JSON.parse(lastJsonLine) as JsonRpcResponse;
 }
 
+function buildMcpHeaders(sessionId?: string) {
+  const token = getZapierMcpAuthToken();
+
+  return {
+    "Content-Type": "application/json",
+    Accept: "application/json, text/event-stream",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(sessionId ? { "Mcp-Session-Id": sessionId } : {}),
+  };
+}
+
 async function postJsonRpc(
   method: string,
   params: Record<string, unknown>,
@@ -60,11 +75,7 @@ async function postJsonRpc(
 ) {
   const response = await fetch(getZapierMcpServerUrl(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json, text/event-stream",
-      ...(sessionId ? { "Mcp-Session-Id": sessionId } : {}),
-    },
+    headers: buildMcpHeaders(sessionId),
     body: JSON.stringify({
       jsonrpc: "2.0",
       id: crypto.randomUUID(),
