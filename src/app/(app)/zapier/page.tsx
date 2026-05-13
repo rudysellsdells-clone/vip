@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PrepareZapierActionButton } from "@/components/zapier/PrepareZapierActionButton";
+import { ExecuteGmailDraftButton } from "@/components/zapier/ExecuteGmailDraftButton";
 import { buildZapierPreparedAction } from "@/lib/zapier/planner";
 
 function formatDate(value: string | null) {
@@ -13,28 +14,56 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function getToolRunInputSummary(input: unknown) {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
+  if (!isRecord(input)) {
     return "Prepared action details unavailable.";
   }
 
-  const value = input as Record<string, unknown>;
-  const preparedAction = value.preparedAction;
+  const preparedAction = input.preparedAction;
 
-  if (
-    !preparedAction ||
-    typeof preparedAction !== "object" ||
-    Array.isArray(preparedAction)
-  ) {
+  if (!isRecord(preparedAction)) {
     return "Prepared action details unavailable.";
   }
 
-  const action = preparedAction as Record<string, unknown>;
-  const app = typeof action.app === "string" ? action.app : "Zapier";
+  const app = typeof preparedAction.app === "string" ? preparedAction.app : "Zapier";
   const actionName =
-    typeof action.actionName === "string" ? action.actionName : "Prepared Action";
+    typeof preparedAction.actionName === "string"
+      ? preparedAction.actionName
+      : "Prepared Action";
 
   return `${app}: ${actionName}`;
+}
+
+function getToolRunOutputSummary(output: unknown) {
+  if (!isRecord(output)) {
+    return null;
+  }
+
+  const content = output.content;
+
+  if (Array.isArray(content)) {
+    const textParts = content
+      .map((item) => {
+        if (!isRecord(item)) return null;
+        return typeof item.text === "string" ? item.text : null;
+      })
+      .filter(Boolean);
+
+    return textParts.length ? textParts.join("\n") : null;
+  }
+
+  return Object.keys(output).length ? JSON.stringify(output, null, 2) : null;
+}
+
+function canExecuteGmailDraft(action: {
+  action_name: string;
+  status: string;
+}) {
+  return action.action_name === "Gmail:draft_v2" && action.status === "waiting_approval";
 }
 
 export default async function ZapierPage() {
@@ -76,13 +105,13 @@ export default async function ZapierPage() {
     <main className="mx-auto max-w-6xl space-y-10 p-8">
       <section>
         <p className="text-sm uppercase tracking-wide text-slate-500">
-          Sprint 5
+          Sprint 5.1
         </p>
-        <h1 className="text-3xl font-bold">Zapier MCP Preparation</h1>
+        <h1 className="text-3xl font-bold">Zapier MCP Actions</h1>
         <p className="mt-2 max-w-3xl text-slate-600">
-          Prepare approved VIP assets for connected business apps. This page does
-          not send, publish, upload, or spend. It creates approval-ready Zapier
-          action plans.
+          Prepare approved VIP assets for connected business apps. Gmail draft
+          creation is now enabled as the first safe execution action. Nothing is
+          sent automatically.
         </p>
       </section>
 
@@ -149,37 +178,54 @@ export default async function ZapierPage() {
       <section className="rounded-2xl border bg-white p-6 shadow-sm">
         <h2 className="text-xl font-semibold">Prepared Zapier Actions</h2>
         <p className="mt-1 text-sm text-slate-500">
-          These are saved action plans waiting for Rudy approval before execution.
+          Gmail draft actions can now be executed safely. Other apps remain preparation-only.
         </p>
 
         <div className="mt-6 space-y-3">
           {preparedActions?.length ? (
-            preparedActions.map((action) => (
-              <article key={action.id} className="rounded-xl border p-4">
-                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <h3 className="font-semibold">
-                      {getToolRunInputSummary(action.input)}
-                    </h3>
-                    <p className="mt-1 text-sm text-slate-500">
-                      {action.action_name}
-                    </p>
-                    {action.error ? (
-                      <p className="mt-2 text-sm text-red-600">{action.error}</p>
-                    ) : null}
-                  </div>
+            preparedActions.map((action) => {
+              const outputSummary = getToolRunOutputSummary(action.output);
 
-                  <div className="flex flex-col gap-1 text-sm md:items-end">
-                    <span className="rounded-full bg-slate-950 px-3 py-1 text-xs font-medium text-white">
-                      {action.status}
-                    </span>
-                    <span className="text-xs text-slate-500">
-                      {formatDate(action.created_at)}
-                    </span>
+              return (
+                <article key={action.id} className="rounded-xl border p-4">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <h3 className="font-semibold">
+                        {getToolRunInputSummary(action.input)}
+                      </h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {action.action_name}
+                      </p>
+
+                      {action.error ? (
+                        <p className="mt-2 text-sm text-red-600">{action.error}</p>
+                      ) : null}
+
+                      {outputSummary ? (
+                        <pre className="mt-3 max-w-3xl whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-xs text-slate-700">
+                          {outputSummary}
+                        </pre>
+                      ) : null}
+                    </div>
+
+                    <div className="flex flex-col gap-3 md:items-end">
+                      <div className="flex flex-col gap-1 text-sm md:items-end">
+                        <span className="rounded-full bg-slate-950 px-3 py-1 text-xs font-medium text-white">
+                          {action.status}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          {formatDate(action.created_at)}
+                        </span>
+                      </div>
+
+                      {canExecuteGmailDraft(action) ? (
+                        <ExecuteGmailDraftButton toolRunId={action.id} />
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-              </article>
-            ))
+                </article>
+              );
+            })
           ) : (
             <div className="rounded-xl border border-dashed p-8 text-center">
               <h3 className="font-semibold">No prepared actions yet</h3>
