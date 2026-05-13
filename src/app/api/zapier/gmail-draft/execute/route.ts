@@ -192,10 +192,10 @@ export async function POST(request: Request) {
         activityType: "gmail_draft_created",
         title: "Gmail draft created",
         description: `Created Gmail draft for ${subject}.`,
-        metadata: {
+        metadata: toJson({
           toolRunId: toolRun.id,
           result,
-        },
+        }),
       });
 
       return NextResponse.json({
