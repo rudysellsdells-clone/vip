@@ -1,4 +1,8 @@
-import type { GalaxyAiRunDetails, GalaxyAiWorkflow } from "./types";
+import type {
+  GalaxyAiRunDetails,
+  GalaxyAiWorkflow,
+  GalaxyAiWorkflowMediaResponse,
+} from "./types";
 
 const GALAXYAI_BASE_URL = "https://api.galaxy.ai/api";
 
@@ -42,7 +46,13 @@ export async function listGalaxyAiWorkflows() {
 }
 
 export async function getGalaxyAiRun(runId: string) {
-  return galaxyAiRequest<GalaxyAiRunDetails>(`/v1/runs/${runId}?inDetails=false`);
+  return galaxyAiRequest<GalaxyAiRunDetails>(`/v1/runs/${runId}?inDetails=true`);
+}
+
+export async function getGalaxyAiWorkflowMedia(workflowId: string) {
+  return galaxyAiRequest<GalaxyAiWorkflowMediaResponse>(
+    `/v1/workflows/${workflowId}/media`
+  );
 }
 
 export type GalaxyAiRunValues = Record<string, Record<string, unknown>>;
