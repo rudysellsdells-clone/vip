@@ -1,84 +1,70 @@
-import type {
-  GalaxyAiRunDetails,
-  GalaxyAiWorkflow,
-  StartGalaxyAiRunResponse,
-} from "./types";
+import type { GalaxyAiRunDetails, GalaxyAiWorkflow } from "./types";
 
 const GALAXYAI_BASE_URL = "https://api.galaxy.ai/api";
 
 function getGalaxyAiApiKey() {
   const apiKey = process.env.GALAXYAI_API_KEY;
 
-  if (!apiKey || apiKey === "not_set_yet") {
+  if (!apiKey) {
     throw new Error("Missing GALAXYAI_API_KEY environment variable.");
   }
 
   return apiKey;
 }
 
-async function galaxyAiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function galaxyAiRequest<T>(
+  path: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const apiKey = getGalaxyAiApiKey();
+
   const response = await fetch(`${GALAXYAI_BASE_URL}${path}`, {
     ...options,
     headers: {
-      Authorization: `Bearer ${getGalaxyAiApiKey()}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
       ...(options.headers ?? {}),
     },
-    cache: "no-store",
   });
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => "");
+    const errorText = await response.text();
     throw new Error(
-      `GalaxyAI request failed: ${response.status} ${response.statusText}${errorText ? ` — ${errorText}` : ""}`
+      `GalaxyAI request failed: ${response.status} ${response.statusText} — ${errorText}`
     );
   }
 
   return response.json() as Promise<T>;
 }
 
-function normalizeWorkflowList(response: unknown): GalaxyAiWorkflow[] {
-  if (Array.isArray(response)) return response as GalaxyAiWorkflow[];
-
-  if (response && typeof response === "object") {
-    const obj = response as Record<string, unknown>;
-
-    if (Array.isArray(obj.workflows)) return obj.workflows as GalaxyAiWorkflow[];
-    if (Array.isArray(obj.data)) return obj.data as GalaxyAiWorkflow[];
-    if (Array.isArray(obj.items)) return obj.items as GalaxyAiWorkflow[];
-  }
-
-  return [];
-}
-
 export async function listGalaxyAiWorkflows() {
-  const response = await galaxyAiRequest<unknown>("/v1/workflows");
-  return normalizeWorkflowList(response);
+  return galaxyAiRequest<GalaxyAiWorkflow[]>("/v1/workflows");
 }
 
 export async function getGalaxyAiRun(runId: string) {
-  return galaxyAiRequest<GalaxyAiRunDetails>(`/v1/runs/${encodeURIComponent(runId)}`);
+  return galaxyAiRequest<GalaxyAiRunDetails>(`/v1/runs/${runId}`);
 }
 
-export async function startGalaxyAiWorkflowRun(input: {
+export type StartGalaxyAiRunInput = {
   workflowId: string;
-  values?: Record<string, unknown>;
+  values: Record<string, Record<string, unknown>>;
   webhookUrl?: string;
-}) {
-  return galaxyAiRequest<StartGalaxyAiRunResponse>("/v1/runs", {
+};
+
+export async function startGalaxyAiWorkflowRun(input: StartGalaxyAiRunInput) {
+  const body: Record<string, unknown> = {
+    workflowId: input.workflowId,
+    values: input.values,
+  };
+
+  if (input.webhookUrl) {
+    body.webhook = {
+      url: input.webhookUrl,
+    };
+  }
+
+  return galaxyAiRequest<{ runId: string }>("/v1/runs", {
     method: "POST",
-    body: JSON.stringify({
-      workflowId: input.workflowId,
-      values: input.values ?? {},
-      source: "api",
-      ...(input.webhookUrl
-        ? {
-            webhook: {
-              url: input.webhookUrl,
-              events: ["run.completed", "run.failed"],
-            },
-          }
-        : {}),
-    }),
+    body: JSON.stringify(body),
   });
 }

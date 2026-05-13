@@ -1,39 +1,35 @@
 import { NextResponse } from "next/server";
-import { startGalaxyAiWorkflowRun } from "@/lib/galaxyai/client";
 import { createClient } from "@/lib/supabase/server";
+import { startGalaxyAiWorkflowRun } from "@/lib/galaxyai/client";
 import { logActivity } from "@/lib/security/auditLog";
+import type { Json } from "@/types/database.types";
 
-export async function GET() {
-  try {
-    const supabase = await createClient();
+function toJson(value: unknown): Json {
+  return JSON.parse(JSON.stringify(value)) as Json;
+}
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { data: runs, error } = await supabase
-      .from("galaxyai_runs")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(25);
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
-    }
-
-    return NextResponse.json({ runs: runs ?? [] });
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unexpected error loading GalaxyAI runs." },
-      { status: 400 }
-    );
-  }
+function buildGalaxyAiValues(input: {
+  prompt: string;
+  campaignId: string | null;
+  assetId: string;
+}) {
+  return {
+    prompt: {
+      value: input.prompt,
+      type: "text",
+      label: "Prompt",
+    },
+    campaignId: {
+      value: input.campaignId,
+      type: "text",
+      label: "Campaign ID",
+    },
+    assetId: {
+      value: input.assetId,
+      type: "text",
+      label: "Asset ID",
+    },
+  };
 }
 
 export async function POST(request: Request) {
@@ -41,10 +37,11 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     const body = await request.json();
 
-    const workflowId = typeof body.workflowId === "string" ? body.workflowId : null;
+    const workflowId =
+      typeof body.workflowId === "string" ? body.workflowId : null;
     const assetId = typeof body.assetId === "string" ? body.assetId : null;
-    const campaignId = typeof body.campaignId === "string" ? body.campaignId : null;
-    const values = body.values && typeof body.values === "object" ? body.values : {};
+    const campaignId =
+      typeof body.campaignId === "string" ? body.campaignId : null;
 
     if (!workflowId || !assetId) {
       return NextResponse.json(
@@ -73,49 +70,47 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Asset not found." }, { status: 404 });
     }
 
-    if (asset.status !== "approved") {
-      return NextResponse.json(
-        { error: "This asset must be approved before a GalaxyAI workflow can run." },
-        { status: 403 }
-      );
-    }
-
     if (asset.asset_type !== "galaxyai_prompt") {
       return NextResponse.json(
-        { error: "Only approved GalaxyAI prompt assets can start GalaxyAI runs." },
+        { error: "Only GalaxyAI prompt assets can be sent to GalaxyAI." },
         { status: 400 }
       );
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-    const webhookUrl = appUrl ? `${appUrl}/api/webhooks/galaxyai` : undefined;
+    if (asset.status !== "approved") {
+      return NextResponse.json(
+        { error: "GalaxyAI prompt must be approved before running." },
+        { status: 403 }
+      );
+    }
 
-    const runResponse = await startGalaxyAiWorkflowRun({
-      workflowId,
-      values: {
-        prompt: asset.content,
-        campaignId,
-        assetId,
-        ...values,
-      },
-      webhookUrl,
+    const values = buildGalaxyAiValues({
+      prompt: asset.content,
+      campaignId: campaignId ?? asset.campaign_id ?? null,
+      assetId: asset.id,
     });
+
+    const run = await startGalaxyAiWorkflowRun({
+      workflowId,
+      values,
+      webhookUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/galaxyai`,
+    });
+
+    const galaxyRunId = run.runId;
 
     const { data: savedRun, error: saveError } = await supabase
       .from("galaxyai_runs")
       .insert({
         user_id: user.id,
-        campaign_id: campaignId,
-        asset_id: assetId,
-        galaxy_run_id: runResponse.runId,
+        campaign_id: campaignId ?? asset.campaign_id ?? null,
+        asset_id: asset.id,
+        galaxy_run_id: galaxyRunId,
         galaxy_workflow_id: workflowId,
         status: "queued",
-        input: {
-          prompt: asset.content,
-          campaignId,
-          assetId,
+        input: toJson({
+          workflowId,
           values,
-        },
+        }),
         output: {},
         started_at: new Date().toISOString(),
       })
@@ -126,30 +121,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: saveError.message }, { status: 400 });
     }
 
-    await supabase.from("tool_runs").insert({
-      user_id: user.id,
-      provider: "galaxyai",
-      action_name: "start_workflow_run",
-      status: "running",
-      input: { workflowId, assetId, campaignId },
-      output: { runId: runResponse.runId },
-      requires_approval: true,
-      approved_by_user: true,
-    });
-
     await logActivity(supabase, {
       userId: user.id,
       activityType: "galaxyai_run_started",
-      title: "GalaxyAI run started",
-      description: `Started GalaxyAI workflow run ${runResponse.runId}.`,
-      metadata: { workflowId, runId: runResponse.runId, assetId, campaignId },
+      title: "GalaxyAI workflow run started",
+      description: `Started GalaxyAI workflow ${workflowId}.`,
+      metadata: {
+        workflowId,
+        runId: galaxyRunId,
+        assetId: asset.id,
+        campaignId: campaignId ?? asset.campaign_id ?? null,
+      },
     });
 
     return NextResponse.json({ run: savedRun });
   } catch (error) {
+    if (error instanceof Error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unexpected error starting GalaxyAI run." },
-      { status: 400 }
+      { error: "Unexpected error starting GalaxyAI run." },
+      { status: 500 }
     );
   }
 }
