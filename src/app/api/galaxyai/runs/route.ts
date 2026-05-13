@@ -4,30 +4,41 @@ import { startGalaxyAiWorkflowRun } from "@/lib/galaxyai/client";
 import { logActivity } from "@/lib/security/auditLog";
 import type { Json } from "@/types/database.types";
 
+type GalaxyAiInputMapping = {
+  nodeRequestKey: string;
+  promptFieldName: string;
+};
+
+const GALAXYAI_WORKFLOW_INPUT_MAPPINGS: Record<string, GalaxyAiInputMapping> = {
+  cmp4j5u8o0001jm049rtesgiw: {
+    nodeRequestKey: "node_1772800705319_request",
+    promptFieldName: "Car prompt",
+  },
+};
+
 function toJson(value: unknown): Json {
   return JSON.parse(JSON.stringify(value)) as Json;
 }
 
 function buildGalaxyAiValues(input: {
+  workflowId: string;
   prompt: string;
-  campaignId: string | null;
-  assetId: string;
 }) {
+  const mapping = GALAXYAI_WORKFLOW_INPUT_MAPPINGS[input.workflowId];
+
+  if (mapping) {
+    return {
+      [mapping.nodeRequestKey]: {
+        [mapping.promptFieldName]: input.prompt,
+      },
+    };
+  }
+
+  // Fallback for future workflows that expose a simple prompt node.
+  // If a workflow rejects this shape, add its workflowId to GALAXYAI_WORKFLOW_INPUT_MAPPINGS.
   return {
     prompt: {
-      value: input.prompt,
-      type: "text",
-      label: "Prompt",
-    },
-    campaignId: {
-      value: input.campaignId,
-      type: "text",
-      label: "Campaign ID",
-    },
-    assetId: {
-      value: input.assetId,
-      type: "text",
-      label: "Asset ID",
+      prompt: input.prompt,
     },
   };
 }
@@ -85,15 +96,13 @@ export async function POST(request: Request) {
     }
 
     const values = buildGalaxyAiValues({
+      workflowId,
       prompt: asset.content,
-      campaignId: campaignId ?? asset.campaign_id ?? null,
-      assetId: asset.id,
     });
 
     const run = await startGalaxyAiWorkflowRun({
       workflowId,
       values,
-      webhookUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/galaxyai`,
     });
 
     const galaxyRunId = run.runId;
@@ -110,6 +119,8 @@ export async function POST(request: Request) {
         input: toJson({
           workflowId,
           values,
+          inputMapping:
+            GALAXYAI_WORKFLOW_INPUT_MAPPINGS[workflowId] ?? "fallback_prompt_mapping",
         }),
         output: {},
         started_at: new Date().toISOString(),
@@ -131,6 +142,8 @@ export async function POST(request: Request) {
         runId: galaxyRunId,
         assetId: asset.id,
         campaignId: campaignId ?? asset.campaign_id ?? null,
+        inputMapping:
+          GALAXYAI_WORKFLOW_INPUT_MAPPINGS[workflowId] ?? "fallback_prompt_mapping",
       },
     });
 

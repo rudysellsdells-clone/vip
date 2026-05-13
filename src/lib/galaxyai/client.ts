@@ -42,29 +42,22 @@ export async function listGalaxyAiWorkflows() {
 }
 
 export async function getGalaxyAiRun(runId: string) {
-  return galaxyAiRequest<GalaxyAiRunDetails>(`/v1/runs/${runId}`);
+  return galaxyAiRequest<GalaxyAiRunDetails>(`/v1/runs/${runId}?inDetails=false`);
 }
+
+export type GalaxyAiRunValues = Record<string, Record<string, unknown>>;
 
 export type StartGalaxyAiRunInput = {
   workflowId: string;
-  values: Record<string, Record<string, unknown>>;
-  webhookUrl?: string;
+  values: GalaxyAiRunValues;
 };
 
 export async function startGalaxyAiWorkflowRun(input: StartGalaxyAiRunInput) {
-  const body: Record<string, unknown> = {
-    workflowId: input.workflowId,
-    values: input.values,
-  };
-
-  if (input.webhookUrl) {
-    body.webhook = {
-      url: input.webhookUrl,
-    };
-  }
-
   return galaxyAiRequest<{ runId: string }>("/v1/runs", {
     method: "POST",
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      workflowId: input.workflowId,
+      values: input.values,
+    }),
   });
 }
