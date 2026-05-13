@@ -20,6 +20,15 @@ type ContextItem = {
   [key: string]: unknown;
 };
 
+type CampaignStrategy = {
+  summary?: string | null;
+  audienceAngle?: string | null;
+  coreMessage?: string | null;
+  positioning?: string | null;
+  cta?: string | null;
+  [key: string]: unknown;
+};
+
 type BuildMarketingAssetPackUserPromptInput = {
   campaign: CampaignForPrompt;
   digitalCloneProfile?: ContextItem | null;
@@ -206,4 +215,37 @@ Return JSON using exactly this structure:
   "approvalChecklist": []
 }
 `;
+}
+
+export function formatCampaignStrategyForAsset(strategy: CampaignStrategy | null | undefined) {
+  if (!strategy) {
+    return "No campaign strategy was generated.";
+  }
+
+  const sections = [
+    ["Summary", strategy.summary],
+    ["Audience Angle", strategy.audienceAngle],
+    ["Core Message", strategy.coreMessage],
+    ["Positioning", strategy.positioning],
+    ["CTA", strategy.cta],
+  ];
+
+  return sections
+    .filter(([, value]) => typeof value === "string" && value.trim().length > 0)
+    .map(([label, value]) => `## ${label}\n\n${value}`)
+    .join("\n\n");
+}
+
+export function formatApprovalChecklistForMetadata(checklist: string[] | null | undefined) {
+  return {
+    approvalChecklist: checklist ?? [],
+  };
+}
+
+export function formatApprovalChecklistForAsset(checklist: string[] | null | undefined) {
+  if (!checklist?.length) {
+    return "No approval checklist was generated.";
+  }
+
+  return checklist.map((item, index) => `${index + 1}. ${item}`).join("\n");
 }
