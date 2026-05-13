@@ -51,7 +51,7 @@ function getFinishedAt(galaxyRun: Record<string, unknown>) {
   return typeof match === "string" ? match : new Date().toISOString();
 }
 
-function isJsonObject(value: Json | null | undefined): value is Record<string, unknown> {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
@@ -91,7 +91,7 @@ async function createGalaxyAiMediaAssetIfNeeded(input: {
   }
 
   const alreadySaved = existingAssets?.some((asset) => {
-    const metadata = isJsonObject(asset.metadata) ? asset.metadata : null;
+    const metadata = isPlainObject(asset.metadata) ? asset.metadata : null;
 
     return metadata?.provider === "galaxyai" && metadata?.runId === input.galaxyRunId;
   });
