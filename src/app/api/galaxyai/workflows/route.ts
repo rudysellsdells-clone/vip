@@ -1,7 +1,38 @@
 import { NextResponse } from "next/server";
-import { listGalaxyAiWorkflows } from "@/lib/galaxyai/client";
 import { createClient } from "@/lib/supabase/server";
+import { listGalaxyAiWorkflows } from "@/lib/galaxyai/client";
 import { logActivity } from "@/lib/security/auditLog";
+import type { Json } from "@/types/database.types";
+
+function toJson(value: unknown): Json {
+  return JSON.parse(JSON.stringify(value)) as Json;
+}
+
+function getWorkflowId(workflow: Record<string, unknown>) {
+  const id = workflow.id ?? workflow.workflow_id ?? workflow.workflowId;
+
+  if (typeof id !== "string" || !id.trim()) {
+    throw new Error("GalaxyAI workflow is missing an id.");
+  }
+
+  return id;
+}
+
+function getWorkflowName(workflow: Record<string, unknown>) {
+  const name = workflow.name ?? workflow.title;
+
+  if (typeof name === "string" && name.trim()) {
+    return name;
+  }
+
+  return "Untitled GalaxyAI Workflow";
+}
+
+function getWorkflowDescription(workflow: Record<string, unknown>) {
+  const description = workflow.description ?? workflow.summary;
+
+  return typeof description === "string" ? description : null;
+}
 
 export async function GET() {
   try {
@@ -19,33 +50,48 @@ export async function GET() {
     const workflows = await listGalaxyAiWorkflows();
 
     for (const workflow of workflows) {
-      await supabase.from("galaxyai_workflows").upsert(
+      const workflowRecord = workflow as Record<string, unknown>;
+      const workflowId = getWorkflowId(workflowRecord);
+
+      const { error } = await supabase.from("galaxyai_workflows").upsert(
         {
           user_id: user.id,
-          galaxy_workflow_id: workflow.id,
-          name: workflow.name,
-          description: workflow.description ?? null,
-          metadata: workflow,
+          galaxy_workflow_id: workflowId,
+          name: getWorkflowName(workflowRecord),
+          description: getWorkflowDescription(workflowRecord),
+          metadata: toJson(workflow),
           active: true,
           last_synced_at: new Date().toISOString(),
         },
-        { onConflict: "user_id,galaxy_workflow_id" }
+        {
+          onConflict: "user_id,galaxy_workflow_id",
+        }
       );
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
     }
 
     await logActivity(supabase, {
       userId: user.id,
       activityType: "galaxyai_workflows_synced",
       title: "GalaxyAI workflows synced",
-      description: `Synced ${workflows.length} workflows from GalaxyAI.`,
-      metadata: { workflowCount: workflows.length },
+      description: `Synced ${workflows.length} GalaxyAI workflows.`,
+      metadata: {
+        workflowCount: workflows.length,
+      },
     });
 
     return NextResponse.json({ workflows });
   } catch (error) {
+    if (error instanceof Error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unexpected error syncing GalaxyAI workflows." },
-      { status: 400 }
+      { error: "Unexpected error syncing GalaxyAI workflows." },
+      { status: 500 }
     );
   }
 }
