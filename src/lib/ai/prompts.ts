@@ -1,22 +1,61 @@
-import type { MarketingAssetPackPromptInput } from "./types";
+type CampaignForPrompt = {
+  name: string;
+  idea: string;
+  buyer_segment: string | null;
+  audience: string | null;
+  goal: string | null;
+  platforms: string[] | null;
+  tone: string | null;
+  cta: string | null;
+  notes: string | null;
+};
 
-function truncate(value: string | null | undefined, maxLength: number) {
-  if (!value) return "";
-  if (value.length <= maxLength) return value;
-  return `${value.slice(0, maxLength)}...`;
-}
+type ContextItem = {
+  name?: string | null;
+  title?: string | null;
+  description?: string | null;
+  rule_text?: string | null;
+  content?: string | null;
+  summary?: string | null;
+  [key: string]: unknown;
+};
 
-function bulletList(items: string[]) {
-  if (!items.length) return "- Not available yet";
-  return items.map((item) => `- ${item}`).join("\n");
+type BuildMarketingAssetPackUserPromptInput = {
+  campaign: CampaignForPrompt;
+  digitalCloneProfile?: ContextItem | null;
+  serviceLines?: ContextItem[] | null;
+  buyerSegments?: ContextItem[] | null;
+  offers?: ContextItem[] | null;
+  brandRules?: ContextItem[] | null;
+  knowledgeSources?: ContextItem[] | null;
+};
+
+function listContextItems(items?: ContextItem[] | null, fallback = "None available yet.") {
+  if (!items?.length) {
+    return fallback;
+  }
+
+  return items
+    .map((item, index) => {
+      const label = item.name ?? item.title ?? `Item ${index + 1}`;
+      const detail =
+        item.description ??
+        item.rule_text ??
+        item.summary ??
+        item.content ??
+        "";
+      return `- ${label}${detail ? `: ${detail}` : ""}`;
+    })
+    .join("\n");
 }
 
 export function buildMarketingAssetPackSystemPrompt() {
-  return `You are Rudy's Marketing Twin, an AI business clone built to help Rudy McCormick make money with his services.
+  return `
+You are Rudy's Marketing Twin.
 
-Your job is to create revenue-focused marketing campaign assets that Rudy can review and approve.
+Your job is to help Rudy McCormick make money with his services by creating clear, practical, revenue-focused marketing campaigns.
 
-Core business focus:
+Rudy sells:
 - AIO — AI Optimization
 - SEO — Search Engine Optimization
 - Web Development
@@ -26,112 +65,80 @@ Core business focus:
 - Local Visibility / Local SEO
 - Website Health, Speed, and Conversion Improvements
 
-Primary buyer segments:
+Rudy's best buyers are:
 - Contractors
 - Mid-sized manufacturers
 - Machine shops
 - Dental practices
 - Legal firms
 
-Successful sales outcomes:
+Successful sales outcomes are:
 - Project contracts
 - Monthly retainers
 
 Voice rules:
 - Clear, direct, polished, human, strategic, and marketing-focused
-- Practical over flashy
-- Explain AI in plain English
+- Avoid robotic language
 - Avoid vague hype
-- Avoid robotic phrasing
-- Focus on business outcomes, trust, visibility, leads, conversion, and revenue
+- Explain AI in plain English
+- Focus on business outcomes
 - Make CTAs specific
 
-Safety and approval rules:
+Guardrails:
 - Draft only
-- Do not claim that anything has been published, sent, or launched
-- Do not imply paid ads are live
-- Do not make unverifiable performance claims
-- No external action is taken without Rudy's approval`;
+- Do not publish
+- Do not send
+- Do not spend credits
+- Do not contact prospects or clients without Rudy's approval
+
+Return valid JSON only.
+`;
 }
 
-export function buildMarketingAssetPackUserPrompt(input: MarketingAssetPackPromptInput) {
-  const campaign = input.campaign;
+export function buildMarketingAssetPackUserPrompt({
+  campaign,
+  digitalCloneProfile,
+  serviceLines,
+  buyerSegments,
+  offers,
+  brandRules,
+  knowledgeSources,
+}: BuildMarketingAssetPackUserPromptInput) {
+  const platforms = campaign.platforms ?? [];
 
-  const serviceLines = bulletList(
-    (input.serviceLines ?? []).map((item) =>
-      `${item.name ?? "Unnamed service"}: ${truncate(item.description, 220)}`
-    )
-  );
+  return `
+Create a Marketing Asset Pack for this campaign.
 
-  const buyerSegments = bulletList(
-    (input.buyerSegments ?? []).map((item) => {
-      const pains = item.common_pains?.length ? ` Pains: ${item.common_pains.join(", ")}.` : "";
-      const outcomes = item.desired_outcomes?.length
-        ? ` Desired outcomes: ${item.desired_outcomes.join(", ")}.`
-        : "";
-      return `${item.name ?? "Unnamed buyer"}: ${truncate(item.description, 180)}${pains}${outcomes}`;
-    })
-  );
+Campaign:
+- Name: ${campaign.name}
+- Idea: ${campaign.idea}
+- Buyer segment: ${campaign.buyer_segment ?? "Not specified"}
+- Audience: ${campaign.audience ?? campaign.buyer_segment ?? "Not specified"}
+- Goal: ${campaign.goal ?? "Not specified"}
+- Platforms: ${platforms.length ? platforms.join(", ") : "Not specified"}
+- Tone: ${campaign.tone ?? "Clear, practical, confident"}
+- CTA: ${campaign.cta ?? "Not specified"}
+- Notes: ${campaign.notes ?? "None"}
 
-  const offers = bulletList(
-    (input.offers ?? []).map((item) =>
-      `${item.name ?? "Unnamed offer"}: ${truncate(item.description, 180)} Outcome: ${truncate(
-        item.outcome,
-        160
-      )} CTA: ${item.primary_cta ?? "Not specified"}`
-    )
-  );
+Digital clone profile:
+${digitalCloneProfile ? JSON.stringify(digitalCloneProfile, null, 2) : "No digital clone profile available yet."}
 
-  const brandRules = bulletList(
-    (input.brandRules ?? []).map((item) => `${item.category ?? "rule"}: ${item.rule_text ?? ""}`)
-  );
+Service lines:
+${listContextItems(serviceLines)}
 
-  const knowledge = bulletList(
-    (input.knowledgeSources ?? []).map((item) =>
-      `${item.title ?? "Knowledge"}: ${truncate(item.summary || item.content, 500)}`
-    )
-  );
+Buyer segments:
+${listContextItems(buyerSegments)}
 
-  const cloneProfile = input.digitalCloneProfile;
+Offers:
+${listContextItems(offers)}
 
-  return `Create a complete Marketing Asset Pack for this campaign.
+Brand rules:
+${listContextItems(brandRules)}
 
-Digital clone context:
-Name: ${cloneProfile?.name ?? "Rudy's Marketing Twin"}
-Purpose: ${cloneProfile?.purpose ?? "Help Rudy generate revenue with marketing and sales assets."}
-Voice summary: ${cloneProfile?.voice_summary ?? "Clear, direct, polished, human, strategic, and marketing-focused."}
-Business summary: ${cloneProfile?.business_summary ?? "Digital marketing and AI optimization services."}
-Audience summary: ${cloneProfile?.audience_summary ?? "Contractors, manufacturers, machine shops, dental practices, and legal firms."}
-Offer summary: ${cloneProfile?.offer_summary ?? "Project contracts and monthly retainers."}
-Sales outcome summary: ${cloneProfile?.sales_outcome_summary ?? "Project contracts and monthly retainers."}
+Knowledge sources:
+${listContextItems(knowledgeSources)}
 
-Campaign details:
-Campaign name: ${campaign.name}
-Campaign idea: ${campaign.idea}
-Buyer segment: ${campaign.buyer_segment ?? "Not specified"}
-Audience: ${campaign.audience ?? campaign.buyer_segment ?? "Not specified"}
-Goal: ${campaign.goal ?? "Not specified"}
-Platforms: ${campaign.platforms?.join(", ") || "Email, LinkedIn, Facebook, YouTube"}
-Tone: ${campaign.tone ?? "Clear, practical, confident"}
-CTA: ${campaign.cta ?? "Not specified"}
-Notes: ${campaign.notes ?? "None"}
-
-Known service lines:
-${serviceLines}
-
-Known buyer segments:
-${buyerSegments}
-
-Known offers:
-${offers}
-
-Brand and writing rules:
-${brandRules}
-
-Useful business knowledge:
-${knowledge}
-
-Required output:
+Create these outputs:
 1. Campaign strategy
 2. Email draft
 3. LinkedIn post
@@ -142,15 +149,61 @@ Required output:
 8. GalaxyAI creative prompt
 9. Approval checklist
 
-Write each asset so it can be reviewed by Rudy before use. Do not say it has been posted, sent, or launched.`;
-}
+Return JSON using exactly this structure:
 
-export function formatCampaignStrategyForAsset(strategy: {
-  summary: string;
-  audienceAngle: string;
-  coreMessage: string;
-  positioning: string;
-  cta: string;
-}) {
-  return `Summary:\n${strategy.summary}\n\nAudience angle:\n${strategy.audienceAngle}\n\nCore message:\n${strategy.coreMessage}\n\nPositioning:\n${strategy.positioning}\n\nCTA:\n${strategy.cta}`;
+{
+  "campaignStrategy": {
+    "summary": "",
+    "audienceAngle": "",
+    "coreMessage": "",
+    "positioning": "",
+    "cta": ""
+  },
+  "assets": [
+    {
+      "type": "email",
+      "title": "",
+      "content": "",
+      "notes": ""
+    },
+    {
+      "type": "linkedin_post",
+      "title": "",
+      "content": "",
+      "notes": ""
+    },
+    {
+      "type": "facebook_post",
+      "title": "",
+      "content": "",
+      "notes": ""
+    },
+    {
+      "type": "youtube_title",
+      "title": "",
+      "content": "",
+      "notes": ""
+    },
+    {
+      "type": "youtube_description",
+      "title": "",
+      "content": "",
+      "notes": ""
+    },
+    {
+      "type": "video_script",
+      "title": "",
+      "content": "",
+      "notes": ""
+    },
+    {
+      "type": "galaxyai_prompt",
+      "title": "",
+      "content": "",
+      "notes": ""
+    }
+  ],
+  "approvalChecklist": []
+}
+`;
 }
