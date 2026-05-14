@@ -1,4 +1,5 @@
 import { getZapierPolicy } from "./action-policy";
+import { getFacebookPageLockStatus } from "./execution-policy";
 
 export type AssetForZapierPlan = {
   id: string;
@@ -56,7 +57,12 @@ function buildParams(asset: AssetForZapierPlan, app: string) {
   }
 
   if (app === "Facebook Pages") {
+    const facebookLock = getFacebookPageLockStatus();
+
     return {
+      page: facebookLock.pageId,
+      pageName: facebookLock.pageName,
+      requiredPageName: facebookLock.requiredPageName,
       message: asset.content,
     };
   }

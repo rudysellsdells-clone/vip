@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PrepareZapierActionButton } from "@/components/zapier/PrepareZapierActionButton";
 import { ExecuteGmailDraftButton } from "@/components/zapier/ExecuteGmailDraftButton";
+import { ExecuteFacebookPostButton } from "@/components/zapier/ExecuteFacebookPostButton";
 import { CancelToolRunButton } from "@/components/zapier/CancelToolRunButton";
 import { ZapierStatusBadge } from "@/components/zapier/ZapierStatusBadge";
 import { buildZapierPreparedAction } from "@/lib/zapier/planner";
@@ -89,6 +90,20 @@ function canExecuteGmailDraft(action: {
   );
 }
 
+function canExecuteFacebookPost(
+  action: {
+    action_name: string;
+    status: string;
+  },
+  facebookConfigured: boolean
+) {
+  return (
+    facebookConfigured &&
+    action.action_name === "Facebook Pages:page_stream" &&
+    (action.status === "waiting_approval" || action.status === "failed")
+  );
+}
+
 function canCancelAction(status: string) {
   return status === "planned" || status === "waiting_approval" || status === "failed";
 }
@@ -133,12 +148,12 @@ export default async function ZapierPage() {
     <main className="mx-auto max-w-6xl space-y-10 p-8">
       <section>
         <p className="text-sm uppercase tracking-wide text-slate-500">
-          Sprint 5.2
+          Sprint 5.3
         </p>
-        <h1 className="text-3xl font-bold">Zapier Execution Controls</h1>
+        <h1 className="text-3xl font-bold">Zapier Locked Execution</h1>
         <p className="mt-2 max-w-3xl text-slate-600">
-          Manage approved VIP assets, prepared Zapier actions, execution status,
-          retries, cancellations, and publishing guardrails.
+          Manage approved VIP assets, prepared Zapier actions, Gmail draft creation,
+          and locked Facebook Page execution.
         </p>
       </section>
 
@@ -155,7 +170,7 @@ export default async function ZapierPage() {
           <p className="mt-2 text-sm text-slate-600">{facebookLock.message}</p>
           {facebookLock.configured ? (
             <p className="mt-2 text-xs text-emerald-700">
-              Locked to {facebookLock.pageName}.
+              Publishing enabled only for {facebookLock.pageName}.
             </p>
           ) : (
             <p className="mt-2 text-xs text-amber-700">
@@ -165,10 +180,10 @@ export default async function ZapierPage() {
         </div>
 
         <div className="rounded-2xl border bg-white p-5 shadow-sm">
-          <h2 className="font-semibold">External Publishing</h2>
+          <h2 className="font-semibold">Other Channels</h2>
           <p className="mt-2 text-sm text-slate-600">
-            LinkedIn, Facebook, YouTube, and Synthesia execution remain blocked
-            until their channel-specific safety rules are complete.
+            LinkedIn, YouTube, and Synthesia execution remain blocked until their
+            channel-specific safety rules are complete.
           </p>
         </div>
       </section>
@@ -239,7 +254,7 @@ export default async function ZapierPage() {
       <section className="rounded-2xl border bg-white p-6 shadow-sm">
         <h2 className="text-xl font-semibold">Prepared Zapier Actions</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Review status, retry safe Gmail drafts, cancel stale actions, and inspect results.
+          Review status, retry safe actions, cancel stale actions, and inspect results.
         </p>
 
         <div className="mt-6 space-y-3">
@@ -296,6 +311,14 @@ export default async function ZapierPage() {
                         <ExecuteGmailDraftButton
                           toolRunId={action.id}
                           isRetry={action.status === "failed"}
+                        />
+                      ) : null}
+
+                      {canExecuteFacebookPost(action, facebookLock.configured) ? (
+                        <ExecuteFacebookPostButton
+                          toolRunId={action.id}
+                          isRetry={action.status === "failed"}
+                          pageName={facebookLock.pageName ?? "locked Facebook Page"}
                         />
                       ) : null}
 

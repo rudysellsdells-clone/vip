@@ -6,6 +6,30 @@ export type ZapierExecutionDecision = {
 
 export const REQUIRED_FACEBOOK_PAGE_NAME = "mccormick.web.marketing";
 
+export function getFacebookPageLockStatus() {
+  const pageName = process.env.ZAPIER_FACEBOOK_PAGE_NAME;
+  const pageId = process.env.ZAPIER_FACEBOOK_PAGE_ID;
+
+  if (pageName === REQUIRED_FACEBOOK_PAGE_NAME && pageId) {
+    return {
+      configured: true,
+      pageName,
+      pageId,
+      requiredPageName: REQUIRED_FACEBOOK_PAGE_NAME,
+      message: `Facebook page lock configured for ${REQUIRED_FACEBOOK_PAGE_NAME}.`,
+    };
+  }
+
+  return {
+    configured: false,
+    pageName: pageName ?? null,
+    pageId: pageId ?? null,
+    requiredPageName: REQUIRED_FACEBOOK_PAGE_NAME,
+    message:
+      `Facebook execution remains disabled until ZAPIER_FACEBOOK_PAGE_NAME is ${REQUIRED_FACEBOOK_PAGE_NAME} and ZAPIER_FACEBOOK_PAGE_ID is set.`,
+  };
+}
+
 export function getZapierExecutionDecision(actionName: string): ZapierExecutionDecision {
   if (actionName === "Gmail:draft_v2") {
     return {
@@ -16,6 +40,17 @@ export function getZapierExecutionDecision(actionName: string): ZapierExecutionD
   }
 
   if (actionName === "Facebook Pages:page_stream") {
+    const facebookLock = getFacebookPageLockStatus();
+
+    if (facebookLock.configured) {
+      return {
+        executable: true,
+        label: "Facebook Page Post",
+        reason:
+          `Execution enabled only for the locked Facebook Page: ${REQUIRED_FACEBOOK_PAGE_NAME}.`,
+      };
+    }
+
     return {
       executable: false,
       label: "Facebook Page Post",
@@ -55,29 +90,5 @@ export function getZapierExecutionDecision(actionName: string): ZapierExecutionD
     executable: false,
     label: "Manual Review",
     reason: "No execution policy exists yet for this action.",
-  };
-}
-
-export function getFacebookPageLockStatus() {
-  const pageName = process.env.ZAPIER_FACEBOOK_PAGE_NAME;
-  const pageId = process.env.ZAPIER_FACEBOOK_PAGE_ID;
-
-  if (pageName === REQUIRED_FACEBOOK_PAGE_NAME && pageId) {
-    return {
-      configured: true,
-      pageName,
-      pageId,
-      requiredPageName: REQUIRED_FACEBOOK_PAGE_NAME,
-      message: `Facebook page lock configured for ${REQUIRED_FACEBOOK_PAGE_NAME}.`,
-    };
-  }
-
-  return {
-    configured: false,
-    pageName: pageName ?? null,
-    pageId: pageId ?? null,
-    requiredPageName: REQUIRED_FACEBOOK_PAGE_NAME,
-    message:
-      `Facebook execution remains disabled until ZAPIER_FACEBOOK_PAGE_NAME is ${REQUIRED_FACEBOOK_PAGE_NAME} and ZAPIER_FACEBOOK_PAGE_ID is set.`,
   };
 }
