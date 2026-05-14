@@ -1,0 +1,16 @@
+type ZapierStatusBadgeProps = {
+  status: string;
+};
+
+export function ZapierStatusBadge({ status }: ZapierStatusBadgeProps) {
+  const label = status
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
+  return (
+    <span className="rounded-full bg-slate-950 px-3 py-1 text-xs font-medium text-white">
+      {label}
+    </span>
+  );
+}
