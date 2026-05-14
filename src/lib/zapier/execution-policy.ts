@@ -4,6 +4,8 @@ export type ZapierExecutionDecision = {
   label: string;
 };
 
+export const REQUIRED_FACEBOOK_PAGE_NAME = "web.search.professionals";
+
 export function getZapierExecutionDecision(actionName: string): ZapierExecutionDecision {
   if (actionName === "Gmail:draft_v2") {
     return {
@@ -18,7 +20,7 @@ export function getZapierExecutionDecision(actionName: string): ZapierExecutionD
       executable: false,
       label: "Facebook Page Post",
       reason:
-        "Execution disabled until the target page is hard-locked to Web Search Pros.",
+        `Execution disabled until the target page is hard-locked to ${REQUIRED_FACEBOOK_PAGE_NAME}.`,
     };
   }
 
@@ -60,12 +62,13 @@ export function getFacebookPageLockStatus() {
   const pageName = process.env.ZAPIER_FACEBOOK_PAGE_NAME;
   const pageId = process.env.ZAPIER_FACEBOOK_PAGE_ID;
 
-  if (pageName === "Web Search Pros" && pageId) {
+  if (pageName === REQUIRED_FACEBOOK_PAGE_NAME && pageId) {
     return {
       configured: true,
       pageName,
       pageId,
-      message: "Facebook page lock configured for Web Search Pros.",
+      requiredPageName: REQUIRED_FACEBOOK_PAGE_NAME,
+      message: `Facebook page lock configured for ${REQUIRED_FACEBOOK_PAGE_NAME}.`,
     };
   }
 
@@ -73,7 +76,8 @@ export function getFacebookPageLockStatus() {
     configured: false,
     pageName: pageName ?? null,
     pageId: pageId ?? null,
+    requiredPageName: REQUIRED_FACEBOOK_PAGE_NAME,
     message:
-      "Facebook execution remains disabled until ZAPIER_FACEBOOK_PAGE_NAME is Web Search Pros and ZAPIER_FACEBOOK_PAGE_ID is set.",
+      `Facebook execution remains disabled until ZAPIER_FACEBOOK_PAGE_NAME is ${REQUIRED_FACEBOOK_PAGE_NAME} and ZAPIER_FACEBOOK_PAGE_ID is set.`,
   };
 }
