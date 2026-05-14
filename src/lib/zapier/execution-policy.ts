@@ -4,7 +4,7 @@ export type ZapierExecutionDecision = {
   label: string;
 };
 
-export const REQUIRED_FACEBOOK_PAGE_NAME = "web.search.professionals";
+export const REQUIRED_FACEBOOK_PAGE_NAME = "mccormick.web.marketing";
 
 export function getZapierExecutionDecision(actionName: string): ZapierExecutionDecision {
   if (actionName === "Gmail:draft_v2") {
