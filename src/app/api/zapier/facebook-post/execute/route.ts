@@ -50,19 +50,20 @@ function getParams(preparedAction: PreparedAction) {
 }
 
 function buildFacebookPostInstructions(input: {
-  pageId: string;
-  pageName: string;
+  pageValue: string;
+  pageHandle: string;
   message: string;
   linkUrl?: string;
 }) {
   return `
-Create a Facebook Page post only on the locked Page listed below.
+Create a Facebook Page post using the structured params provided with this tool call.
 
-Locked Facebook Page Name:
-${input.pageName}
+Critical:
+- For the required Facebook Pages "Page" field, use exactly this value:
+${input.pageValue}
 
-Locked Facebook Page Value:
-${input.pageId}
+Allowed Page handle / safety lock:
+${input.pageHandle}
 
 Message:
 ${input.message}
@@ -70,11 +71,11 @@ ${input.message}
 ${input.linkUrl?.trim() ? `Link URL:\n${input.linkUrl}` : "No link URL."}
 
 Important safety rules:
-- Publish only to the Page named ${REQUIRED_FACEBOOK_PAGE_NAME}.
-- Use the Page field value provided above.
-- Do not post to a personal profile.
-- Do not post to any other Facebook Page.
+- Do not use the display name "Web Search Professionals" as the Page field.
+- Do not post to Rudy's personal profile.
+- Do not post to any Facebook Page other than the locked Page.
 - Do not boost, advertise, or spend money.
+- If the exact Page value cannot be used, fail instead of posting somewhere else.
 - Return the Facebook post details after creation.
 `;
 }
@@ -182,9 +183,18 @@ export async function POST(request: Request) {
       );
     }
 
+    const zapierParams: Record<string, unknown> = {
+      page: facebookLock.pageId,
+      message,
+    };
+
+    if (linkUrl.trim()) {
+      zapierParams.link_url = linkUrl;
+    }
+
     const instructions = buildFacebookPostInstructions({
-      pageId: facebookLock.pageId,
-      pageName: facebookLock.pageName ?? REQUIRED_FACEBOOK_PAGE_NAME,
+      pageValue: facebookLock.pageId,
+      pageHandle: facebookLock.pageName ?? REQUIRED_FACEBOOK_PAGE_NAME,
       message,
       linkUrl,
     });
@@ -203,9 +213,10 @@ export async function POST(request: Request) {
       const result = await executeZapierMcpWriteAction({
         app: "Facebook Pages",
         action: "page_stream",
+        params: zapierParams,
         instructions,
         output:
-          "Return the Facebook Page post id, URL if available, Page name, Page id/value used, and confirmation that it was posted only to the locked Page.",
+          "Return the Facebook Page post id, URL if available, Page value used, and confirmation that it was posted only to the locked Page.",
       });
 
       const { data: updatedToolRun, error: updateError } = await supabase
