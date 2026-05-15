@@ -48,6 +48,15 @@ export async function POST(request: Request) {
       );
     }
 
+    const { data: latestApproval } = await supabase
+      .from("approvals")
+      .select("*")
+      .eq("asset_id", asset.id)
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
     const preparedAction = buildZapierPreparedAction({
       id: asset.id,
       campaign_id: asset.campaign_id,
@@ -57,6 +66,43 @@ export async function POST(request: Request) {
       status: asset.status,
     });
 
+    const sourceAssetSnapshot = {
+      id: asset.id,
+      campaignId: asset.campaign_id,
+      assetType: asset.asset_type,
+      title: asset.title,
+      content: asset.content,
+      status: asset.status,
+      version: asset.version,
+      metadata: asset.metadata,
+      createdAt: asset.created_at,
+      updatedAt: asset.updated_at,
+    };
+
+    const approvalSnapshot = latestApproval
+      ? {
+          id: latestApproval.id,
+          status: latestApproval.status,
+          notes: latestApproval.notes,
+          approvedAt: latestApproval.approved_at,
+          createdAt: latestApproval.created_at,
+        }
+      : null;
+
+    const toolRunInput = {
+      assetId: asset.id,
+      campaignId: asset.campaign_id,
+      sourceAsset: sourceAssetSnapshot,
+      approval: approvalSnapshot,
+      preparedAction,
+      preparedAt: new Date().toISOString(),
+      safety: {
+        requiresApprovedAsset: true,
+        assetStatusAtPreparation: asset.status,
+        externalExecutionRequiresFinalClick: true,
+      },
+    };
+
     const { data: toolRun, error: toolRunError } = await supabase
       .from("tool_runs")
       .insert({
@@ -64,11 +110,7 @@ export async function POST(request: Request) {
         provider: "zapier_mcp",
         action_name: `${preparedAction.app}:${preparedAction.action}`,
         status: "waiting_approval",
-        input: toJson({
-          assetId: asset.id,
-          campaignId: asset.campaign_id,
-          preparedAction,
-        }),
+        input: toJson(toolRunInput),
         output: {},
         requires_approval: true,
         approved_by_user: false,
@@ -85,20 +127,25 @@ export async function POST(request: Request) {
       activityType: "zapier_action_prepared",
       title: "Zapier action prepared",
       description: `${preparedAction.app} ${preparedAction.actionName} prepared from approved asset.`,
-      metadata: {
+      metadata: toJson({
         toolRunId: toolRun.id,
         assetId: asset.id,
         campaignId: asset.campaign_id,
         app: preparedAction.app,
         action: preparedAction.action,
         policyKey: preparedAction.policyKey,
-      },
+        assetType: asset.asset_type,
+        assetStatus: asset.status,
+        approvalId: latestApproval?.id ?? null,
+      }),
     });
 
     return NextResponse.json({
       success: true,
       toolRun,
       preparedAction,
+      sourceAsset: sourceAssetSnapshot,
+      approval: approvalSnapshot,
     });
   } catch (error) {
     if (error instanceof Error) {
