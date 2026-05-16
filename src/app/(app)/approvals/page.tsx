@@ -4,6 +4,22 @@ import { createClient } from "@/lib/supabase/server";
 import { AssetReviewActions } from "@/components/approvals/AssetReviewActions";
 import { RequestRevisionButton } from "@/components/assets/RequestRevisionButton";
 
+type ApprovalAsset = {
+  id: string;
+  campaign_id: string | null;
+  asset_type: string;
+  title: string | null;
+  content: string;
+  status: string;
+  version: number;
+  updated_at: string | null;
+};
+
+type CampaignName = {
+  id: string;
+  name: string;
+};
+
 function formatDate(value: string | null) {
   if (!value) return "No date";
 
@@ -32,9 +48,9 @@ export default async function ApprovalsPage() {
     redirect("/login");
   }
 
-  const { data: assets, error } = await supabase
+  const { data: assetsData, error } = await supabase
     .from("generated_assets")
-    .select("*, campaigns(name)")
+    .select("*")
     .eq("user_id", user.id)
     .in("status", ["needs_review", "revision_requested"])
     .order("updated_at", { ascending: false })
@@ -42,6 +58,35 @@ export default async function ApprovalsPage() {
 
   if (error) {
     console.error("Failed to load approval assets", error);
+  }
+
+  const assets = (assetsData ?? []) as ApprovalAsset[];
+
+  const campaignIds = Array.from(
+    new Set(
+      assets
+        .map((asset) => asset.campaign_id)
+        .filter((campaignId): campaignId is string => Boolean(campaignId))
+    )
+  );
+
+  let campaignNameById = new Map<string, string>();
+
+  if (campaignIds.length > 0) {
+    const { data: campaignsData, error: campaignsError } = await supabase
+      .from("campaigns")
+      .select("id,name")
+      .eq("user_id", user.id)
+      .in("id", campaignIds);
+
+    if (campaignsError) {
+      console.error("Failed to load campaign names for approval assets", campaignsError);
+    }
+
+    const campaigns = (campaignsData ?? []) as CampaignName[];
+    campaignNameById = new Map(
+      campaigns.map((campaign) => [campaign.id, campaign.name])
+    );
   }
 
   return (
@@ -52,17 +97,17 @@ export default async function ApprovalsPage() {
         </p>
         <h1 className="text-3xl font-bold">Approval Queue</h1>
         <p className="mt-2 max-w-3xl text-slate-600">
-          Review generated assets, approve them for execution, or create a revised version using Rudy&apos;s clone memory.
+          Review generated assets, approve them for execution, or create a
+          revised version using Rudy&apos;s clone memory.
         </p>
       </section>
 
       <section className="space-y-4">
-        {assets?.length ? (
+        {assets.length ? (
           assets.map((asset) => {
-            const campaignName =
-              asset.campaigns && typeof asset.campaigns === "object" && "name" in asset.campaigns
-                ? String(asset.campaigns.name)
-                : "No campaign";
+            const campaignName = asset.campaign_id
+              ? campaignNameById.get(asset.campaign_id) ?? "Campaign unavailable"
+              : "No campaign";
 
             const canRevise = asset.status !== "published" && asset.status !== "sent";
 
