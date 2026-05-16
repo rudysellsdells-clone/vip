@@ -14,7 +14,7 @@ type RecentItem = {
   title: string;
   subtitle: string;
   href?: string;
-  status?: string;
+  status?: string | null;
 };
 
 function formatDate(value: string | null) {
@@ -27,7 +27,7 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
-function formatStatus(status: string | null) {
+function formatStatus(status: string | null | undefined) {
   if (!status) return "Unknown";
 
   return status
@@ -331,7 +331,6 @@ export default async function DashboardPage() {
     id: activity.id,
     title: activity.title,
     subtitle: `${activity.activity_type} • ${formatDate(activity.created_at)}`,
-    status: null,
   }));
 
   return (
