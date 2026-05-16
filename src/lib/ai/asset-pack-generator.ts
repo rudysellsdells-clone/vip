@@ -99,7 +99,6 @@ async function callOpenAiForAssetPack(input: GenerateMarketingAssetPackInput) {
     },
     body: JSON.stringify({
       model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-      temperature: 0.7,
       response_format: { type: "json_object" },
       messages: [
         {
@@ -132,19 +131,12 @@ async function callOpenAiForAssetPack(input: GenerateMarketingAssetPackInput) {
     throw new Error("OpenAI response did not include choices.");
   }
 
-  const firstChoice = choices[0];
+  const message = (choices[0] as Record<string, unknown> | undefined)?.message;
 
-  if (!firstChoice || typeof firstChoice !== "object" || Array.isArray(firstChoice)) {
-    throw new Error("OpenAI response did not include a valid first choice.");
-  }
-
-  const message = (firstChoice as Record<string, unknown>).message;
-
-  if (!message || typeof message !== "object" || Array.isArray(message)) {
-    throw new Error("OpenAI response did not include a message.");
-  }
-
-  const messageContent = (message as Record<string, unknown>).content;
+  const messageContent =
+    message && typeof message === "object" && !Array.isArray(message)
+      ? (message as Record<string, unknown>).content
+      : null;
 
   if (typeof messageContent !== "string") {
     throw new Error("OpenAI response did not include message content.");
