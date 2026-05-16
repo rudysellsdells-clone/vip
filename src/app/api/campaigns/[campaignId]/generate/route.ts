@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { logActivity } from "@/lib/security/auditLog";
-import {
-  buildMarketingAssetPackSystemPrompt,
-  buildMarketingAssetPackUserPrompt,
-  formatCampaignStrategyForAsset,
-} from "@/lib/ai/prompts";
-import { generateMarketingAssetPack } from "@/lib/ai/openai";
+import { loadDigitalCloneContext } from "@/lib/clone/context";
+import { generateMarketingAssetPackWithCloneMemory } from "@/lib/ai/asset-pack-generator";
+import { marketingAssetPackToAssets } from "@/lib/ai/asset-pack-types";
+import type { Json } from "@/types/database.types";
 
 type RouteContext = {
   params: Promise<{
@@ -14,11 +12,38 @@ type RouteContext = {
   }>;
 };
 
+function toJson(value: unknown): Json {
+  return JSON.parse(JSON.stringify(value)) as Json;
+}
+
+function normalizeCampaignForPrompt(campaign: {
+  name: string;
+  idea: string;
+  buyer_segment: string | null;
+  audience: string | null;
+  goal: string | null;
+  platforms: string[] | null;
+  tone: string | null;
+  cta: string | null;
+  notes: string | null;
+}) {
+  return {
+    name: campaign.name,
+    idea: campaign.idea,
+    buyer_segment: campaign.buyer_segment,
+    audience: campaign.audience,
+    goal: campaign.goal,
+    platforms: campaign.platforms ?? [],
+    tone: campaign.tone,
+    cta: campaign.cta,
+    notes: campaign.notes,
+  };
+}
+
 export async function POST(_request: Request, context: RouteContext) {
   try {
     const { campaignId } = await context.params;
     const supabase = await createClient();
-    const db = supabase as any;
 
     const {
       data: { user },
@@ -40,126 +65,95 @@ export async function POST(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Campaign not found." }, { status: 404 });
     }
 
-    const [{ data: digitalCloneProfile }, { data: serviceLines }, { data: buyerSegments }, { data: offers }, { data: brandRules }, { data: knowledgeSources }] =
-      await Promise.all([
-        db
-          .from("digital_clone_profiles")
-          .select("name,purpose,voice_summary,business_summary,audience_summary,offer_summary,sales_outcome_summary")
-          .eq("user_id", user.id)
-          .eq("active", true)
-          .limit(1)
-          .maybeSingle(),
-        db
-          .from("service_lines")
-          .select("name,short_name,description,primary_outcome")
-          .eq("user_id", user.id)
-          .eq("active", true)
-          .order("sort_order", { ascending: true })
-          .limit(12),
-        db
-          .from("buyer_segments")
-          .select("name,description,common_pains,desired_outcomes,objections")
-          .eq("user_id", user.id)
-          .eq("active", true)
-          .order("sort_order", { ascending: true })
-          .limit(12),
-        db
-          .from("offers")
-          .select("name,description,primary_cta,outcome,offer_type")
-          .eq("user_id", user.id)
-          .eq("active", true)
-          .limit(12),
-        db
-          .from("brand_rules")
-          .select("category,rule_text")
-          .eq("user_id", user.id)
-          .eq("active", true)
-          .order("priority", { ascending: true })
-          .limit(40),
-        db
-          .from("knowledge_sources")
-          .select("title,summary,content,tags")
-          .eq("user_id", user.id)
-          .eq("active", true)
-          .order("created_at", { ascending: false })
-          .limit(8),
-      ]);
+    const cloneContext = await loadDigitalCloneContext(user.id);
 
-    const systemPrompt = buildMarketingAssetPackSystemPrompt();
-    const userPrompt = buildMarketingAssetPackUserPrompt({
-      campaign,
-      digitalCloneProfile,
-      serviceLines: serviceLines ?? [],
-      buyerSegments: buyerSegments ?? [],
-      offers: offers ?? [],
-      brandRules: brandRules ?? [],
-      knowledgeSources: knowledgeSources ?? [],
+    const assetPack = await generateMarketingAssetPackWithCloneMemory({
+      campaign: normalizeCampaignForPrompt(campaign),
+      digitalCloneProfile:
+        cloneContext.profile && typeof cloneContext.profile === "object"
+          ? (cloneContext.profile as Record<string, unknown>)
+          : null,
+      digitalCloneMemoryContext: cloneContext.formattedContext,
+      serviceLines: cloneContext.serviceLines as Record<string, unknown>[],
+      buyerSegments: cloneContext.buyerSegments as Record<string, unknown>[],
+      offers: cloneContext.offers as Record<string, unknown>[],
     });
 
-    const assetPack = await generateMarketingAssetPack({ systemPrompt, userPrompt });
-
-    const { error: campaignUpdateError } = await supabase
-      .from("campaigns")
-      .update({
-        strategy: assetPack.campaignStrategy,
-        status: "asset_pack_generated",
-      })
-      .eq("id", campaign.id)
-      .eq("user_id", user.id);
-
-    if (campaignUpdateError) {
-      return NextResponse.json({ error: campaignUpdateError.message }, { status: 400 });
-    }
-
-    const strategyAsset = {
-      user_id: user.id,
-      campaign_id: campaign.id,
-      asset_type: "campaign_strategy",
-      title: `${campaign.name} Campaign Strategy`,
-      content: formatCampaignStrategyForAsset(assetPack.campaignStrategy),
-      metadata: {
-        approvalChecklist: assetPack.approvalChecklist,
-      },
-      status: "needs_review" as const,
+    const assets = marketingAssetPackToAssets(assetPack);
+    const memorySnapshot = {
+      profileLoaded: Boolean(cloneContext.profile),
+      brandRuleCount: cloneContext.brandRules.length,
+      contentExampleCount: cloneContext.contentExamples.length,
+      knowledgeSourceCount: cloneContext.knowledgeSources.length,
+      serviceLineCount: cloneContext.serviceLines.length,
+      buyerSegmentCount: cloneContext.buyerSegments.length,
+      offerCount: cloneContext.offers.length,
+      formattedContextPreview: cloneContext.formattedContext.slice(0, 2000),
+      generatedAt: new Date().toISOString(),
     };
 
-    const assetRows = assetPack.assets.map((asset) => ({
-      user_id: user.id,
-      campaign_id: campaign.id,
-      asset_type: asset.type,
-      title: asset.title,
-      content: asset.content,
-      metadata: {
-        notes: asset.notes,
-      },
-      status: "needs_review" as const,
-    }));
-
-    const { data: assets, error: assetError } = await supabase
+    const { data: insertedAssets, error: insertAssetsError } = await supabase
       .from("generated_assets")
-      .insert([strategyAsset, ...assetRows])
+      .insert(
+        assets.map((asset) => ({
+          user_id: user.id,
+          campaign_id: campaign.id,
+          asset_type: asset.assetType,
+          title: asset.title,
+          content: asset.content,
+          metadata: toJson({
+            generatedBy: "campaign_asset_pack",
+            sprint: "5.7",
+            cloneMemoryUsed: true,
+            cloneMemorySnapshot: memorySnapshot,
+          }),
+          status: "needs_review",
+        }))
+      )
       .select("*");
 
-    if (assetError) {
-      return NextResponse.json({ error: assetError.message }, { status: 400 });
+    if (insertAssetsError) {
+      return NextResponse.json({ error: insertAssetsError.message }, { status: 400 });
+    }
+
+    const { data: updatedCampaign, error: updateCampaignError } = await supabase
+      .from("campaigns")
+      .update({
+        status: "asset_pack_generated",
+        strategy: toJson({
+          campaignStrategy: assetPack.campaignStrategy,
+          audienceAngle: assetPack.audienceAngle,
+          coreMessage: assetPack.coreMessage,
+          cloneMemorySnapshot: memorySnapshot,
+        }),
+      })
+      .eq("id", campaign.id)
+      .eq("user_id", user.id)
+      .select("*")
+      .single();
+
+    if (updateCampaignError) {
+      return NextResponse.json({ error: updateCampaignError.message }, { status: 400 });
     }
 
     await logActivity(supabase, {
       userId: user.id,
-      activityType: "asset_pack_generated",
+      activityType: "campaign_asset_pack_generated",
       title: "Marketing Asset Pack generated",
-      description: `Generated asset pack for ${campaign.name}`,
-      metadata: {
+      description: `${campaign.name} generated using digital clone memory.`,
+      metadata: toJson({
         campaignId: campaign.id,
-        assetCount: assets?.length ?? 0,
-      },
+        assetCount: insertedAssets?.length ?? 0,
+        cloneMemoryUsed: true,
+        memorySnapshot,
+      }),
     });
 
     return NextResponse.json({
-      campaignId: campaign.id,
-      strategy: assetPack.campaignStrategy,
-      assets,
-      approvalChecklist: assetPack.approvalChecklist,
+      campaign: updatedCampaign,
+      assetPack,
+      assets: insertedAssets ?? [],
+      cloneMemory: memorySnapshot,
     });
   } catch (error) {
     if (error instanceof Error) {
@@ -167,7 +161,7 @@ export async function POST(_request: Request, context: RouteContext) {
     }
 
     return NextResponse.json(
-      { error: "Unexpected error generating the Marketing Asset Pack." },
+      { error: "Unexpected error generating campaign asset pack." },
       { status: 500 }
     );
   }

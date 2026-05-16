@@ -1,4 +1,4 @@
-type CampaignForPrompt = {
+type PromptCampaign = {
   name: string;
   idea: string;
   buyer_segment: string | null;
@@ -10,242 +10,125 @@ type CampaignForPrompt = {
   notes: string | null;
 };
 
-type ContextItem = {
-  name?: string | null;
-  title?: string | null;
-  description?: string | null;
-  rule_text?: string | null;
-  content?: string | null;
-  summary?: string | null;
-  [key: string]: unknown;
-};
+type PromptEntity = Record<string, unknown>;
 
-type CampaignStrategy = {
-  summary?: string | null;
-  audienceAngle?: string | null;
-  coreMessage?: string | null;
-  positioning?: string | null;
-  cta?: string | null;
-  [key: string]: unknown;
-};
-
-type BuildMarketingAssetPackUserPromptInput = {
-  campaign: CampaignForPrompt;
-  digitalCloneProfile?: ContextItem | null;
-  serviceLines?: ContextItem[] | null;
-  buyerSegments?: ContextItem[] | null;
-  offers?: ContextItem[] | null;
-  brandRules?: ContextItem[] | null;
-  knowledgeSources?: ContextItem[] | null;
-};
-
-function listContextItems(items?: ContextItem[] | null, fallback = "None available yet.") {
+function formatUnknownList(title: string, items: PromptEntity[] | null | undefined) {
   if (!items?.length) {
-    return fallback;
+    return "";
   }
 
-  return items
-    .map((item, index) => {
-      const label = item.name ?? item.title ?? `Item ${index + 1}`;
-      const detail =
-        item.description ??
-        item.rule_text ??
-        item.summary ??
-        item.content ??
-        "";
-      return `- ${label}${detail ? `: ${detail}` : ""}`;
-    })
-    .join("\n");
+  const lines = items.map((item) => {
+    const name = typeof item.name === "string" ? item.name : "Unnamed";
+    const description =
+      typeof item.description === "string" ? item.description : "";
+    const outcome =
+      typeof item.primary_outcome === "string"
+        ? item.primary_outcome
+        : typeof item.outcome === "string"
+          ? item.outcome
+          : "";
+
+    return `- ${[name, description, outcome].filter(Boolean).join(" — ")}`;
+  });
+
+  return [`## ${title}`, ...lines].join("\n");
+}
+
+function normalizePlatforms(platforms: string[] | null | undefined) {
+  return platforms?.length ? platforms.join(", ") : "Email, LinkedIn, Facebook, YouTube";
 }
 
 export function buildMarketingAssetPackSystemPrompt() {
-  return `
-You are Rudy's Marketing Twin.
+  return `You are Rudy's Marketing Twin, a senior marketing strategist and content operator.
 
-Your job is to help Rudy McCormick make money with his services by creating clear, practical, revenue-focused marketing campaigns.
+Your job is to create revenue-focused marketing assets for Rudy McCormick.
 
-Rudy sells:
-- AIO — AI Optimization
-- SEO — Search Engine Optimization
-- Web Development
-- Content Creation
-- Performance Marketing / Paid Ads
-- Marketing Automation
-- Local Visibility / Local SEO
-- Website Health, Speed, and Conversion Improvements
+Write in clear, polished, human English. Be practical, specific, and business-focused.
+Avoid robotic phrasing, vague hype, fake guarantees, and filler.
+Use Rudy's digital clone memory, brand rules, knowledge library, offers, and examples whenever provided.
 
-Rudy's best buyers are:
-- Contractors
-- Mid-sized manufacturers
-- Machine shops
-- Dental practices
-- Legal firms
+Safety rules:
+- Do not claim anything that is not supported by the provided context.
+- Do not create legal, medical, or financial guarantees.
+- Do not imply any action has been sent, posted, published, or launched.
+- All external actions require Rudy's approval.
 
-Successful sales outcomes are:
-- Project contracts
-- Monthly retainers
-
-Voice rules:
-- Clear, direct, polished, human, strategic, and marketing-focused
-- Avoid robotic language
-- Avoid vague hype
-- Explain AI in plain English
-- Focus on business outcomes
-- Make CTAs specific
-
-Guardrails:
-- Draft only
-- Do not publish
-- Do not send
-- Do not spend credits
-- Do not contact prospects or clients without Rudy's approval
-
-Return valid JSON only.
-`;
-}
-
-export function buildMarketingAssetPackUserPrompt({
-  campaign,
-  digitalCloneProfile,
-  serviceLines,
-  buyerSegments,
-  offers,
-  brandRules,
-  knowledgeSources,
-}: BuildMarketingAssetPackUserPromptInput) {
-  const platforms = campaign.platforms ?? [];
-
-  return `
-Create a Marketing Asset Pack for this campaign.
-
-Campaign:
-- Name: ${campaign.name}
-- Idea: ${campaign.idea}
-- Buyer segment: ${campaign.buyer_segment ?? "Not specified"}
-- Audience: ${campaign.audience ?? campaign.buyer_segment ?? "Not specified"}
-- Goal: ${campaign.goal ?? "Not specified"}
-- Platforms: ${platforms.length ? platforms.join(", ") : "Not specified"}
-- Tone: ${campaign.tone ?? "Clear, practical, confident"}
-- CTA: ${campaign.cta ?? "Not specified"}
-- Notes: ${campaign.notes ?? "None"}
-
-Digital clone profile:
-${digitalCloneProfile ? JSON.stringify(digitalCloneProfile, null, 2) : "No digital clone profile available yet."}
-
-Service lines:
-${listContextItems(serviceLines)}
-
-Buyer segments:
-${listContextItems(buyerSegments)}
-
-Offers:
-${listContextItems(offers)}
-
-Brand rules:
-${listContextItems(brandRules)}
-
-Knowledge sources:
-${listContextItems(knowledgeSources)}
-
-Create these outputs:
-1. Campaign strategy
-2. Email draft
-3. LinkedIn post
-4. Facebook post
-5. YouTube title
-6. YouTube description
-7. Short video script
-8. GalaxyAI creative prompt
-9. Approval checklist
-
-Return JSON using exactly this structure:
+Return only valid JSON matching this shape:
 
 {
-  "campaignStrategy": {
-    "summary": "",
-    "audienceAngle": "",
-    "coreMessage": "",
-    "positioning": "",
-    "cta": ""
-  },
-  "assets": [
-    {
-      "type": "email",
-      "title": "",
-      "content": "",
-      "notes": ""
-    },
-    {
-      "type": "linkedin_post",
-      "title": "",
-      "content": "",
-      "notes": ""
-    },
-    {
-      "type": "facebook_post",
-      "title": "",
-      "content": "",
-      "notes": ""
-    },
-    {
-      "type": "youtube_title",
-      "title": "",
-      "content": "",
-      "notes": ""
-    },
-    {
-      "type": "youtube_description",
-      "title": "",
-      "content": "",
-      "notes": ""
-    },
-    {
-      "type": "video_script",
-      "title": "",
-      "content": "",
-      "notes": ""
-    },
-    {
-      "type": "galaxyai_prompt",
-      "title": "",
-      "content": "",
-      "notes": ""
-    }
-  ],
-  "approvalChecklist": []
-}
-`;
+  "campaignStrategy": "string",
+  "audienceAngle": "string",
+  "coreMessage": "string",
+  "emailDraft": "string",
+  "linkedinPost": "string",
+  "facebookPost": "string",
+  "youtubeTitle": "string",
+  "youtubeDescription": "string",
+  "shortVideoScript": "string",
+  "galaxyAiCreativePrompt": "string",
+  "approvalChecklist": "string"
+}`;
 }
 
-export function formatCampaignStrategyForAsset(strategy: CampaignStrategy | null | undefined) {
-  if (!strategy) {
-    return "No campaign strategy was generated.";
+export function buildMarketingAssetPackUserPrompt(input: {
+  campaign: PromptCampaign;
+  digitalCloneProfile?: PromptEntity | null;
+  digitalCloneMemoryContext?: string | null;
+  cloneMemoryContext?: string | null;
+  serviceLines?: PromptEntity[] | null;
+  buyerSegments?: PromptEntity[] | null;
+  offers?: PromptEntity[] | null;
+}) {
+  const campaign = input.campaign;
+  const cloneMemory =
+    input.digitalCloneMemoryContext ??
+    input.cloneMemoryContext ??
+    "No digital clone memory was provided.";
+
+  const serviceLines = formatUnknownList("Service Lines", input.serviceLines);
+  const buyerSegments = formatUnknownList("Buyer Segments", input.buyerSegments);
+  const offers = formatUnknownList("Offers", input.offers);
+
+  return `Create a complete Marketing Asset Pack for this campaign.
+
+## Campaign Brief
+Campaign name: ${campaign.name}
+Campaign idea: ${campaign.idea}
+Buyer segment: ${campaign.buyer_segment ?? "Not specified"}
+Audience: ${campaign.audience ?? "Not specified"}
+Goal: ${campaign.goal ?? "Book qualified sales conversations"}
+Platforms: ${normalizePlatforms(campaign.platforms)}
+Tone: ${campaign.tone ?? "Clear, practical, confident"}
+CTA: ${campaign.cta ?? "Book a call"}
+Notes: ${campaign.notes ?? "None"}
+
+## Rudy Digital Clone Memory
+${cloneMemory}
+
+${serviceLines}
+
+${buyerSegments}
+
+${offers}
+
+## Output Requirements
+1. Make this sound like Rudy, not generic AI.
+2. Tie the campaign to revenue, leads, visibility, or qualified conversations.
+3. Use the buyer segment's likely pain points.
+4. Keep the email useful and ready to review.
+5. Keep the LinkedIn and Facebook posts publish-ready but still approval-gated.
+6. Make the YouTube metadata clear and search-friendly.
+7. Make the short video script practical and easy to record.
+8. Make the GalaxyAI prompt visual and specific.
+9. Include an approval checklist that helps Rudy decide whether the campaign is safe and useful.
+
+Return only valid JSON.`;
+}
+
+export function formatCampaignStrategyForAsset(strategy: unknown) {
+  if (typeof strategy === "string") {
+    return strategy;
   }
 
-  const sections = [
-    ["Summary", strategy.summary],
-    ["Audience Angle", strategy.audienceAngle],
-    ["Core Message", strategy.coreMessage],
-    ["Positioning", strategy.positioning],
-    ["CTA", strategy.cta],
-  ];
-
-  return sections
-    .filter(([, value]) => typeof value === "string" && value.trim().length > 0)
-    .map(([label, value]) => `## ${label}\n\n${value}`)
-    .join("\n\n");
-}
-
-export function formatApprovalChecklistForMetadata(checklist: string[] | null | undefined) {
-  return {
-    approvalChecklist: checklist ?? [],
-  };
-}
-
-export function formatApprovalChecklistForAsset(checklist: string[] | null | undefined) {
-  if (!checklist?.length) {
-    return "No approval checklist was generated.";
-  }
-
-  return checklist.map((item, index) => `${index + 1}. ${item}`).join("\n");
+  return JSON.stringify(strategy, null, 2);
 }
