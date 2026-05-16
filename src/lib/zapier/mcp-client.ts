@@ -1,3 +1,5 @@
+import { assertZapierToolResultHasNoError } from "./result-utils";
+
 type JsonRpcResponse = {
   jsonrpc?: string;
   id?: string | number | null;
@@ -19,11 +21,7 @@ type ZapierMcpWriteActionInput = {
 
 function getZapierMcpServerUrl() {
   const url = process.env.ZAPIER_MCP_SERVER_URL;
-
-  if (!url) {
-    throw new Error("Missing ZAPIER_MCP_SERVER_URL environment variable.");
-  }
-
+  if (!url) throw new Error("Missing ZAPIER_MCP_SERVER_URL environment variable.");
   return url;
 }
 
@@ -31,66 +29,10 @@ function getZapierMcpAuthToken() {
   return process.env.ZAPIER_MCP_AUTH_TOKEN;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function getTextFromToolContent(result: unknown) {
-  if (!isRecord(result) || !Array.isArray(result.content)) {
-    return null;
-  }
-
-  return result.content
-    .map((item) => {
-      if (!isRecord(item)) return null;
-      return typeof item.text === "string" ? item.text : null;
-    })
-    .filter((text): text is string => Boolean(text))
-    .join("\n");
-}
-
-function maybeParseJson(text: string) {
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return null;
-  }
-}
-
-function assertZapierToolResultHasNoError(result: unknown) {
-  if (isRecord(result) && result.isError === true) {
-    const text = getTextFromToolContent(result);
-    throw new Error(text ?? "Zapier tool returned an error.");
-  }
-
-  const text = getTextFromToolContent(result);
-
-  if (!text) {
-    return;
-  }
-
-  const parsed = maybeParseJson(text);
-
-  if (isRecord(parsed) && parsed.isError === true) {
-    const error =
-      typeof parsed.error === "string"
-        ? parsed.error
-        : "Zapier tool returned an error.";
-
-    throw new Error(error);
-  }
-}
-
 function parseMcpResponse(text: string): JsonRpcResponse {
   const trimmed = text.trim();
-
-  if (!trimmed) {
-    return {};
-  }
-
-  if (trimmed.startsWith("{")) {
-    return JSON.parse(trimmed) as JsonRpcResponse;
-  }
+  if (!trimmed) return {};
+  if (trimmed.startsWith("{")) return JSON.parse(trimmed) as JsonRpcResponse;
 
   const dataLines = trimmed
     .split("\n")
@@ -100,17 +42,12 @@ function parseMcpResponse(text: string): JsonRpcResponse {
     .filter((line) => line && line !== "[DONE]");
 
   const lastJsonLine = dataLines.reverse().find((line) => line.startsWith("{"));
-
-  if (!lastJsonLine) {
-    throw new Error(`Unable to parse MCP response: ${text.slice(0, 500)}`);
-  }
-
+  if (!lastJsonLine) throw new Error(`Unable to parse MCP response: ${text.slice(0, 500)}`);
   return JSON.parse(lastJsonLine) as JsonRpcResponse;
 }
 
 function buildMcpHeaders(sessionId?: string) {
   const token = getZapierMcpAuthToken();
-
   return {
     "Content-Type": "application/json",
     Accept: "application/json, text/event-stream",
@@ -136,20 +73,12 @@ async function postJsonRpc(
   });
 
   const text = await response.text();
-
   if (!response.ok) {
-    throw new Error(
-      `Zapier MCP request failed: ${response.status} ${response.statusText} — ${text}`
-    );
+    throw new Error(`Zapier MCP request failed: ${response.status} ${response.statusText} — ${text}`);
   }
 
   const parsed = parseMcpResponse(text);
-
-  if (parsed.error) {
-    throw new Error(
-      `Zapier MCP error: ${parsed.error.message ?? "Unknown error"}`
-    );
-  }
+  if (parsed.error) throw new Error(`Zapier MCP error: ${parsed.error.message ?? "Unknown error"}`);
 
   return {
     result: parsed.result,
@@ -170,16 +99,13 @@ async function initializeZapierMcp() {
         version: "0.1.0",
       },
     });
-
     return initialized.sessionId;
   } catch {
     return undefined;
   }
 }
 
-export async function executeZapierMcpWriteAction(
-  input: ZapierMcpWriteActionInput
-) {
+export async function executeZapierMcpWriteAction(input: ZapierMcpWriteActionInput) {
   const sessionId = await initializeZapierMcp();
 
   const argumentsPayload: Record<string, unknown> = {
@@ -189,9 +115,7 @@ export async function executeZapierMcpWriteAction(
     output: input.output,
   };
 
-  if (input.params) {
-    argumentsPayload.params = input.params;
-  }
+  if (input.params) argumentsPayload.params = input.params;
 
   const { result } = await postJsonRpc(
     "tools/call",
@@ -203,6 +127,5 @@ export async function executeZapierMcpWriteAction(
   );
 
   assertZapierToolResultHasNoError(result);
-
   return result;
 }

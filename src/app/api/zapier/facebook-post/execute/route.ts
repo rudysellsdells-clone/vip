@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { executeZapierMcpWriteAction } from "@/lib/zapier/mcp-client";
+import { markSourceAssetAfterZapierExecution } from "@/lib/zapier/execution-audit";
+import { normalizeZapierToolResult } from "@/lib/zapier/result-utils";
 import {
   getFacebookPageLockStatus,
   REQUIRED_FACEBOOK_PAGE_NAME,
@@ -28,17 +30,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function getPreparedAction(input: unknown): PreparedAction | null {
-  if (!isRecord(input)) {
-    return null;
-  }
-
-  const preparedAction = input.preparedAction;
-
-  if (!isRecord(preparedAction)) {
-    return null;
-  }
-
-  return preparedAction;
+  if (!isRecord(input)) return null;
+  return isRecord(input.preparedAction) ? input.preparedAction : null;
 }
 
 function getString(value: unknown, fallback = "") {
@@ -84,14 +77,10 @@ export async function POST(request: Request) {
   try {
     const supabase = await createClient();
     const body = await request.json().catch(() => ({}));
-    const toolRunId =
-      typeof body.toolRunId === "string" ? body.toolRunId : null;
+    const toolRunId = typeof body.toolRunId === "string" ? body.toolRunId : null;
 
     if (!toolRunId) {
-      return NextResponse.json(
-        { error: "toolRunId is required." },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "toolRunId is required." }, { status: 400 });
     }
 
     const facebookLock = getFacebookPageLockStatus();
@@ -99,8 +88,7 @@ export async function POST(request: Request) {
     if (!facebookLock.configured || !facebookLock.pageId) {
       return NextResponse.json(
         {
-          error:
-            `Facebook execution is blocked until ZAPIER_FACEBOOK_PAGE_NAME is ${REQUIRED_FACEBOOK_PAGE_NAME} and ZAPIER_FACEBOOK_PAGE_ID is set.`,
+          error: `Facebook execution is blocked until ZAPIER_FACEBOOK_PAGE_NAME is ${REQUIRED_FACEBOOK_PAGE_NAME} and ZAPIER_FACEBOOK_PAGE_ID is set.`,
         },
         { status: 403 }
       );
@@ -109,8 +97,7 @@ export async function POST(request: Request) {
     if (facebookLock.pageName !== REQUIRED_FACEBOOK_PAGE_NAME) {
       return NextResponse.json(
         {
-          error:
-            `Facebook execution blocked. Expected ${REQUIRED_FACEBOOK_PAGE_NAME}, got ${facebookLock.pageName ?? "empty"}.`,
+          error: `Facebook execution blocked. Expected ${REQUIRED_FACEBOOK_PAGE_NAME}, got ${facebookLock.pageName ?? "empty"}.`,
         },
         { status: 403 }
       );
@@ -136,40 +123,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Tool run not found." }, { status: 404 });
     }
 
-    if (toolRun.provider !== "zapier_mcp") {
-      return NextResponse.json(
-        { error: "This tool run is not a Zapier MCP action." },
-        { status: 400 }
-      );
+    if (toolRun.provider !== "zapier_mcp" || toolRun.action_name !== "Facebook Pages:page_stream") {
+      return NextResponse.json({ error: "This route only executes Facebook Page post actions." }, { status: 400 });
     }
 
-    if (toolRun.action_name !== "Facebook Pages:page_stream") {
-      return NextResponse.json(
-        { error: "Sprint 5.3 only executes Facebook Page post actions." },
-        { status: 400 }
-      );
-    }
-
-    if (
-      !RETRIABLE_FACEBOOK_POST_STATUSES.includes(
-        toolRun.status as (typeof RETRIABLE_FACEBOOK_POST_STATUSES)[number]
-      )
-    ) {
-      return NextResponse.json(
-        {
-          error: `This Facebook action cannot be executed from status "${toolRun.status}".`,
-        },
-        { status: 400 }
-      );
+    if (!RETRIABLE_FACEBOOK_POST_STATUSES.includes(toolRun.status as (typeof RETRIABLE_FACEBOOK_POST_STATUSES)[number])) {
+      return NextResponse.json({ error: `This Facebook action cannot be executed from status "${toolRun.status}".` }, { status: 400 });
     }
 
     const preparedAction = getPreparedAction(toolRun.input);
-
     if (!preparedAction) {
-      return NextResponse.json(
-        { error: "Prepared action details are missing." },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Prepared action details are missing." }, { status: 400 });
     }
 
     const params = getParams(preparedAction);
@@ -177,10 +141,7 @@ export async function POST(request: Request) {
     const linkUrl = getString(params.link_url) || getString(params.linkUrl);
 
     if (!message.trim()) {
-      return NextResponse.json(
-        { error: "Prepared Facebook post message is missing." },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Prepared Facebook post message is missing." }, { status: 400 });
     }
 
     const zapierParams: Record<string, unknown> = {
@@ -188,24 +149,11 @@ export async function POST(request: Request) {
       message,
     };
 
-    if (linkUrl.trim()) {
-      zapierParams.link_url = linkUrl;
-    }
-
-    const instructions = buildFacebookPostInstructions({
-      pageValue: facebookLock.pageId,
-      pageHandle: facebookLock.pageName ?? REQUIRED_FACEBOOK_PAGE_NAME,
-      message,
-      linkUrl,
-    });
+    if (linkUrl.trim()) zapierParams.link_url = linkUrl;
 
     await supabase
       .from("tool_runs")
-      .update({
-        status: "running",
-        approved_by_user: true,
-        error: null,
-      })
+      .update({ status: "running", approved_by_user: true, error: null })
       .eq("id", toolRun.id)
       .eq("user_id", user.id);
 
@@ -214,16 +162,32 @@ export async function POST(request: Request) {
         app: "Facebook Pages",
         action: "page_stream",
         params: zapierParams,
-        instructions,
+        instructions: buildFacebookPostInstructions({
+          pageValue: facebookLock.pageId,
+          pageHandle: facebookLock.pageName ?? REQUIRED_FACEBOOK_PAGE_NAME,
+          message,
+          linkUrl,
+        }),
         output:
           "Return the Facebook Page post id, URL if available, Page value used, and confirmation that it was posted only to the locked Page.",
+      });
+
+      const normalizedResult = normalizeZapierToolResult(result);
+
+      await markSourceAssetAfterZapierExecution({
+        supabase,
+        userId: user.id,
+        toolRunInput: toolRun.input,
+        providerAction: "Facebook Pages:page_stream",
+        normalizedResult,
+        assetStatus: "published",
       });
 
       const { data: updatedToolRun, error: updateError } = await supabase
         .from("tool_runs")
         .update({
           status: "completed",
-          output: toJson(result),
+          output: toJson({ normalizedResult, rawResult: result }),
           error: null,
           completed_at: new Date().toISOString(),
         })
@@ -240,33 +204,25 @@ export async function POST(request: Request) {
         userId: user.id,
         activityType: "facebook_page_post_created",
         title: "Facebook Page post created",
-        description: `Created Facebook Page post for ${REQUIRED_FACEBOOK_PAGE_NAME}.`,
+        description: normalizedResult.summary,
         metadata: toJson({
           toolRunId: toolRun.id,
+          actionName: "Facebook Pages:page_stream",
           pageName: facebookLock.pageName,
           pageId: facebookLock.pageId,
-          result,
+          externalId: normalizedResult.externalId,
+          externalUrl: normalizedResult.externalUrl,
+          normalizedResult,
         }),
       });
 
-      return NextResponse.json({
-        success: true,
-        toolRun: updatedToolRun,
-        result,
-      });
+      return NextResponse.json({ success: true, toolRun: updatedToolRun, result, normalizedResult });
     } catch (executionError) {
-      const errorMessage =
-        executionError instanceof Error
-          ? executionError.message
-          : "Unexpected Zapier execution error.";
+      const errorMessage = executionError instanceof Error ? executionError.message : "Unexpected Zapier execution error.";
 
       await supabase
         .from("tool_runs")
-        .update({
-          status: "failed",
-          error: errorMessage,
-          completed_at: new Date().toISOString(),
-        })
+        .update({ status: "failed", error: errorMessage, completed_at: new Date().toISOString() })
         .eq("id", toolRun.id)
         .eq("user_id", user.id);
 
@@ -277,9 +233,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    return NextResponse.json(
-      { error: "Unexpected error executing Facebook Page post." },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Unexpected error executing Facebook Page post." }, { status: 500 });
   }
 }
