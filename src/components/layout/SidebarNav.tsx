@@ -39,6 +39,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: "Brand Voice", href: "/brand-voice" },
       { label: "Knowledge", href: "/knowledge" },
+      { label: "Settings", href: "/settings" },
     ],
   },
 ];

@@ -11,9 +11,11 @@ type Option = {
 
 export function CampaignWebsiteForm({
   serviceLines,
+  buyerSegments,
   offers,
 }: {
   serviceLines: Option[];
+  buyerSegments: Option[];
   offers: Option[];
 }) {
   const router = useRouter();
@@ -90,7 +92,19 @@ export function CampaignWebsiteForm({
 
         <label className={formStyles.field}>
           <span className={formStyles.label}>Buyer Segment</span>
-          <input name="buyer_segment" className={formStyles.input} placeholder="Contractors, dental practices..." />
+          <select name="buyer_segment" className={formStyles.select} required>
+            <option value="">Select buyer segment</option>
+            {buyerSegments.map((buyerSegment) => (
+              <option key={buyerSegment.id} value={buyerSegment.name}>
+                {buyerSegment.name}
+              </option>
+            ))}
+          </select>
+          {buyerSegments.length === 0 ? (
+            <span className={formStyles.help}>
+              No buyer segments found. Go to Settings and populate the commercial foundation.
+            </span>
+          ) : null}
         </label>
       </div>
 
@@ -98,7 +112,9 @@ export function CampaignWebsiteForm({
         <label className={formStyles.field}>
           <span className={formStyles.label}>Campaign Idea</span>
           <textarea name="idea" className={[formStyles.textarea, formStyles.textareaLarge].join(" ")} required />
-          <span className={formStyles.help}>Describe the offer, problem, or opportunity this campaign should focus on.</span>
+          <span className={formStyles.help}>
+            Describe the offer, problem, or opportunity this campaign should focus on.
+          </span>
         </label>
       </div>
 
@@ -125,6 +141,11 @@ export function CampaignWebsiteForm({
               </option>
             ))}
           </select>
+          {offers.length === 0 ? (
+            <span className={formStyles.help}>
+              No offers found. Go to Settings and populate the commercial foundation.
+            </span>
+          ) : null}
         </label>
       </div>
 
