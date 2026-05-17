@@ -1,5 +1,3 @@
-import { assertZapierToolResultHasNoError } from "./result-utils";
-
 type JsonRpcResponse = {
   jsonrpc?: string;
   id?: string | number | null;
@@ -11,121 +9,125 @@ type JsonRpcResponse = {
   };
 };
 
-type ZapierMcpWriteActionInput = {
-  app: string;
-  action: string;
-  instructions: string;
-  output: string;
-  params?: Record<string, unknown>;
-};
+function getMcpServerUrl() {
+  const url = process.env.ZAPIER_MCP_SERVER_URL?.trim();
 
-function getZapierMcpServerUrl() {
-  const url = process.env.ZAPIER_MCP_SERVER_URL;
-  if (!url) throw new Error("Missing ZAPIER_MCP_SERVER_URL environment variable.");
+  if (!url) {
+    throw new Error("Missing ZAPIER_MCP_SERVER_URL.");
+  }
+
   return url;
 }
 
-function getZapierMcpAuthToken() {
-  return process.env.ZAPIER_MCP_AUTH_TOKEN;
+function getMcpToken() {
+  return (
+    process.env.ZAPIER_MCP_TOKEN?.trim() ||
+    process.env.ZAPIER_MCP_AUTH_TOKEN?.trim() ||
+    process.env.ZAPIER_MCP_BEARER_TOKEN?.trim() ||
+    ""
+  );
+}
+
+function responseLooksLikeHtml(value: string) {
+  return value.trim().toLowerCase().startsWith("<!doctype html") ||
+    value.trim().toLowerCase().startsWith("<html");
 }
 
 function parseMcpResponse(text: string): JsonRpcResponse {
-  const trimmed = text.trim();
-  if (!trimmed) return {};
-  if (trimmed.startsWith("{")) return JSON.parse(trimmed) as JsonRpcResponse;
+  if (responseLooksLikeHtml(text)) {
+    throw new Error(
+      `Unable to parse MCP response. Zapier returned HTML instead of JSON. Check ZAPIER_MCP_SERVER_URL and token. Preview: ${text.slice(0, 240)}`
+    );
+  }
 
-  const dataLines = trimmed
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith("data:"))
-    .map((line) => line.replace(/^data:\s*/, ""))
-    .filter((line) => line && line !== "[DONE]");
-
-  const lastJsonLine = dataLines.reverse().find((line) => line.startsWith("{"));
-  if (!lastJsonLine) throw new Error(`Unable to parse MCP response: ${text.slice(0, 500)}`);
-  return JSON.parse(lastJsonLine) as JsonRpcResponse;
+  try {
+    return JSON.parse(text) as JsonRpcResponse;
+  } catch {
+    throw new Error(`Unable to parse MCP response: ${text.slice(0, 500)}`);
+  }
 }
 
-function buildMcpHeaders(sessionId?: string) {
-  const token = getZapierMcpAuthToken();
-  return {
-    "Content-Type": "application/json",
-    Accept: "application/json, text/event-stream",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...(sessionId ? { "Mcp-Session-Id": sessionId } : {}),
+function extractNestedToolError(result: unknown) {
+  if (!result || typeof result !== "object") return null;
+
+  const maybeResult = result as {
+    isError?: unknown;
+    content?: Array<{ type?: string; text?: string }>;
   };
+
+  if (maybeResult.isError !== true) return null;
+
+  const textContent = maybeResult.content?.find(
+    (item) => item.type === "text" && typeof item.text === "string"
+  )?.text;
+
+  if (!textContent) {
+    return "Zapier MCP returned an error.";
+  }
+
+  try {
+    const parsed = JSON.parse(textContent) as { error?: string; message?: string };
+    return parsed.error ?? parsed.message ?? textContent;
+  } catch {
+    return textContent;
+  }
 }
 
-async function postJsonRpc(
-  method: string,
-  params: Record<string, unknown>,
-  sessionId?: string
-) {
-  const response = await fetch(getZapierMcpServerUrl(), {
+export async function callZapierMcpTool({
+  toolName,
+  args,
+  requestId,
+}: {
+  toolName: string;
+  args: Record<string, unknown>;
+  requestId: string;
+}) {
+  const serverUrl = getMcpServerUrl();
+  const token = getMcpToken();
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const response = await fetch(serverUrl, {
     method: "POST",
-    headers: buildMcpHeaders(sessionId),
+    headers,
     body: JSON.stringify({
       jsonrpc: "2.0",
-      id: crypto.randomUUID(),
-      method,
-      params,
+      id: requestId,
+      method: "tools/call",
+      params: {
+        name: toolName,
+        arguments: args,
+      },
     }),
   });
 
-  const text = await response.text();
+  const responseText = await response.text();
+
   if (!response.ok) {
-    throw new Error(`Zapier MCP request failed: ${response.status} ${response.statusText} — ${text}`);
+    throw new Error(
+      `Zapier MCP request failed: ${response.status} ${response.statusText} — ${responseText.slice(0, 500)}`
+    );
   }
 
-  const parsed = parseMcpResponse(text);
-  if (parsed.error) throw new Error(`Zapier MCP error: ${parsed.error.message ?? "Unknown error"}`);
+  const payload = parseMcpResponse(responseText);
 
-  return {
-    result: parsed.result,
-    sessionId:
-      response.headers.get("mcp-session-id") ??
-      response.headers.get("Mcp-Session-Id") ??
-      sessionId,
-  };
-}
-
-async function initializeZapierMcp() {
-  try {
-    const initialized = await postJsonRpc("initialize", {
-      protocolVersion: "2025-03-26",
-      capabilities: {},
-      clientInfo: {
-        name: "rudys-vip",
-        version: "0.1.0",
-      },
-    });
-    return initialized.sessionId;
-  } catch {
-    return undefined;
+  if (payload.error) {
+    throw new Error(
+      `Zapier MCP error: ${payload.error.message ?? "Unknown MCP error"}`
+    );
   }
-}
 
-export async function executeZapierMcpWriteAction(input: ZapierMcpWriteActionInput) {
-  const sessionId = await initializeZapierMcp();
+  const nestedError = extractNestedToolError(payload.result);
 
-  const argumentsPayload: Record<string, unknown> = {
-    app: input.app,
-    action: input.action,
-    instructions: input.instructions,
-    output: input.output,
-  };
+  if (nestedError) {
+    throw new Error(nestedError);
+  }
 
-  if (input.params) argumentsPayload.params = input.params;
-
-  const { result } = await postJsonRpc(
-    "tools/call",
-    {
-      name: "execute_zapier_write_action",
-      arguments: argumentsPayload,
-    },
-    sessionId
-  );
-
-  assertZapierToolResultHasNoError(result);
-  return result;
+  return payload.result;
 }
