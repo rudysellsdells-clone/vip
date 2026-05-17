@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AssetTitleLink } from "@/components/assets/AssetTitleLink";
 import { AssetReviewActions } from "@/components/approvals/AssetReviewActions";
 import { PrepareLinkedInPostButton } from "@/components/assets/PrepareLinkedInPostButton";
 import { RequestRevisionButton } from "@/components/assets/RequestRevisionButton";
@@ -89,7 +90,8 @@ export default async function AssetDetailPage({ params }: PageProps) {
   const revisions = (childRevisions ?? []) as Array<Record<string, any>>;
   const approvalRows = (approvals ?? []) as Array<Record<string, any>>;
   const canRevise = asset.status !== "published" && asset.status !== "sent";
-  const canPrepareLinkedIn = asset.status === "approved" && isLinkedInAsset(asset.asset_type, asset.title);
+  const canPrepareLinkedIn =
+    asset.status === "approved" && isLinkedInAsset(asset.asset_type, asset.title);
 
   return (
     <WebsitePage>
@@ -176,7 +178,13 @@ export default async function AssetDetailPage({ params }: PageProps) {
 
           {parentAsset ? (
             <article className={websiteStyles.card} style={{ marginTop: 16 }}>
-              <h3 className={websiteStyles.cardTitle}>Parent asset</h3>
+              <h3 className={websiteStyles.cardTitle}>
+                <AssetTitleLink
+                  assetId={parentAsset.id}
+                  title={parentAsset.title ?? "Parent asset"}
+                  className="text-slate-950 underline-offset-4 transition hover:text-[#0b4a7a] hover:underline"
+                />
+              </h3>
               <p className={websiteStyles.cardMeta}>
                 Version {parentAsset.version} • {parentAsset.status}
               </p>
@@ -206,13 +214,19 @@ export default async function AssetDetailPage({ params }: PageProps) {
           {revisions.length ? (
             <div className={websiteStyles.cardGrid}>
               {revisions.map((revision) => (
-                <Link key={revision.id} href={`/assets/${revision.id}`} className={websiteStyles.card}>
-                  <h3 className={websiteStyles.cardTitle}>{revision.title ?? "Untitled revision"}</h3>
+                <article key={revision.id} className={websiteStyles.card}>
+                  <h3 className={websiteStyles.cardTitle}>
+                    <AssetTitleLink
+                      assetId={revision.id}
+                      title={revision.title ?? "Untitled revision"}
+                      className="text-slate-950 underline-offset-4 transition hover:text-[#0b4a7a] hover:underline"
+                    />
+                  </h3>
                   <p className={websiteStyles.cardMeta}>
                     Version {revision.version} • {formatDate(revision.created_at)}
                   </p>
                   <WebsiteBadge status={revision.status} />
-                </Link>
+                </article>
               ))}
             </div>
           ) : (

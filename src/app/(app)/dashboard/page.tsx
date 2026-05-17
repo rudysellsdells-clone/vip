@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 import styles from "./DashboardWebsite.module.css";
+import { createClient } from "@/lib/supabase/server";
 
 type RecentItem = {
   id: string;
@@ -118,41 +118,30 @@ function RecentList({
     <Section title={title} description={description}>
       <div className={styles.listStack}>
         {items.length ? (
-          items.map((item) => {
-            const card = (
-              <div className={styles.listCard}>
-                <div className={styles.listCardInner}>
-                  <div>
-                    <h3 className={styles.listTitle}>{item.title}</h3>
-                    <p className={styles.listSubtitle}>{item.subtitle}</p>
-                  </div>
-                  {item.status ? (
-                    <span className={styles.statusPill}>
-                      {formatStatus(item.status)}
-                    </span>
-                  ) : null}
+          items.map((item) => (
+            <div key={item.id} className={styles.listCard}>
+              <div className={styles.listCardInner}>
+                <div>
+                  <h3 className={styles.listTitle}>
+                    {item.href ? (
+                      <Link
+                        href={item.href}
+                        className="text-slate-950 underline-offset-4 transition hover:text-[#0b4a7a] hover:underline"
+                      >
+                        {item.title}
+                      </Link>
+                    ) : (
+                      item.title
+                    )}
+                  </h3>
+                  <p className={styles.listSubtitle}>{item.subtitle}</p>
                 </div>
+                {item.status ? (
+                  <span className={styles.statusPill}>{formatStatus(item.status)}</span>
+                ) : null}
               </div>
-            );
-
-            return item.href ? (
-              <Link key={item.id} href={item.href} className={styles.listCard}>
-                <div className={styles.listCardInner}>
-                  <div>
-                    <h3 className={styles.listTitle}>{item.title}</h3>
-                    <p className={styles.listSubtitle}>{item.subtitle}</p>
-                  </div>
-                  {item.status ? (
-                    <span className={styles.statusPill}>
-                      {formatStatus(item.status)}
-                    </span>
-                  ) : null}
-                </div>
-              </Link>
-            ) : (
-              <div key={item.id}>{card}</div>
-            );
-          })
+            </div>
+          ))
         ) : (
           <div className={styles.empty}>{emptyMessage}</div>
         )}
@@ -240,9 +229,9 @@ function getNextActions(input: {
     actions.push({
       title: "Execute prepared actions",
       description:
-        "Create Gmail drafts or publish approved Facebook posts from the safety queue.",
-      href: "/zapier",
-      cta: "Open Zapier",
+        "Create Gmail drafts or publish approved social posts from the safety queue.",
+      href: "/actions",
+      cta: "Open actions",
     });
   }
 
@@ -366,22 +355,13 @@ export default async function DashboardPage() {
             </p>
 
             <div className={styles.heroActions}>
-              <Link
-                href="/campaigns"
-                className={[styles.button, styles.buttonPrimary].join(" ")}
-              >
+              <Link href="/campaigns" className={[styles.button, styles.buttonPrimary].join(" ")}>
                 Create Campaign
               </Link>
-              <Link
-                href="/approvals"
-                className={[styles.button, styles.buttonSecondary].join(" ")}
-              >
+              <Link href="/approvals" className={[styles.button, styles.buttonSecondary].join(" ")}>
                 Review Assets
               </Link>
-              <Link
-                href="/prospects"
-                className={[styles.button, styles.buttonSecondary].join(" ")}
-              >
+              <Link href="/prospects" className={[styles.button, styles.buttonSecondary].join(" ")}>
                 Build Pipeline
               </Link>
             </div>
@@ -419,40 +399,11 @@ export default async function DashboardPage() {
       </section>
 
       <section className={styles.metricsGrid}>
-        <Metric
-          label="Campaigns"
-          value={campaigns.length}
-          description="Revenue-focused campaigns in motion."
-          href="/campaigns"
-        />
-        <Metric
-          label="Pending Review"
-          value={pendingAssets.length}
-          description="Assets waiting for approval or revision."
-          href="/approvals"
-          dotClass={styles.dotGold}
-        />
-        <Metric
-          label="Approved"
-          value={approvedAssets.length}
-          description="Ready for safe execution."
-          href="/zapier"
-          dotClass={styles.dotGreen}
-        />
-        <Metric
-          label="Published"
-          value={publishedAssets.length}
-          description="Completed public publishing actions."
-          href="/actions"
-          dotClass={styles.dotPurple}
-        />
-        <Metric
-          label="Failed"
-          value={failedToolRuns.length}
-          description="Actions that need attention."
-          href="/actions"
-          dotClass={failedToolRuns.length ? styles.dotRed : undefined}
-        />
+        <Metric label="Campaigns" value={campaigns.length} description="Revenue-focused campaigns in motion." href="/campaigns" />
+        <Metric label="Pending Review" value={pendingAssets.length} description="Assets waiting for approval or revision." href="/approvals" dotClass={styles.dotGold} />
+        <Metric label="Approved" value={approvedAssets.length} description="Ready for safe execution." href="/zapier" dotClass={styles.dotGreen} />
+        <Metric label="Published" value={publishedAssets.length} description="Completed public publishing actions." href="/actions" dotClass={styles.dotPurple} />
+        <Metric label="Failed" value={failedToolRuns.length} description="Actions that need attention." href="/actions" dotClass={failedToolRuns.length ? styles.dotRed : undefined} />
       </section>
 
       <section className={styles.twoColumn}>
@@ -463,11 +414,7 @@ export default async function DashboardPage() {
         >
           <div className={styles.serviceGrid}>
             {services.map((service) => (
-              <Link
-                key={service.title}
-                href={service.href}
-                className={styles.serviceCard}
-              >
+              <Link key={service.title} href={service.href} className={styles.serviceCard}>
                 <span className={styles.serviceIcon}>{service.title.slice(0, 1)}</span>
                 <h3 className={styles.serviceTitle}>{service.title}</h3>
                 <p className={styles.serviceCopy}>{service.description}</p>
@@ -513,7 +460,7 @@ export default async function DashboardPage() {
       <section className={styles.twoColumn}>
         <RecentList
           title="Recent executions"
-          description="Latest Zapier, GalaxyAI, Gmail, Facebook, and tool actions."
+          description="Latest Zapier, GalaxyAI, Gmail, Facebook, LinkedIn, and tool actions."
           items={toolRunItems}
           emptyMessage="No tool runs yet."
         />

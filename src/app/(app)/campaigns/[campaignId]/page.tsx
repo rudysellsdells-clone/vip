@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { AssetTitleLink } from "@/components/assets/AssetTitleLink";
 import { DeleteCampaignButton } from "@/components/campaigns/DeleteCampaignButton";
 import { GenerateCampaignAssetsButton } from "@/components/campaigns/GenerateCampaignAssetsButton";
 import {
@@ -11,6 +11,7 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
+import { createClient } from "@/lib/supabase/server";
 
 type PageProps = {
   params: Promise<{
@@ -20,6 +21,7 @@ type PageProps = {
 
 function formatDate(value: string | null) {
   if (!value) return "No date";
+
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
@@ -157,23 +159,37 @@ export default async function CampaignDetailPage({ params }: PageProps) {
       <WebsiteSection
         eyebrow="Asset Pack"
         title="Generated assets"
-        description="Open each asset to review, revise, approve, and execute the version you trust."
+        description="Open each asset by clicking its title, then review, revise, approve, and execute the version you trust."
       >
         {assets.length ? (
           <div className={websiteStyles.cardGrid}>
             {assets.map((asset) => (
-              <Link key={asset.id} href={`/assets/${asset.id}`} className={websiteStyles.card}>
+              <article key={asset.id} className={websiteStyles.card}>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className={websiteStyles.cardTitle}>{asset.title ?? asset.asset_type}</h3>
                   <WebsiteBadge status={asset.status} />
+                  <span className={websiteStyles.badge}>{asset.asset_type}</span>
                 </div>
+
+                <h3 className={websiteStyles.cardTitle} style={{ marginTop: 16 }}>
+                  <AssetTitleLink
+                    assetId={asset.id}
+                    title={asset.title ?? asset.asset_type}
+                    className="text-slate-950 underline-offset-4 transition hover:text-[#0b4a7a] hover:underline"
+                  />
+                </h3>
+
                 <p className={websiteStyles.cardMeta}>
-                  {asset.asset_type} • Version {asset.version} • {formatDate(asset.created_at)}
+                  Version {asset.version} • {formatDate(asset.created_at)}
                 </p>
+
                 <p className={websiteStyles.cardText}>
                   {String(asset.content).slice(0, 220)}...
                 </p>
-              </Link>
+
+                <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
+                  Open asset →
+                </Link>
+              </article>
             ))}
           </div>
         ) : (
