@@ -1,114 +1,79 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import {
+  WebsiteBadge,
+  WebsiteHero,
+  WebsiteMetric,
+  WebsitePage,
+  WebsiteSection,
+  websiteStyles,
+} from "@/components/website-ui/WebsitePage";
 
 function formatDate(value: string | null) {
   if (!value) return "No date";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function getNormalizedResult(output: unknown) {
-  if (!isRecord(output) || !isRecord(output.normalizedResult)) return null;
-  return output.normalizedResult;
-}
-
-function getSourceAsset(input: unknown) {
-  if (!isRecord(input) || !isRecord(input.sourceAsset)) return null;
-  return input.sourceAsset;
-}
-
-function getString(value: unknown, fallback = "") {
-  return typeof value === "string" ? value : fallback;
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
 }
 
 export default async function ActionsPage() {
   const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
 
-  const { data: actions } = await supabase
+  const { data: toolRunsData } = await supabase
     .from("tool_runs")
     .select("*")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(100);
 
+  const toolRuns = (toolRunsData ?? []) as Array<Record<string, any>>;
+  const completed = toolRuns.filter((run) => run.status === "completed").length;
+  const failed = toolRuns.filter((run) => run.status === "failed").length;
+  const waiting = toolRuns.filter((run) => ["planned", "waiting_approval"].includes(run.status)).length;
+
   return (
-    <main className="mx-auto max-w-6xl space-y-8 p-8">
-      <section>
-        <p className="text-sm uppercase tracking-wide text-slate-500">Audit Trail</p>
-        <h1 className="text-3xl font-bold">Action History</h1>
-        <p className="mt-2 max-w-3xl text-slate-600">
-          A clean audit trail of internal, GalaxyAI, Zapier MCP, and manual tool actions.
-        </p>
+    <WebsitePage>
+      <WebsiteHero
+        eyebrow="Execution History"
+        title="Track every external action."
+        description="Review Zapier, GalaxyAI, Gmail, Facebook, and manual workflow actions so execution stays visible and accountable."
+        primaryAction={{ label: "Open Zapier", href: "/zapier" }}
+        secondaryAction={{ label: "Dashboard", href: "/dashboard" }}
+      />
+
+      <section className={websiteStyles.metricsGrid}>
+        <WebsiteMetric label="Total Actions" value={toolRuns.length} description="All tracked tool runs." dot="blue" />
+        <WebsiteMetric label="Completed" value={completed} description="Successfully finished actions." dot="green" />
+        <WebsiteMetric label="Waiting" value={waiting} description="Prepared or awaiting approval." dot="gold" />
+        <WebsiteMetric label="Failed" value={failed} description="Actions needing attention." dot={failed ? "red" : "blue"} />
       </section>
 
-      <section className="rounded-2xl border bg-white p-6 shadow-sm">
-        <div className="space-y-3">
-          {actions?.length ? (
-            actions.map((action) => {
-              const normalized = getNormalizedResult(action.output);
-              const sourceAsset = getSourceAsset(action.input);
-
-              return (
-                <article key={action.id} className="rounded-xl border p-4">
-                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <h2 className="font-semibold">{action.action_name}</h2>
-                      <p className="mt-1 text-sm text-slate-500">
-                        Provider: {action.provider} · Status: {action.status}
-                      </p>
-
-                      {sourceAsset ? (
-                        <p className="mt-2 text-sm text-slate-600">
-                          Source: {getString(sourceAsset.title, "Untitled asset")}
-                        </p>
-                      ) : null}
-
-                      {normalized ? (
-                        <div className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
-                          <p>{getString(normalized.summary, "Completed")}</p>
-                          {getString(normalized.externalId) ? (
-                            <p className="mt-1">External ID: {getString(normalized.externalId)}</p>
-                          ) : null}
-                        </div>
-                      ) : null}
-
-                      {action.error ? (
-                        <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-                          {action.error}
-                        </p>
-                      ) : null}
-                    </div>
-
-                    <p className="text-xs text-slate-500">{formatDate(action.created_at)}</p>
-                  </div>
-                </article>
-              );
-            })
-          ) : (
-            <div className="rounded-xl border border-dashed p-8 text-center">
-              <h2 className="font-semibold">No actions yet</h2>
-              <p className="mt-2 text-sm text-slate-500">
-                Tool actions will appear here after VIP prepares or executes work.
-              </p>
-            </div>
-          )}
-        </div>
-      </section>
-    </main>
+      <WebsiteSection
+        eyebrow="Audit Trail"
+        title="Recent tool runs"
+        description="Use this page to understand what VIP prepared, executed, completed, or failed."
+      >
+        {toolRuns.length ? (
+          <div className={websiteStyles.cardGrid}>
+            {toolRuns.map((run) => (
+              <article key={run.id} className={websiteStyles.card}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className={websiteStyles.cardTitle}>{run.action_name}</h3>
+                  <WebsiteBadge status={run.status} />
+                </div>
+                <p className={websiteStyles.cardMeta}>
+                  {run.provider} • Created {formatDate(run.created_at)}
+                </p>
+                {run.error ? <p className={websiteStyles.cardText}><strong>Error:</strong> {run.error}</p> : null}
+                {run.completed_at ? <p className={websiteStyles.cardMeta}>Completed {formatDate(run.completed_at)}</p> : null}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className={websiteStyles.empty}>No tool runs yet.</div>
+        )}
+      </WebsiteSection>
+    </WebsitePage>
   );
 }

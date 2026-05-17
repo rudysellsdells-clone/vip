@@ -103,30 +103,25 @@ export function WebsiteMetric({
   }[dot];
 
   const content = (
-    <div className={styles.metric}>
+    <>
       <div className={styles.metricHeader}>
         <p className={styles.metricLabel}>{label}</p>
         <span className={[styles.metricDot, dotClass].join(" ")} />
       </div>
       <p className={styles.metricValue}>{value}</p>
       <p className={styles.metricDescription}>{description}</p>
-    </div>
+    </>
   );
 
   if (href) {
     return (
       <Link href={href} className={styles.metric}>
-        <div className={styles.metricHeader}>
-          <p className={styles.metricLabel}>{label}</p>
-          <span className={[styles.metricDot, dotClass].join(" ")} />
-        </div>
-        <p className={styles.metricValue}>{value}</p>
-        <p className={styles.metricDescription}>{description}</p>
+        {content}
       </Link>
     );
   }
 
-  return content;
+  return <div className={styles.metric}>{content}</div>;
 }
 
 export function WebsiteBadge({ status }: { status: string | null | undefined }) {
@@ -142,13 +137,13 @@ export function WebsiteBadge({ status }: { status: string | null | undefined }) 
   if (["approved", "completed", "won", "qualified", "customer"].includes(status ?? "")) {
     className = [styles.badge, styles.badgeGreen].join(" ");
   } else if (
-    ["needs_review", "waiting_approval", "revision_requested", "proposal_needed"].includes(status ?? "")
+    ["needs_review", "waiting_approval", "revision_requested", "proposal_needed", "new"].includes(status ?? "")
   ) {
     className = [styles.badge, styles.badgeGold].join(" ");
   } else if (["failed", "rejected", "lost", "unqualified"].includes(status ?? "")) {
     className = [styles.badge, styles.badgeRed].join(" ");
   } else if (
-    ["published", "sent", "active_opportunity", "asset_pack_generated"].includes(status ?? "")
+    ["published", "sent", "active_opportunity", "asset_pack_generated", "active"].includes(status ?? "")
   ) {
     className = [styles.badge, styles.badgeBlue].join(" ");
   } else if (["running", "queued", "researching"].includes(status ?? "")) {

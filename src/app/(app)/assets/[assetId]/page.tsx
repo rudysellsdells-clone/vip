@@ -3,6 +3,14 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AssetReviewActions } from "@/components/approvals/AssetReviewActions";
 import { RequestRevisionButton } from "@/components/assets/RequestRevisionButton";
+import {
+  WebsiteBadge,
+  WebsiteHero,
+  WebsiteMetric,
+  WebsitePage,
+  WebsiteSection,
+  websiteStyles,
+} from "@/components/website-ui/WebsitePage";
 
 type PageProps = {
   params: Promise<{
@@ -12,32 +20,15 @@ type PageProps = {
 
 function formatDate(value: string | null) {
   if (!value) return "No date";
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(value));
-}
-
-function formatStatus(status: string) {
-  return status
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
 }
 
 export default async function AssetDetailPage({ params }: PageProps) {
   const { assetId } = await params;
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
+  if (!user) redirect("/login");
 
   const { data: asset, error: assetError } = await supabase
     .from("generated_assets")
@@ -46,17 +37,10 @@ export default async function AssetDetailPage({ params }: PageProps) {
     .eq("user_id", user.id)
     .single();
 
-  if (assetError || !asset) {
-    redirect("/approvals");
-  }
+  if (assetError || !asset) redirect("/approvals");
 
   const { data: campaign } = asset.campaign_id
-    ? await supabase
-        .from("campaigns")
-        .select("*")
-        .eq("id", asset.campaign_id)
-        .eq("user_id", user.id)
-        .maybeSingle()
+    ? await supabase.from("campaigns").select("*").eq("id", asset.campaign_id).eq("user_id", user.id).maybeSingle()
     : { data: null };
 
   const { data: childRevisions } = await supabase
@@ -67,12 +51,7 @@ export default async function AssetDetailPage({ params }: PageProps) {
     .order("version", { ascending: false });
 
   const { data: parentAsset } = asset.parent_asset_id
-    ? await supabase
-        .from("generated_assets")
-        .select("*")
-        .eq("id", asset.parent_asset_id)
-        .eq("user_id", user.id)
-        .maybeSingle()
+    ? await supabase.from("generated_assets").select("*").eq("id", asset.parent_asset_id).eq("user_id", user.id).maybeSingle()
     : { data: null };
 
   const { data: approvals } = await supabase
@@ -83,105 +62,118 @@ export default async function AssetDetailPage({ params }: PageProps) {
     .order("created_at", { ascending: false })
     .limit(10);
 
+  const revisions = (childRevisions ?? []) as Array<Record<string, any>>;
+  const approvalRows = (approvals ?? []) as Array<Record<string, any>>;
   const canRevise = asset.status !== "published" && asset.status !== "sent";
 
   return (
-    <main className="mx-auto max-w-5xl space-y-8 p-8">
-      <section className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div>
-          <Link href="/approvals" className="text-sm font-semibold text-slate-600">
-            ← Back to approvals
-          </Link>
-          <p className="mt-4 text-xs uppercase tracking-wide text-slate-500">
-            {asset.asset_type} • Version {asset.version}
-          </p>
-          <h1 className="mt-1 text-3xl font-bold">{asset.title ?? "Untitled asset"}</h1>
-          <p className="mt-2 text-sm text-slate-500">
-            Status: {formatStatus(asset.status)} • Created {formatDate(asset.created_at)}
-          </p>
+    <WebsitePage>
+      <WebsiteHero
+        eyebrow="Asset Detail"
+        title={asset.title ?? "Untitled asset"}
+        description={`${asset.asset_type} asset. Review the content, compare revisions, and approve only the version you want to execute.`}
+        primaryAction={{ label: "Approval Queue", href: "/approvals" }}
+        secondaryAction={campaign ? { label: "Campaign", href: `/campaigns/${campaign.id}` } : { label: "Dashboard", href: "/dashboard" }}
+      />
+
+      <section className={websiteStyles.metricsGrid}>
+        <WebsiteMetric label="Status" value={asset.status} description="Current asset decision state." dot="gold" />
+        <WebsiteMetric label="Version" value={asset.version} description="Current version number." dot="blue" />
+        <WebsiteMetric label="Revisions" value={revisions.length} description="Child versions created from this asset." dot="purple" />
+        <WebsiteMetric label="Activity" value={approvalRows.length} description="Approval records for this asset." dot="green" />
+      </section>
+
+      <section className={websiteStyles.twoColumn}>
+        <WebsiteSection
+          eyebrow="Content"
+          title="Asset content"
+          description="This is the version currently selected."
+        >
+          <div className="flex flex-wrap gap-2">
+            <WebsiteBadge status={asset.status} />
+            <span className={websiteStyles.badge}>Version {asset.version}</span>
+            <span className={websiteStyles.badge}>{asset.asset_type}</span>
+          </div>
+          <pre className={websiteStyles.cardContentBox}>{asset.content}</pre>
+
+          <div className={websiteStyles.cardActions}>
+            <AssetReviewActions assetId={asset.id} />
+            {canRevise ? <RequestRevisionButton assetId={asset.id} assetTitle={asset.title} /> : null}
+          </div>
+        </WebsiteSection>
+
+        <WebsiteSection
+          eyebrow="Context"
+          title="Campaign and history"
+          description="Use this area to move between parent and child versions."
+        >
           {campaign ? (
-            <p className="mt-1 text-sm text-slate-500">
-              Campaign: <Link className="font-semibold" href={`/campaigns/${campaign.id}`}>{campaign.name}</Link>
-            </p>
-          ) : null}
-        </div>
-
-        <div className="flex flex-col gap-3 md:items-end">
-          <AssetReviewActions assetId={asset.id} />
-          {canRevise ? (
-            <RequestRevisionButton assetId={asset.id} assetTitle={asset.title} />
-          ) : null}
-        </div>
-      </section>
-
-      <section className="rounded-2xl border bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-semibold">Asset Content</h2>
-        <pre className="mt-4 whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-sm text-slate-800">
-          {asset.content}
-        </pre>
-      </section>
-
-      {parentAsset ? (
-        <section className="rounded-2xl border bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-semibold">Parent Asset</h2>
-          <Link href={`/assets/${parentAsset.id}`} className="mt-3 block rounded-xl border p-4 hover:bg-slate-50">
-            <p className="font-semibold">{parentAsset.title ?? "Untitled parent asset"}</p>
-            <p className="mt-1 text-sm text-slate-500">
-              Version {parentAsset.version} • {formatStatus(parentAsset.status)}
-            </p>
-          </Link>
-        </section>
-      ) : null}
-
-      <section className="rounded-2xl border bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-semibold">Revision History</h2>
-        <div className="mt-4 space-y-3">
-          {childRevisions?.length ? (
-            childRevisions.map((revision) => (
-              <Link
-                key={revision.id}
-                href={`/assets/${revision.id}`}
-                className="block rounded-xl border p-4 hover:bg-slate-50"
-              >
-                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <p className="font-semibold">{revision.title ?? "Untitled revision"}</p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      Version {revision.version} • {formatStatus(revision.status)}
-                    </p>
-                  </div>
-                  <span className="text-xs text-slate-500">{formatDate(revision.created_at)}</span>
-                </div>
+            <article className={websiteStyles.card}>
+              <h3 className={websiteStyles.cardTitle}>{campaign.name}</h3>
+              <p className={websiteStyles.cardText}>{campaign.idea}</p>
+              <Link href={`/campaigns/${campaign.id}`} className={websiteStyles.link}>
+                Open campaign →
               </Link>
-            ))
-          ) : (
-            <div className="rounded-xl border border-dashed p-6 text-center text-sm text-slate-500">
-              No child revisions yet.
-            </div>
-          )}
-        </div>
+            </article>
+          ) : null}
+
+          {parentAsset ? (
+            <article className={websiteStyles.card} style={{ marginTop: 16 }}>
+              <h3 className={websiteStyles.cardTitle}>Parent asset</h3>
+              <p className={websiteStyles.cardMeta}>
+                Version {parentAsset.version} • {parentAsset.status}
+              </p>
+              <Link href={`/assets/${parentAsset.id}`} className={websiteStyles.link}>
+                Open parent →
+              </Link>
+            </article>
+          ) : null}
+        </WebsiteSection>
       </section>
 
-      <section className="rounded-2xl border bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-semibold">Approval Activity</h2>
-        <div className="mt-4 space-y-3">
-          {approvals?.length ? (
-            approvals.map((approval) => (
-              <article key={approval.id} className="rounded-xl border p-4">
-                <p className="font-semibold">{formatStatus(approval.status)}</p>
-                {approval.notes ? (
-                  <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{approval.notes}</p>
-                ) : null}
-                <p className="mt-2 text-xs text-slate-500">{formatDate(approval.created_at)}</p>
-              </article>
-            ))
-          ) : (
-            <div className="rounded-xl border border-dashed p-6 text-center text-sm text-slate-500">
-              No approval records yet.
+      <section className={websiteStyles.twoColumn}>
+        <WebsiteSection
+          eyebrow="Versions"
+          title="Revision history"
+          description="Child versions created from this asset."
+        >
+          {revisions.length ? (
+            <div className={websiteStyles.cardGrid}>
+              {revisions.map((revision) => (
+                <Link key={revision.id} href={`/assets/${revision.id}`} className={websiteStyles.card}>
+                  <h3 className={websiteStyles.cardTitle}>{revision.title ?? "Untitled revision"}</h3>
+                  <p className={websiteStyles.cardMeta}>
+                    Version {revision.version} • {formatDate(revision.created_at)}
+                  </p>
+                  <WebsiteBadge status={revision.status} />
+                </Link>
+              ))}
             </div>
+          ) : (
+            <div className={websiteStyles.empty}>No child revisions yet.</div>
           )}
-        </div>
+        </WebsiteSection>
+
+        <WebsiteSection
+          eyebrow="Decisions"
+          title="Approval activity"
+          description="Recent approval, rejection, or revision records."
+        >
+          {approvalRows.length ? (
+            <div className={websiteStyles.cardGrid}>
+              {approvalRows.map((approval) => (
+                <article key={approval.id} className={websiteStyles.card}>
+                  <WebsiteBadge status={approval.status} />
+                  {approval.notes ? <p className={websiteStyles.cardText}>{approval.notes}</p> : null}
+                  <p className={websiteStyles.cardMeta}>{formatDate(approval.created_at)}</p>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className={websiteStyles.empty}>No approval records yet.</div>
+          )}
+        </WebsiteSection>
       </section>
-    </main>
+    </WebsitePage>
   );
 }

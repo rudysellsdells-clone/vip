@@ -1,144 +1,85 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { CampaignForm } from "@/components/campaigns/CampaignForm";
-
-function formatStatus(status: string | null) {
-  if (!status) return "Draft";
-
-  return status
-    .split("_")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-}
+import { CampaignWebsiteForm } from "@/components/campaigns/CampaignWebsiteForm";
+import {
+  WebsiteBadge,
+  WebsiteHero,
+  WebsiteMetric,
+  WebsitePage,
+  WebsiteSection,
+  websiteStyles,
+} from "@/components/website-ui/WebsitePage";
 
 function formatDate(value: string | null) {
   if (!value) return "No date";
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(value));
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
 }
 
 export default async function CampaignsPage() {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
-  if (!user) {
-    redirect("/login");
-  }
+  const [campaignsResult, serviceLinesResult, offersResult] = await Promise.all([
+    supabase.from("campaigns").select("*").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(100),
+    supabase.from("service_lines").select("id,name").eq("user_id", user.id).eq("active", true).order("sort_order", { ascending: true }),
+    supabase.from("offers").select("id,name").eq("user_id", user.id).eq("active", true).order("name", { ascending: true }),
+  ]);
 
-  const { data: campaigns, error } = await supabase
-    .from("campaigns")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
+  const campaigns = (campaignsResult.data ?? []) as Array<Record<string, any>>;
+  const serviceLines = ((serviceLinesResult.data ?? []) as Array<Record<string, any>>).map((row) => ({ id: row.id, name: row.name }));
+  const offers = ((offersResult.data ?? []) as Array<Record<string, any>>).map((row) => ({ id: row.id, name: row.name }));
 
-  if (error) {
-    console.error("Failed to load campaigns", error);
-  }
+  const inReview = campaigns.filter((campaign) => ["asset_pack_generated", "in_review"].includes(campaign.status)).length;
+  const active = campaigns.filter((campaign) => campaign.status === "active").length;
 
   return (
-    <main className="mx-auto max-w-6xl space-y-10 p-8">
-      <section>
-        <p className="text-sm uppercase tracking-wide text-slate-500">
-          Campaigns
-        </p>
-        <h1 className="text-3xl font-bold">Campaign Library</h1>
-        <p className="mt-2 max-w-3xl text-slate-600">
-          Review existing campaigns or create a new campaign for Rudy’s Marketing Twin.
-        </p>
+    <WebsitePage>
+      <WebsiteHero
+        eyebrow="Campaign Builder"
+        title="Create revenue-focused marketing campaigns."
+        description="Build campaigns around Rudy's services, buyer segments, offers, and calls-to-action. VIP will turn the brief into an asset pack for review."
+        primaryAction={{ label: "Review Assets", href: "/approvals" }}
+        secondaryAction={{ label: "Dashboard", href: "/dashboard" }}
+      />
+
+      <section className={websiteStyles.metricsGrid}>
+        <WebsiteMetric label="Campaigns" value={campaigns.length} description="Total campaigns in VIP." dot="blue" />
+        <WebsiteMetric label="In Review" value={inReview} description="Campaigns with generated assets." dot="gold" />
+        <WebsiteMetric label="Active" value={active} description="Campaigns currently in motion." dot="green" />
+        <WebsiteMetric label="Next Step" value="Create" description="Start with a strong offer and CTA." dot="purple" />
       </section>
 
-      <section className="rounded-2xl border bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold">Existing Campaigns</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Open a campaign to review, generate assets, approve content, or run next steps.
-            </p>
-          </div>
+      <div className={websiteStyles.formFrame}>
+        <CampaignWebsiteForm serviceLines={serviceLines} offers={offers} />
+      </div>
 
-          <div className="rounded-full bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700">
-            {campaigns?.length ?? 0} total
-          </div>
-        </div>
-
-        <div className="mt-6 space-y-3">
-          {campaigns?.length ? (
-            campaigns.map((campaign) => (
-              <Link
-                key={campaign.id}
-                href={`/campaigns/${campaign.id}`}
-                className="block rounded-xl border p-4 transition hover:bg-slate-50"
-              >
-                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <h3 className="font-semibold text-slate-950">
-                      {campaign.name}
-                    </h3>
-                    <p className="mt-1 line-clamp-2 text-sm text-slate-600">
-                      {campaign.idea}
-                    </p>
-
-                    <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
-                      {campaign.buyer_segment ? (
-                        <span className="rounded-full bg-slate-100 px-3 py-1">
-                          {campaign.buyer_segment}
-                        </span>
-                      ) : null}
-
-                      {campaign.goal ? (
-                        <span className="rounded-full bg-slate-100 px-3 py-1">
-                          Goal: {campaign.goal}
-                        </span>
-                      ) : null}
-
-                      {campaign.cta ? (
-                        <span className="rounded-full bg-slate-100 px-3 py-1">
-                          CTA: {campaign.cta}
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="flex shrink-0 flex-row gap-2 md:flex-col md:items-end">
-                    <span className="rounded-full bg-slate-950 px-3 py-1 text-xs font-medium text-white">
-                      {formatStatus(campaign.status)}
-                    </span>
-                    <span className="text-xs text-slate-500">
-                      {formatDate(campaign.created_at)}
-                    </span>
-                  </div>
+      <WebsiteSection
+        eyebrow="Campaign Library"
+        title="Recent campaigns"
+        description="Open a campaign to generate assets, review outputs, and move the work into approval."
+      >
+        {campaigns.length ? (
+          <div className={websiteStyles.cardGrid}>
+            {campaigns.map((campaign) => (
+              <Link key={campaign.id} href={`/campaigns/${campaign.id}`} className={websiteStyles.card}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className={websiteStyles.cardTitle}>{campaign.name}</h3>
+                  <WebsiteBadge status={campaign.status} />
                 </div>
+                <p className={websiteStyles.cardMeta}>
+                  {campaign.buyer_segment ?? "No buyer segment"} • {formatDate(campaign.updated_at)}
+                </p>
+                <p className={websiteStyles.cardText}>{campaign.idea}</p>
               </Link>
-            ))
-          ) : (
-            <div className="rounded-xl border border-dashed p-8 text-center">
-              <h3 className="font-semibold">No campaigns yet</h3>
-              <p className="mt-2 text-sm text-slate-500">
-                Create your first campaign below. After it saves, it will appear here.
-              </p>
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-xl font-semibold">Create New Campaign</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Use this form to create a new revenue-focused campaign.
-          </p>
-        </div>
-
-        <CampaignForm />
-      </section>
-    </main>
+            ))}
+          </div>
+        ) : (
+          <div className={websiteStyles.empty}>No campaigns yet. Create your first campaign above.</div>
+        )}
+      </WebsiteSection>
+    </WebsitePage>
   );
 }

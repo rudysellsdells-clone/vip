@@ -1,89 +1,106 @@
 import { redirect } from "next/navigation";
-import { SyncGalaxyAiWorkflowsButton } from "@/components/galaxyai/SyncGalaxyAiWorkflowsButton";
-import { RefreshGalaxyAiRunButton } from "@/components/galaxyai/RefreshGalaxyAiRunButton";
 import { createClient } from "@/lib/supabase/server";
+import { SyncGalaxyWorkflowsButton } from "@/components/galaxyai/SyncGalaxyWorkflowsButton";
+import {
+  WebsiteBadge,
+  WebsiteHero,
+  WebsiteMetric,
+  WebsitePage,
+  WebsiteSection,
+  websiteStyles,
+} from "@/components/website-ui/WebsitePage";
+
+function formatDate(value: string | null) {
+  if (!value) return "No date";
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+}
 
 export default async function GalaxyAiPage() {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
-  if (!user) {
-    redirect("/login");
-  }
+  const [workflowsResult, runsResult] = await Promise.all([
+    supabase.from("galaxyai_workflows").select("*").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(50),
+    supabase.from("galaxyai_runs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(50),
+  ]);
 
-  const { data: workflows } = await supabase
-    .from("galaxyai_workflows")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("name", { ascending: true });
-
-  const { data: runs } = await supabase
-    .from("galaxyai_runs")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(20);
+  const workflows = (workflowsResult.data ?? []) as Array<Record<string, any>>;
+  const runs = (runsResult.data ?? []) as Array<Record<string, any>>;
+  const running = runs.filter((run) => ["queued", "running"].includes(run.status)).length;
+  const completed = runs.filter((run) => run.status === "completed").length;
+  const failed = runs.filter((run) => run.status === "failed").length;
 
   return (
-    <main className="mx-auto max-w-6xl space-y-8 p-8">
-      <section className="flex flex-col gap-4 rounded-2xl border p-6 shadow-sm md:flex-row md:items-start md:justify-between">
-        <div>
-          <p className="text-sm uppercase tracking-wide text-slate-500">Sprint 4</p>
-          <h1 className="text-3xl font-bold">GalaxyAI Workflows</h1>
-          <p className="mt-2 max-w-2xl text-slate-600">
-            Sync GalaxyAI workflows, then run approved GalaxyAI prompt assets from campaign pages.
-          </p>
-        </div>
-        <SyncGalaxyAiWorkflowsButton />
+    <WebsitePage>
+      <WebsiteHero
+        eyebrow="GalaxyAI"
+        title="Creative workflow control center."
+        description="Sync workflows, monitor creative runs, and pull finished GalaxyAI outputs back into VIP."
+        primaryAction={{ label: "Review Assets", href: "/approvals" }}
+        secondaryAction={{ label: "Dashboard", href: "/dashboard" }}
+      />
+
+      <section className={websiteStyles.metricsGrid}>
+        <WebsiteMetric label="Workflows" value={workflows.length} description="Saved GalaxyAI workflow references." dot="blue" />
+        <WebsiteMetric label="Running" value={running} description="Queued or active creative runs." dot="purple" />
+        <WebsiteMetric label="Completed" value={completed} description="Finished GalaxyAI runs." dot="green" />
+        <WebsiteMetric label="Failed" value={failed} description="Runs needing attention." dot={failed ? "red" : "blue"} />
       </section>
 
-      <section className="rounded-2xl border p-6 shadow-sm">
-        <h2 className="text-xl font-semibold">Synced Workflows</h2>
-        <div className="mt-4 space-y-3">
-          {workflows?.length ? (
-            workflows.map((workflow) => (
-              <article key={workflow.id} className="rounded-xl border p-4">
-                <p className="font-semibold">{workflow.name}</p>
-                <p className="mt-1 text-sm text-slate-500">
-                  {workflow.description || "No description available."}
+      <WebsiteSection
+        eyebrow="Sync"
+        title="Workflow library"
+        description="Keep VIP aligned with the workflows available in GalaxyAI."
+      >
+        <div className={websiteStyles.actionRow}>
+          <SyncGalaxyWorkflowsButton />
+        </div>
+
+        {workflows.length ? (
+          <div className={websiteStyles.cardGrid} style={{ marginTop: 24 }}>
+            {workflows.map((workflow) => (
+              <article key={workflow.id} className={websiteStyles.card}>
+                <h3 className={websiteStyles.cardTitle}>{workflow.name}</h3>
+                <p className={websiteStyles.cardMeta}>
+                  {workflow.galaxy_workflow_id} • Last synced {formatDate(workflow.last_synced_at)}
                 </p>
-                <p className="mt-2 text-xs text-slate-400">
-                  Workflow ID: {workflow.galaxy_workflow_id}
-                </p>
+                {workflow.description ? <p className={websiteStyles.cardText}>{workflow.description}</p> : null}
               </article>
-            ))
-          ) : (
-            <p className="text-sm text-slate-500">
-              No workflows synced yet. Click Sync GalaxyAI Workflows.
-            </p>
-          )}
-        </div>
-      </section>
+            ))}
+          </div>
+        ) : (
+          <div className={websiteStyles.empty} style={{ marginTop: 24 }}>
+            No GalaxyAI workflows synced yet.
+          </div>
+        )}
+      </WebsiteSection>
 
-      <section className="rounded-2xl border p-6 shadow-sm">
-        <h2 className="text-xl font-semibold">Recent Runs</h2>
-        <div className="mt-4 space-y-3">
-          {runs?.length ? (
-            runs.map((run) => (
-              <article key={run.id} className="rounded-xl border p-4">
-                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <p className="font-semibold">Run {run.galaxy_run_id}</p>
-                    <p className="mt-1 text-sm text-slate-500">Status: {run.status}</p>
-                    {run.error && <p className="mt-1 text-sm text-red-600">{run.error}</p>}
-                  </div>
-                  <RefreshGalaxyAiRunButton runId={run.id} />
+      <WebsiteSection
+        eyebrow="Runs"
+        title="Recent GalaxyAI runs"
+        description="Monitor creative workflow execution status."
+      >
+        {runs.length ? (
+          <div className={websiteStyles.cardGrid}>
+            {runs.map((run) => (
+              <article key={run.id} className={websiteStyles.card}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className={websiteStyles.cardTitle}>{run.galaxy_workflow_id ?? "GalaxyAI run"}</h3>
+                  <WebsiteBadge status={run.status} />
                 </div>
+                <p className={websiteStyles.cardMeta}>
+                  Created {formatDate(run.created_at)} • Completed {formatDate(run.completed_at)}
+                </p>
+                {run.error ? <p className={websiteStyles.cardText}><strong>Error:</strong> {run.error}</p> : null}
               </article>
-            ))
-          ) : (
-            <p className="text-sm text-slate-500">No GalaxyAI runs yet.</p>
-          )}
-        </div>
-      </section>
-    </main>
+            ))}
+          </div>
+        ) : (
+          <div className={websiteStyles.empty}>No GalaxyAI runs yet.</div>
+        )}
+      </WebsiteSection>
+    </WebsitePage>
   );
 }
