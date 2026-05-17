@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 import { AssetReviewActions } from "@/components/approvals/AssetReviewActions";
+import { PrepareLinkedInPostButton } from "@/components/assets/PrepareLinkedInPostButton";
 import { RequestRevisionButton } from "@/components/assets/RequestRevisionButton";
 import {
   WebsiteBadge,
@@ -11,6 +11,8 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
+import { createClient } from "@/lib/supabase/server";
+import { isLinkedInAsset } from "@/lib/zapier/linkedin";
 
 type PageProps = {
   params: Promise<{
@@ -20,15 +22,25 @@ type PageProps = {
 
 function formatDate(value: string | null) {
   if (!value) return "No date";
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(value));
 }
 
 export default async function AssetDetailPage({ params }: PageProps) {
   const { assetId } = await params;
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
 
-  if (!user) redirect("/login");
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
 
   const { data: asset, error: assetError } = await supabase
     .from("generated_assets")
@@ -37,10 +49,17 @@ export default async function AssetDetailPage({ params }: PageProps) {
     .eq("user_id", user.id)
     .single();
 
-  if (assetError || !asset) redirect("/approvals");
+  if (assetError || !asset) {
+    redirect("/approvals");
+  }
 
   const { data: campaign } = asset.campaign_id
-    ? await supabase.from("campaigns").select("*").eq("id", asset.campaign_id).eq("user_id", user.id).maybeSingle()
+    ? await supabase
+        .from("campaigns")
+        .select("*")
+        .eq("id", asset.campaign_id)
+        .eq("user_id", user.id)
+        .maybeSingle()
     : { data: null };
 
   const { data: childRevisions } = await supabase
@@ -51,7 +70,12 @@ export default async function AssetDetailPage({ params }: PageProps) {
     .order("version", { ascending: false });
 
   const { data: parentAsset } = asset.parent_asset_id
-    ? await supabase.from("generated_assets").select("*").eq("id", asset.parent_asset_id).eq("user_id", user.id).maybeSingle()
+    ? await supabase
+        .from("generated_assets")
+        .select("*")
+        .eq("id", asset.parent_asset_id)
+        .eq("user_id", user.id)
+        .maybeSingle()
     : { data: null };
 
   const { data: approvals } = await supabase
@@ -65,6 +89,7 @@ export default async function AssetDetailPage({ params }: PageProps) {
   const revisions = (childRevisions ?? []) as Array<Record<string, any>>;
   const approvalRows = (approvals ?? []) as Array<Record<string, any>>;
   const canRevise = asset.status !== "published" && asset.status !== "sent";
+  const canPrepareLinkedIn = asset.status === "approved" && isLinkedInAsset(asset.asset_type, asset.title);
 
   return (
     <WebsitePage>
@@ -73,14 +98,38 @@ export default async function AssetDetailPage({ params }: PageProps) {
         title={asset.title ?? "Untitled asset"}
         description={`${asset.asset_type} asset. Review the content, compare revisions, and approve only the version you want to execute.`}
         primaryAction={{ label: "Approval Queue", href: "/approvals" }}
-        secondaryAction={campaign ? { label: "Campaign", href: `/campaigns/${campaign.id}` } : { label: "Dashboard", href: "/dashboard" }}
+        secondaryAction={
+          campaign
+            ? { label: "Campaign", href: `/campaigns/${campaign.id}` }
+            : { label: "Dashboard", href: "/dashboard" }
+        }
       />
 
       <section className={websiteStyles.metricsGrid}>
-        <WebsiteMetric label="Status" value={asset.status} description="Current asset decision state." dot="gold" />
-        <WebsiteMetric label="Version" value={asset.version} description="Current version number." dot="blue" />
-        <WebsiteMetric label="Revisions" value={revisions.length} description="Child versions created from this asset." dot="purple" />
-        <WebsiteMetric label="Activity" value={approvalRows.length} description="Approval records for this asset." dot="green" />
+        <WebsiteMetric
+          label="Status"
+          value={asset.status}
+          description="Current asset decision state."
+          dot="gold"
+        />
+        <WebsiteMetric
+          label="Version"
+          value={asset.version}
+          description="Current version number."
+          dot="blue"
+        />
+        <WebsiteMetric
+          label="Revisions"
+          value={revisions.length}
+          description="Child versions created from this asset."
+          dot="purple"
+        />
+        <WebsiteMetric
+          label="Activity"
+          value={approvalRows.length}
+          description="Approval records for this asset."
+          dot="green"
+        />
       </section>
 
       <section className={websiteStyles.twoColumn}>
@@ -94,11 +143,19 @@ export default async function AssetDetailPage({ params }: PageProps) {
             <span className={websiteStyles.badge}>Version {asset.version}</span>
             <span className={websiteStyles.badge}>{asset.asset_type}</span>
           </div>
+
           <pre className={websiteStyles.cardContentBox}>{asset.content}</pre>
 
           <div className={websiteStyles.cardActions}>
             <AssetReviewActions assetId={asset.id} />
-            {canRevise ? <RequestRevisionButton assetId={asset.id} assetTitle={asset.title} /> : null}
+
+            {canPrepareLinkedIn ? (
+              <PrepareLinkedInPostButton assetId={asset.id} />
+            ) : null}
+
+            {canRevise ? (
+              <RequestRevisionButton assetId={asset.id} assetTitle={asset.title} />
+            ) : null}
           </div>
         </WebsiteSection>
 
@@ -126,6 +183,15 @@ export default async function AssetDetailPage({ params }: PageProps) {
               <Link href={`/assets/${parentAsset.id}`} className={websiteStyles.link}>
                 Open parent →
               </Link>
+            </article>
+          ) : null}
+
+          {canPrepareLinkedIn ? (
+            <article className={websiteStyles.card} style={{ marginTop: 16 }}>
+              <h3 className={websiteStyles.cardTitle}>LinkedIn execution</h3>
+              <p className={websiteStyles.cardText}>
+                This approved LinkedIn asset can be prepared as a Zapier MCP action for the McCormick Web Marketing LinkedIn company page.
+              </p>
             </article>
           ) : null}
         </WebsiteSection>
