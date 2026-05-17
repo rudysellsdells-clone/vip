@@ -18,6 +18,10 @@ export function getLinkedInOrganizationId() {
   );
 }
 
+export function getLinkedInMcpToolName() {
+  return process.env.ZAPIER_LINKEDIN_MCP_TOOL_NAME?.trim() || "execute_zapier_write_action";
+}
+
 export function isLinkedInAsset(assetType: string | null | undefined, title?: string | null) {
   const haystack = `${assetType ?? ""} ${title ?? ""}`.toLowerCase();
 
@@ -42,13 +46,14 @@ export function buildLinkedInMcpInput({
     policyKey: LINKEDIN_POLICY_KEY,
     app: LINKEDIN_APP_NAME,
     action: LINKEDIN_ACTION_NAME,
+    mcpToolName: getLinkedInMcpToolName(),
     assetId,
     campaignId,
     assetTitle,
     pageName,
     organizationId,
     instructions:
-      "Publish this exact approved content as a LinkedIn company page post. Do not publish to a personal profile. Target only the configured company page.",
+      "Publish this exact approved content as a LinkedIn company page update. Do not publish to a personal profile. Target only the configured company page.",
     params: {
       organization: organizationId ?? pageName,
       organization_id: organizationId,

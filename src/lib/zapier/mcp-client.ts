@@ -161,7 +161,12 @@ function getCompatToolName(options: Record<string, any>, input: unknown, actionN
   return getZapierToolName(input, actionName);
 }
 
-function getCompatToolArgs(options: Record<string, any>, input: unknown) {
+function getCompatToolArgs(
+  options: Record<string, any>,
+  input: unknown,
+  actionName: string | null,
+  toolName: string
+) {
   const explicitArgs =
     options.toolArgs ??
     options.arguments ??
@@ -172,7 +177,7 @@ function getCompatToolArgs(options: Record<string, any>, input: unknown) {
     return explicitArgs as Record<string, unknown>;
   }
 
-  return getZapierToolArgs(input);
+  return getZapierToolArgs(input, actionName, toolName);
 }
 
 export async function callZapierMcpTool({
@@ -221,9 +226,15 @@ export async function callZapierMcpTool({
   const payload = parseMcpResponse(responseText);
 
   if (payload.error) {
-    throw new Error(
-      `Zapier MCP error: ${payload.error.message ?? "Unknown MCP error"}`
-    );
+    const message = payload.error.message ?? "Unknown MCP error";
+
+    if (payload.error.code === -32602 && message.toLowerCase().includes("tool") && message.toLowerCase().includes("not found")) {
+      throw new Error(
+        `MCP tool not found: ${toolName}. Your Zapier MCP server likely uses execute_zapier_write_action with an app/action key instead of a static tool name.`
+      );
+    }
+
+    throw new Error(`Zapier MCP error: ${message}`);
   }
 
   const nestedError = extractNestedToolError(payload.result);
@@ -237,10 +248,6 @@ export async function callZapierMcpTool({
 
 /**
  * Backwards-compatible export for older Zapier execution routes.
- *
- * Some existing routes, especially the Gmail draft executor, import
- * executeZapierMcpWriteAction directly. This wrapper accepts flexible legacy
- * option shapes and forwards the request into the shared MCP JSON-RPC caller.
  */
 export async function executeZapierMcpWriteAction(...args: any[]): Promise<any> {
   const options = (args[0] ?? {}) as Record<string, any>;
@@ -248,7 +255,7 @@ export async function executeZapierMcpWriteAction(...args: any[]): Promise<any> 
   const actionName = getCompatActionName(options);
   const requestId = getCompatRequestId(options);
   const toolName = getCompatToolName(options, input, actionName);
-  const toolArgs = getCompatToolArgs(options, input);
+  const toolArgs = getCompatToolArgs(options, input, actionName, toolName);
 
   return callZapierMcpTool({
     toolName,

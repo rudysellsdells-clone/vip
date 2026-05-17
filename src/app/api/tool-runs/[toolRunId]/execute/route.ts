@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { toJsonValue } from "@/lib/utils/json";
 import { getZapierToolArgs, getZapierToolName } from "@/lib/zapier/action-registry";
 import { callZapierMcpTool } from "@/lib/zapier/mcp-client";
-import { toJsonValue } from "@/lib/utils/json";
-import { createClient } from "@/lib/supabase/server";
 
 type RouteContext = {
   params: Promise<{
@@ -57,7 +57,7 @@ export async function POST(_request: Request, context: RouteContext) {
 
   const input = toolRun.input ?? {};
   const toolName = getZapierToolName(input, toolRun.action_name);
-  const toolArgs = getZapierToolArgs(input);
+  const toolArgs = getZapierToolArgs(input, toolRun.action_name, toolName);
 
   await supabase
     .from("tool_runs")
@@ -78,6 +78,7 @@ export async function POST(_request: Request, context: RouteContext) {
 
     const output = toJsonValue({
       toolName,
+      toolArgs,
       result,
     });
 
@@ -109,8 +110,7 @@ export async function POST(_request: Request, context: RouteContext) {
       const policyKey =
         typeof inputObject.policyKey === "string" ? inputObject.policyKey : "";
 
-      const nextStatus =
-        policyKey.includes("gmail") ? "sent" : "published";
+      const nextStatus = policyKey.includes("gmail") ? "sent" : "published";
 
       await supabase
         .from("generated_assets")
@@ -150,6 +150,7 @@ export async function POST(_request: Request, context: RouteContext) {
         error: message,
         output: toJsonValue({
           toolName,
+          toolArgs,
           error: message,
         }),
       })
