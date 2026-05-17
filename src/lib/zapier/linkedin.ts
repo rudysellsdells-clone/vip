@@ -1,3 +1,10 @@
+import type { GalaxyMediaAttachment } from "@/lib/galaxyai/media";
+import {
+  buildNativeUploadInstruction,
+  getPrimaryImage,
+  getPrimaryVideo,
+} from "@/lib/galaxyai/media";
+
 export const LINKEDIN_POLICY_KEY = "linkedin_create_company_update";
 export const LINKEDIN_APP_NAME = "LinkedIn";
 export const LINKEDIN_ACTION_NAME = "create_company_update";
@@ -33,14 +40,33 @@ export function buildLinkedInMcpInput({
   campaignId,
   assetTitle,
   content,
+  mediaAttachments = [],
 }: {
   assetId: string;
   campaignId: string | null;
   assetTitle: string | null;
   content: string;
+  mediaAttachments?: GalaxyMediaAttachment[];
 }) {
   const pageName = getLinkedInCompanyPageName();
   const organizationId = getLinkedInOrganizationId();
+  const primaryImage = getPrimaryImage(mediaAttachments);
+  const primaryVideo = getPrimaryVideo(mediaAttachments);
+
+  const nativeUploadInstruction = primaryImage
+    ? buildNativeUploadInstruction({
+        platform: "LinkedIn",
+        action: LINKEDIN_ACTION_NAME,
+        media: primaryImage,
+        captionField: "comment",
+        mediaField: "image",
+      })
+    : "";
+
+  const videoWarning =
+    !primaryImage && primaryVideo
+      ? "A GalaxyAI video was found, but the enabled Zapier LinkedIn action exposes an image upload field, not a video upload field. Do not paste the video URL into the post body. Prepare this as text-only unless a LinkedIn video upload action is added."
+      : "";
 
   return {
     policyKey: LINKEDIN_POLICY_KEY,
@@ -52,22 +78,32 @@ export function buildLinkedInMcpInput({
     assetTitle,
     pageName,
     organizationId,
-    instructions:
-      "Publish this exact approved content as a LinkedIn company page update. Do not publish to a personal profile. Target only the configured company page.",
+    mediaUploadMode: primaryImage
+      ? "native_image_upload"
+      : primaryVideo
+        ? "video_upload_not_available"
+        : "text_only",
+    primaryMediaUrl: primaryImage?.url ?? null,
+    primaryMediaType: primaryImage?.type ?? null,
+    unsupportedMediaUrl: !primaryImage && primaryVideo ? primaryVideo.url : null,
+    unsupportedMediaType: !primaryImage && primaryVideo ? primaryVideo.type : null,
+    mediaAttachments,
+    instructions: [
+      primaryImage
+        ? "Upload the GalaxyAI image as native LinkedIn post media using the Zapier image field."
+        : "Publish this exact approved content as a LinkedIn company page update.",
+      "Do not publish to a personal profile. Target only the configured company page.",
+      nativeUploadInstruction,
+      videoWarning,
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
     params: {
-      organization: organizationId ?? pageName,
-      organization_id: organizationId,
-      company: pageName,
-      company_page: pageName,
-      page: pageName,
-      page_name: pageName,
-      visibility: "PUBLIC",
-      text: content,
-      body: content,
+      company_id: organizationId ?? pageName,
       comment: content,
-      update_text: content,
-      post_text: content,
-      content,
+      image: primaryImage?.url ?? null,
+      image_type: primaryImage ? "post_media" : null,
+      allow_reserved_characters: "false",
     },
   };
 }

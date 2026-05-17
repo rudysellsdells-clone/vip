@@ -14,12 +14,26 @@ export const ZAPIER_ACTIONS = {
     defaultToolName: "gmail_create_draft",
     envToolNameKey: "ZAPIER_GMAIL_DRAFT_TOOL_NAME",
   },
-  facebookPagePost: {
+  facebookTextPost: {
     policyKey: "facebook_pages_page_stream",
     app: "Facebook Pages",
     action: "page_stream",
-    defaultToolName: "facebook_pages_page_stream",
-    envToolNameKey: "ZAPIER_FACEBOOK_PAGE_POST_TOOL_NAME",
+    defaultToolName: "execute_zapier_write_action",
+    envToolNameKey: "ZAPIER_FACEBOOK_MCP_TOOL_NAME",
+  },
+  facebookPhotoPost: {
+    policyKey: "facebook_pages_page_photo",
+    app: "Facebook Pages",
+    action: "page_photo",
+    defaultToolName: "execute_zapier_write_action",
+    envToolNameKey: "ZAPIER_FACEBOOK_MCP_TOOL_NAME",
+  },
+  facebookVideoPost: {
+    policyKey: "facebook_pages_page_video",
+    app: "Facebook Pages",
+    action: "page_video",
+    defaultToolName: "execute_zapier_write_action",
+    envToolNameKey: "ZAPIER_FACEBOOK_MCP_TOOL_NAME",
   },
   linkedinCompanyPost: {
     policyKey: "linkedin_create_company_update",
@@ -105,6 +119,26 @@ function isGenericZapierExecutor(toolName?: string | null) {
   return toolName === "execute_zapier_write_action" || toolName === "execute_zapier_read_action";
 }
 
+function formatExactFieldValues(params: Record<string, unknown>) {
+  const lines = Object.entries(params)
+    .filter(([, value]) => value !== null && value !== undefined && value !== "")
+    .map(([key, value]) => {
+      const serialized = Array.isArray(value)
+        ? JSON.stringify(value)
+        : typeof value === "object"
+          ? JSON.stringify(value)
+          : String(value);
+
+      return `- ${key}: ${serialized}`;
+    });
+
+  if (lines.length === 0) {
+    return "";
+  }
+
+  return ["Use these exact Zapier field values:", ...lines].join("\n");
+}
+
 function buildGenericZapierInstructions({
   input,
   params,
@@ -114,34 +148,13 @@ function buildGenericZapierInstructions({
   params: Record<string, unknown>;
   config: ZapierActionConfig;
 }) {
-  const approvedContent = firstString(
-    params.text,
-    params.body,
-    params.comment,
-    params.update_text,
-    params.post_text,
-    params.content,
-    input.content
-  );
-
-  const pageName = firstString(
-    input.pageName,
-    params.page_name,
-    params.company_page,
-    params.company,
-    params.organization,
-    params.page
-  );
-
-  const organizationId = firstString(
-    input.organizationId,
-    params.organization_id,
-    params.organizationId
-  );
-
   const baseInstructions =
     firstString(input.instructions) ||
     `Execute the ${config.app} action ${config.action}.`;
+
+  const fieldValues = formatExactFieldValues(params);
+  const mediaUploadMode = firstString(input.mediaUploadMode);
+  const primaryMediaUrl = firstString(input.primaryMediaUrl);
 
   const lines = [
     baseInstructions,
@@ -150,22 +163,32 @@ function buildGenericZapierInstructions({
     `Action key: ${config.action}`,
   ];
 
-  if (pageName) {
-    lines.push(`Target company/page name: ${pageName}`);
+  if (mediaUploadMode) {
+    lines.push(`Media upload mode: ${mediaUploadMode}`);
   }
 
-  if (organizationId) {
-    lines.push(`Target organization/page ID: ${organizationId}`);
+  if (primaryMediaUrl) {
+    lines.push(`Primary media URL for upload field: ${primaryMediaUrl}`);
   }
 
-  if (approvedContent) {
-    lines.push("", "Approved content to use exactly:", approvedContent);
+  if (fieldValues) {
+    lines.push("", fieldValues);
   }
+
+  lines.push(
+    "",
+    "Do not paste the media URL into the public post text unless the selected Zapier action explicitly requires it as an upload/source field."
+  );
 
   if (config.app === "LinkedIn") {
     lines.push(
-      "",
-      "Important LinkedIn safety rule: publish to the configured company page only. Do not publish to a personal profile."
+      "LinkedIn rule: use image as the native image upload field and image_type as post_media when an image is provided. Do not publish to a personal profile."
+    );
+  }
+
+  if (config.app === "Facebook Pages") {
+    lines.push(
+      "Facebook rule: use source as the native photo/video upload field for page_photo or page_video. Do not publish to a personal profile."
     );
   }
 
@@ -174,11 +197,11 @@ function buildGenericZapierInstructions({
 
 function buildGenericZapierOutput(config: ZapierActionConfig) {
   if (config.app === "LinkedIn") {
-    return "Return the LinkedIn company update result, including the post id or URL if available.";
+    return "Return the LinkedIn company update result, including post id, URL, and whether the image was uploaded as post media.";
   }
 
   if (config.app === "Facebook Pages") {
-    return "Return the Facebook Pages publishing result, including the post id or URL if available.";
+    return "Return the Facebook Pages publishing result, including post id, URL, and whether media was uploaded through the source field.";
   }
 
   if (config.app === "Gmail") {

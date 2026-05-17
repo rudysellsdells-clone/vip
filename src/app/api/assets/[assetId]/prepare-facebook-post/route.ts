@@ -2,13 +2,11 @@ import { NextResponse } from "next/server";
 import { loadGalaxyMediaForAsset } from "@/lib/galaxyai/media";
 import { createClient } from "@/lib/supabase/server";
 import {
-  LINKEDIN_ACTION_NAME,
-  LINKEDIN_APP_NAME,
-  LINKEDIN_POLICY_KEY,
-  buildLinkedInMcpInput,
-  getLinkedInCompanyPageName,
-  isLinkedInAsset,
-} from "@/lib/zapier/linkedin";
+  FACEBOOK_APP_NAME,
+  buildFacebookMcpInput,
+  getFacebookPageName,
+  isFacebookAsset,
+} from "@/lib/zapier/facebook";
 
 type RouteContext = {
   params: Promise<{
@@ -43,14 +41,14 @@ export async function POST(_request: Request, context: RouteContext) {
 
     if (asset.status !== "approved") {
       return NextResponse.json(
-        { error: "Only approved LinkedIn post assets can be prepared." },
+        { error: "Only approved Facebook post assets can be prepared." },
         { status: 400 }
       );
     }
 
-    if (!isLinkedInAsset(asset.asset_type, asset.title)) {
+    if (!isFacebookAsset(asset.asset_type, asset.title)) {
       return NextResponse.json(
-        { error: "This asset does not appear to be a LinkedIn post." },
+        { error: "This asset does not appear to be a Facebook post." },
         { status: 400 }
       );
     }
@@ -62,7 +60,7 @@ export async function POST(_request: Request, context: RouteContext) {
       campaignId: asset.campaign_id ?? null,
     });
 
-    const mcpInput = buildLinkedInMcpInput({
+    const mcpInput = buildFacebookMcpInput({
       assetId: asset.id,
       campaignId: asset.campaign_id ?? null,
       assetTitle: asset.title ?? null,
@@ -74,8 +72,8 @@ export async function POST(_request: Request, context: RouteContext) {
       .from("zapier_action_policies")
       .select("id")
       .eq("user_id", user.id)
-      .eq("app_name", LINKEDIN_APP_NAME)
-      .eq("action_name", LINKEDIN_ACTION_NAME)
+      .eq("app_name", FACEBOOK_APP_NAME)
+      .eq("action_name", mcpInput.action)
       .eq("active", true)
       .maybeSingle();
 
@@ -84,12 +82,12 @@ export async function POST(_request: Request, context: RouteContext) {
         .from("zapier_action_policies")
         .insert({
           user_id: user.id,
-          app_name: LINKEDIN_APP_NAME,
-          action_name: LINKEDIN_ACTION_NAME,
+          app_name: FACEBOOK_APP_NAME,
+          action_name: mcpInput.action,
           risk_level: "medium",
           approval_required: true,
           notes:
-            "Publishes approved LinkedIn post assets to the configured company page. Uploads GalaxyAI image URLs through the native image field when available. Does not publish to a personal profile.",
+            "Publishes approved Facebook assets to the configured Facebook Page. Uses native media upload actions when GalaxyAI image/video URLs are available. Never publish to a personal profile.",
           active: true,
         });
 
@@ -103,7 +101,7 @@ export async function POST(_request: Request, context: RouteContext) {
       .insert({
         user_id: user.id,
         provider: "zapier_mcp",
-        action_name: "LinkedIn company page post",
+        action_name: mcpInput.actionLabel,
         status: "waiting_approval",
         input: mcpInput,
         output: {},
@@ -115,7 +113,7 @@ export async function POST(_request: Request, context: RouteContext) {
 
     if (toolRunError || !toolRun) {
       return NextResponse.json(
-        { error: toolRunError?.message ?? "Unable to prepare LinkedIn action." },
+        { error: toolRunError?.message ?? "Unable to prepare Facebook action." },
         { status: 400 }
       );
     }
@@ -123,31 +121,30 @@ export async function POST(_request: Request, context: RouteContext) {
     await supabase.from("activity_log").insert({
       user_id: user.id,
       activity_type: "zapier_action_prepared",
-      title: "LinkedIn post prepared",
-      description: `Prepared LinkedIn company page post for ${getLinkedInCompanyPageName()}.`,
+      title: "Facebook post prepared",
+      description: `Prepared ${mcpInput.actionLabel} for ${getFacebookPageName()}.`,
       metadata: {
-        app: LINKEDIN_APP_NAME,
-        action: LINKEDIN_ACTION_NAME,
-        policyKey: LINKEDIN_POLICY_KEY,
+        app: FACEBOOK_APP_NAME,
+        action: mcpInput.action,
+        policyKey: mcpInput.policyKey,
         assetId: asset.id,
         campaignId: asset.campaign_id ?? null,
         toolRunId: toolRun.id,
-        pageName: getLinkedInCompanyPageName(),
+        pageName: getFacebookPageName(),
         mediaUploadMode: mcpInput.mediaUploadMode,
         mediaAttachmentCount: mediaAttachments.length,
         primaryMediaUrl: mcpInput.primaryMediaUrl,
-        unsupportedMediaUrl: mcpInput.unsupportedMediaUrl,
       },
     });
 
     return NextResponse.json({
       ok: true,
       toolRunId: toolRun.id,
-      pageName: getLinkedInCompanyPageName(),
+      pageName: getFacebookPageName(),
+      action: mcpInput.action,
       mediaUploadMode: mcpInput.mediaUploadMode,
       mediaAttachmentCount: mediaAttachments.length,
       primaryMediaUrl: mcpInput.primaryMediaUrl,
-      unsupportedMediaUrl: mcpInput.unsupportedMediaUrl,
     });
   } catch (error) {
     if (error instanceof Error) {
@@ -155,7 +152,7 @@ export async function POST(_request: Request, context: RouteContext) {
     }
 
     return NextResponse.json(
-      { error: "Unexpected error preparing LinkedIn post." },
+      { error: "Unexpected error preparing Facebook post." },
       { status: 500 }
     );
   }

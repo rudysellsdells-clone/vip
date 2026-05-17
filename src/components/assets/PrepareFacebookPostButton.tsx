@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import formStyles from "@/components/forms/VipForm.module.css";
 
-export function PrepareLinkedInPostButton({
+export function PrepareFacebookPostButton({
   assetId,
   disabled = false,
 }: {
@@ -22,24 +22,24 @@ export function PrepareLinkedInPostButton({
     setError(null);
 
     try {
-      const response = await fetch(`/api/assets/${assetId}/prepare-linkedin-post`, {
+      const response = await fetch(`/api/assets/${assetId}/prepare-facebook-post`, {
         method: "POST",
       });
 
       const result = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(result.error ?? "Unable to prepare LinkedIn post.");
+        throw new Error(result.error ?? "Unable to prepare Facebook post.");
       }
 
       const uploadMessage =
-        result.mediaUploadMode === "native_image_upload"
+        result.mediaUploadMode === "native_photo_upload"
           ? " Image will upload natively from the GalaxyAI URL."
-          : result.mediaUploadMode === "video_upload_not_available"
-            ? " GalaxyAI video was found, but the enabled LinkedIn Zapier action does not expose native video upload."
-            : " No GalaxyAI image was found, so this is text-only.";
+          : result.mediaUploadMode === "native_video_upload"
+            ? " Video will upload natively from the GalaxyAI URL."
+            : " No GalaxyAI media was found, so this is text-only.";
 
-      setMessage(`LinkedIn post prepared for ${result.pageName ?? "the company page"}.${uploadMessage}`);
+      setMessage(`Facebook action prepared for ${result.pageName ?? "the page"}.${uploadMessage}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected error.");
@@ -56,7 +56,7 @@ export function PrepareLinkedInPostButton({
         disabled={disabled || running}
         className={formStyles.submit}
       >
-        {running ? "Preparing..." : "Prepare LinkedIn Post"}
+        {running ? "Preparing..." : "Prepare Facebook Post"}
       </button>
 
       {message ? <p className={formStyles.message}>{message}</p> : null}
