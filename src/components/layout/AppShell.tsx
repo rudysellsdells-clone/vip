@@ -1,17 +1,16 @@
-import type { ReactNode } from "react";
 import { SidebarNav } from "@/components/layout/SidebarNav";
 
 export function AppShell({
   children,
   userEmail,
 }: {
-  children: ReactNode;
+  children: React.ReactNode;
   userEmail: string;
 }) {
   return (
-    <div className="vip-app-bg">
+    <div className="min-h-screen bg-[#f6f9fc]">
       <SidebarNav userEmail={userEmail} />
-      <div className="vip-main lg:pl-72">
+      <div className="min-h-screen lg:pl-72">
         {children}
       </div>
     </div>

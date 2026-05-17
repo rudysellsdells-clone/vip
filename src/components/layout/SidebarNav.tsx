@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import styles from "./SidebarNav.module.css";
 
 type NavGroup = {
   label: string;
@@ -11,17 +12,17 @@ type NavGroup = {
 
 const navGroups: NavGroup[] = [
   {
-    label: "Command",
+    label: "Start Here",
     items: [
       { label: "Dashboard", href: "/dashboard" },
-      { label: "Actions", href: "/actions" },
+      { label: "Campaigns", href: "/campaigns" },
+      { label: "Approvals", href: "/approvals" },
     ],
   },
   {
-    label: "Campaign Workflow",
+    label: "Execution",
     items: [
-      { label: "Campaigns", href: "/campaigns" },
-      { label: "Approvals", href: "/approvals" },
+      { label: "Actions", href: "/actions" },
       { label: "GalaxyAI", href: "/galaxyai" },
       { label: "Zapier", href: "/zapier" },
     ],
@@ -34,7 +35,7 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    label: "Memory",
+    label: "Business Memory",
     items: [
       { label: "Brand Voice", href: "/brand-voice" },
       { label: "Knowledge", href: "/knowledge" },
@@ -46,6 +47,18 @@ function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+function Logo() {
+  return (
+    <Link href="/dashboard" className={styles.logoLink}>
+      <span className={styles.logoMark}>VIP</span>
+      <span>
+        <p className={styles.logoTitle}>Rudy&apos;s VIP</p>
+        <p className={styles.logoSub}>Web Search Pros OS</p>
+      </span>
+    </Link>
+  );
+}
+
 function NavContent({
   pathname,
   onNavigate,
@@ -54,14 +67,11 @@ function NavContent({
   onNavigate?: () => void;
 }) {
   return (
-    <nav className="space-y-7">
+    <nav className={styles.nav} aria-label="Main navigation">
       {navGroups.map((group) => (
-        <div key={group.label}>
-          <p className="px-3 text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">
-            {group.label}
-          </p>
-
-          <div className="mt-2 space-y-1">
+        <section key={group.label}>
+          <p className={styles.groupLabel}>{group.label}</p>
+          <div className={styles.itemList}>
             {group.items.map((item) => {
               const active = isActivePath(pathname, item.href);
 
@@ -71,19 +81,18 @@ function NavContent({
                   href={item.href}
                   onClick={onNavigate}
                   className={[
-                    "flex items-center justify-between rounded-2xl px-3 py-2.5 text-sm font-bold transition",
-                    active
-                      ? "bg-slate-950 text-white shadow-sm"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
+                    styles.navItem,
+                    active ? styles.navItemActive : "",
                   ].join(" ")}
+                  aria-current={active ? "page" : undefined}
                 >
                   <span>{item.label}</span>
-                  {active ? <span className="h-2 w-2 rounded-full bg-sky-300" /> : null}
+                  {active ? <span className={styles.activeDot} /> : null}
                 </Link>
               );
             })}
           </div>
-        </div>
+        </section>
       ))}
     </nav>
   );
@@ -95,62 +104,45 @@ export function SidebarNav({ userEmail }: { userEmail: string }) {
 
   return (
     <>
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-slate-200 bg-white/95 backdrop-blur lg:flex lg:flex-col">
-        <div className="border-b border-slate-200 p-5">
-          <Link href="/dashboard" className="block">
-            <div className="flex items-center gap-3">
-              <div className="grid h-12 w-12 place-items-center rounded-3xl bg-gradient-to-br from-slate-950 to-sky-900 text-sm font-black text-white shadow-sm">
-                VIP
-              </div>
-              <div>
-                <p className="font-black tracking-tight text-slate-950">Rudy&apos;s VIP</p>
-                <p className="text-xs font-medium text-slate-500">Marketing Twin OS</p>
-              </div>
-            </div>
-          </Link>
+      <aside className={styles.sidebar}>
+        <div className={styles.sidebarHeader}>
+          <Logo />
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 vip-subtle-scrollbar">
+        <div className={styles.sidebarBody}>
           <NavContent pathname={pathname} />
         </div>
 
-        <div className="border-t border-slate-200 p-4">
-          <div className="vip-gradient-dark rounded-3xl p-4 text-white shadow-sm">
-            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-sky-200">
-              Signed in
-            </p>
-            <p className="mt-1 truncate text-sm font-bold">{userEmail}</p>
-            <p className="mt-3 text-xs leading-5 text-slate-300">
-              Generate, approve, execute, and track revenue workflows.
+        <div className={styles.sidebarFooter}>
+          <div className={styles.accountCard}>
+            <p className={styles.accountLabel}>Signed in</p>
+            <p className={styles.accountEmail}>{userEmail}</p>
+            <p className={styles.accountHelp}>
+              Build campaigns, approve assets, execute safely, and track revenue.
             </p>
           </div>
         </div>
       </aside>
 
-      <div className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur lg:hidden">
-        <div className="flex h-16 items-center justify-between px-4">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-slate-950 text-xs font-black text-white">
-              VIP
-            </div>
-            <div>
-              <p className="text-sm font-black text-slate-950">Rudy&apos;s VIP</p>
-              <p className="text-xs text-slate-500">Marketing Twin OS</p>
-            </div>
-          </Link>
-
+      <div className={styles.mobileBar}>
+        <div className={styles.mobileInner}>
+          <Logo />
           <button
             type="button"
+            className={styles.menuButton}
             onClick={() => setMobileOpen((value) => !value)}
-            className="rounded-2xl border border-slate-300 px-3 py-2 text-sm font-bold text-slate-800"
+            aria-expanded={mobileOpen}
           >
             Menu
           </button>
         </div>
 
         {mobileOpen ? (
-          <div className="border-t border-slate-200 bg-white p-4 shadow-sm">
-            <NavContent pathname={pathname} onNavigate={() => setMobileOpen(false)} />
+          <div className={styles.mobilePanel}>
+            <NavContent
+              pathname={pathname}
+              onNavigate={() => setMobileOpen(false)}
+            />
           </div>
         ) : null}
       </div>
