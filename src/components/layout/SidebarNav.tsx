@@ -12,7 +12,7 @@ type NavGroup = {
 
 const navGroups: NavGroup[] = [
   {
-    label: "Start Here",
+    label: "Start",
     items: [
       { label: "Dashboard", href: "/dashboard" },
       { label: "Campaigns", href: "/campaigns" },
@@ -35,7 +35,7 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    label: "Business Memory",
+    label: "Memory",
     items: [
       { label: "Brand Voice", href: "/brand-voice" },
       { label: "Knowledge", href: "/knowledge" },
@@ -59,74 +59,43 @@ function Logo() {
   );
 }
 
-function NavContent({
-  pathname,
-  onNavigate,
-}: {
-  pathname: string;
-  onNavigate?: () => void;
-}) {
+export function SidebarNav({ userEmail }: { userEmail: string }) {
+  const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const allItems = navGroups.flatMap((group) => group.items);
+
   return (
-    <nav className={styles.nav} aria-label="Main navigation">
-      {navGroups.map((group) => (
-        <section key={group.label}>
-          <p className={styles.groupLabel}>{group.label}</p>
-          <div className={styles.itemList}>
-            {group.items.map((item) => {
+    <header className={styles.header}>
+      <div className={styles.headerInner}>
+        <div className={styles.topRow}>
+          <Logo />
+
+          <nav className={styles.desktopNav} aria-label="Main navigation">
+            {allItems.map((item) => {
               const active = isActivePath(pathname, item.href);
 
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  onClick={onNavigate}
                   className={[
                     styles.navItem,
                     active ? styles.navItemActive : "",
                   ].join(" ")}
                   aria-current={active ? "page" : undefined}
                 >
-                  <span>{item.label}</span>
-                  {active ? <span className={styles.activeDot} /> : null}
+                  {item.label}
                 </Link>
               );
             })}
-          </div>
-        </section>
-      ))}
-    </nav>
-  );
-}
+          </nav>
 
-export function SidebarNav({ userEmail }: { userEmail: string }) {
-  const pathname = usePathname();
-  const [mobileOpen, setMobileOpen] = useState(false);
-
-  return (
-    <>
-      <aside className={styles.sidebar}>
-        <div className={styles.sidebarHeader}>
-          <Logo />
-        </div>
-
-        <div className={styles.sidebarBody}>
-          <NavContent pathname={pathname} />
-        </div>
-
-        <div className={styles.sidebarFooter}>
-          <div className={styles.accountCard}>
+          <div className={styles.account}>
             <p className={styles.accountLabel}>Signed in</p>
             <p className={styles.accountEmail}>{userEmail}</p>
-            <p className={styles.accountHelp}>
-              Build campaigns, approve assets, execute safely, and track revenue.
-            </p>
           </div>
-        </div>
-      </aside>
 
-      <div className={styles.mobileBar}>
-        <div className={styles.mobileInner}>
-          <Logo />
           <button
             type="button"
             className={styles.menuButton}
@@ -136,16 +105,40 @@ export function SidebarNav({ userEmail }: { userEmail: string }) {
             Menu
           </button>
         </div>
-
-        {mobileOpen ? (
-          <div className={styles.mobilePanel}>
-            <NavContent
-              pathname={pathname}
-              onNavigate={() => setMobileOpen(false)}
-            />
-          </div>
-        ) : null}
       </div>
-    </>
+
+      {mobileOpen ? (
+        <div className={styles.mobilePanel}>
+          <div className={styles.mobileGroups}>
+            {navGroups.map((group) => (
+              <section key={group.label}>
+                <p className={styles.mobileGroupLabel}>{group.label}</p>
+                <div className={styles.mobileLinks}>
+                  {group.items.map((item) => {
+                    const active = isActivePath(pathname, item.href);
+
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setMobileOpen(false)}
+                        className={[
+                          styles.mobileLink,
+                          active ? styles.mobileLinkActive : "",
+                        ].join(" ")}
+                        aria-current={active ? "page" : undefined}
+                      >
+                        <span>{item.label}</span>
+                        <span>→</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </header>
   );
 }

@@ -10,7 +10,7 @@ export function AppShell({
   return (
     <div className="min-h-screen bg-[#f6f9fc]">
       <SidebarNav userEmail={userEmail} />
-      <div className="min-h-screen lg:pl-72">
+      <div className="min-h-screen">
         {children}
       </div>
     </div>
