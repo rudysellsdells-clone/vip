@@ -4,14 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
-type NavItem = {
-  label: string;
-  href: string;
-};
-
 type NavGroup = {
   label: string;
-  items: NavItem[];
+  items: Array<{ label: string; href: string }>;
 };
 
 const navGroups: NavGroup[] = [
@@ -83,9 +78,7 @@ function NavContent({
                   ].join(" ")}
                 >
                   <span>{item.label}</span>
-                  {active ? (
-                    <span className="h-2 w-2 rounded-full bg-sky-300" />
-                  ) : null}
+                  {active ? <span className="h-2 w-2 rounded-full bg-sky-300" /> : null}
                 </Link>
               );
             })}
@@ -102,7 +95,7 @@ export function SidebarNav({ userEmail }: { userEmail: string }) {
 
   return (
     <>
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-76 border-r border-slate-200 bg-white/95 backdrop-blur lg:flex lg:w-72 lg:flex-col">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-slate-200 bg-white/95 backdrop-blur lg:flex lg:flex-col">
         <div className="border-b border-slate-200 p-5">
           <Link href="/dashboard" className="block">
             <div className="flex items-center gap-3">
@@ -117,12 +110,12 @@ export function SidebarNav({ userEmail }: { userEmail: string }) {
           </Link>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-4 vip-subtle-scrollbar">
           <NavContent pathname={pathname} />
         </div>
 
         <div className="border-t border-slate-200 p-4">
-          <div className="rounded-3xl bg-gradient-to-br from-slate-950 to-sky-900 p-4 text-white shadow-sm">
+          <div className="vip-gradient-dark rounded-3xl p-4 text-white shadow-sm">
             <p className="text-[11px] font-black uppercase tracking-[0.18em] text-sky-200">
               Signed in
             </p>
@@ -157,10 +150,7 @@ export function SidebarNav({ userEmail }: { userEmail: string }) {
 
         {mobileOpen ? (
           <div className="border-t border-slate-200 bg-white p-4 shadow-sm">
-            <NavContent
-              pathname={pathname}
-              onNavigate={() => setMobileOpen(false)}
-            />
+            <NavContent pathname={pathname} onNavigate={() => setMobileOpen(false)} />
           </div>
         ) : null}
       </div>

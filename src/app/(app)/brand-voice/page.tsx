@@ -3,17 +3,14 @@ import { createClient } from "@/lib/supabase/server";
 import { DigitalCloneProfileForm } from "@/components/clone/DigitalCloneProfileForm";
 import { BrandRuleForm } from "@/components/clone/BrandRuleForm";
 import { DEFAULT_DIGITAL_CLONE_PROFILE } from "@/lib/clone/defaults";
+import { VipEmptyState, VipMetricCard, VipSection } from "@/components/vip-ui/VipCards";
+import { VipHero, VipPageShell } from "@/components/vip-ui/VipPageShell";
 
 export default async function BrandVoicePage() {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
+  if (!user) redirect("/login");
 
   const { data: profile } = await supabase
     .from("digital_clone_profiles")
@@ -32,61 +29,57 @@ export default async function BrandVoicePage() {
     .order("priority", { ascending: true })
     .order("created_at", { ascending: true });
 
-  const workingProfile =
-    profile ?? {
-      ...DEFAULT_DIGITAL_CLONE_PROFILE,
-    };
+  const workingProfile = profile ?? { ...DEFAULT_DIGITAL_CLONE_PROFILE };
+  const rules = (brandRules ?? []) as any[];
 
   return (
-    <main className="mx-auto max-w-6xl space-y-8 p-8">
-      <section>
-        <p className="text-sm uppercase tracking-wide text-slate-500">
-          Sprint 5.6
-        </p>
-        <h1 className="text-3xl font-bold">Digital Clone Profile</h1>
-        <p className="mt-2 max-w-3xl text-slate-600">
-          Manage the business memory VIP uses to sound like Rudy, sell Rudy&apos;s services, and stay inside the approval guardrails.
-        </p>
+    <VipPageShell>
+      <VipHero
+        eyebrow="Business Memory"
+        title="Brand voice and clone profile"
+        description="Control how VIP thinks, writes, positions Rudy's services, and respects approval guardrails."
+        primaryAction={{ label: "Knowledge Library", href: "/knowledge" }}
+        secondaryAction={{ label: "Dashboard", href: "/dashboard" }}
+      />
+
+      <section className="grid gap-4 md:grid-cols-3">
+        <VipMetricCard label="Clone Profile" value={profile ? "Active" : "Default"} description="The core memory layer." tone={profile ? "success" : "warning"} />
+        <VipMetricCard label="Brand Rules" value={rules.length} description="Voice and behavior guardrails." tone="info" />
+        <VipMetricCard label="Safety Mode" value="On" description="External actions require approval." tone="success" />
       </section>
 
-      <DigitalCloneProfileForm profile={workingProfile} />
+      <div className="vip-card rounded-[1.75rem] p-1">
+        <DigitalCloneProfileForm profile={workingProfile} />
+      </div>
 
-      <section className="rounded-2xl border bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold">Brand Rules</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Rules that guide tone, positioning, safety, and business behavior.
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-5 space-y-3">
-          {brandRules?.length ? (
-            brandRules.map((rule) => (
-              <article key={rule.id} className="rounded-xl border p-4">
-                <div className="flex flex-col gap-1 md:flex-row md:items-start md:justify-between">
+      <VipSection title="Brand rules" description="Rules that guide tone, positioning, safety, and business behavior.">
+        <div className="space-y-3">
+          {rules.length ? (
+            rules.map((rule) => (
+              <article key={rule.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-slate-500">
-                      {rule.category}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-800">{rule.rule_text}</p>
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-sky-700">{rule.category}</p>
+                    <p className="mt-2 text-sm leading-6 text-slate-700">{rule.rule_text}</p>
                   </div>
-                  <span className="text-xs text-slate-500">Priority {rule.priority}</span>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">
+                    Priority {rule.priority}
+                  </span>
                 </div>
               </article>
             ))
           ) : (
-            <div className="rounded-xl border border-dashed p-6 text-center text-sm text-slate-500">
-              No brand rules yet. Add a few rules below.
-            </div>
+            <VipEmptyState
+              title="No custom rules yet"
+              description="Add rules that describe how VIP should sound, sell, and behave."
+            />
           )}
         </div>
 
         <div className="mt-5">
           <BrandRuleForm />
         </div>
-      </section>
-    </main>
+      </VipSection>
+    </VipPageShell>
   );
 }

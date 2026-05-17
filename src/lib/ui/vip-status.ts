@@ -30,6 +30,7 @@ export function getVipStatusTone(status: string | null | undefined): VipStatusTo
     case "proposal_needed":
     case "discovery_scheduled":
     case "negotiation":
+    case "pending":
       return "warning";
 
     case "failed":
@@ -43,6 +44,7 @@ export function getVipStatusTone(status: string | null | undefined): VipStatusTo
     case "active":
     case "active_opportunity":
     case "proposal_sent":
+    case "asset_pack_generated":
       return "info";
 
     case "running":

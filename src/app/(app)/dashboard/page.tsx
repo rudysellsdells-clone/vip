@@ -1,13 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { VipActionCard } from "@/components/ui/vip/VipActionCard";
-import { VipEmptyState } from "@/components/ui/vip/VipEmptyState";
-import { VipMetricCard } from "@/components/ui/vip/VipMetricCard";
-import { VipPageHeader } from "@/components/ui/vip/VipPageHeader";
-import { VipSection } from "@/components/ui/vip/VipSection";
-import { VipStatusBadge } from "@/components/ui/vip/VipStatusBadge";
-import { VipWorkflowSteps } from "@/components/ui/vip/VipWorkflowSteps";
+import { VipActionCard, VipEmptyState, VipMetricCard, VipSection } from "@/components/vip-ui/VipCards";
+import { VipHero, VipPageShell } from "@/components/vip-ui/VipPageShell";
+import { VipStatusBadge } from "@/components/vip-ui/VipStatusBadge";
+import { VipWorkflowRail } from "@/components/vip-ui/VipWorkflow";
 
 type RecentItem = {
   id: string;
@@ -17,56 +14,9 @@ type RecentItem = {
   status?: string | null;
 };
 
-type CampaignRow = {
-  id: string;
-  name: string;
-  buyer_segment: string | null;
-  status: string;
-  created_at: string | null;
-};
-
-type AssetRow = {
-  id: string;
-  title: string | null;
-  asset_type: string;
-  status: string;
-  created_at: string | null;
-};
-
-type ToolRunRow = {
-  id: string;
-  provider: string;
-  action_name: string;
-  status: string;
-  created_at: string | null;
-};
-
-type ActivityRow = {
-  id: string;
-  activity_type: string;
-  title: string;
-  created_at: string | null;
-};
-
-type GalaxyRunRow = {
-  id: string;
-  status: string;
-};
-
-type OpportunityRow = {
-  id: string;
-  stage: string;
-  estimated_value: number | null;
-};
-
 function formatDate(value: string | null) {
   if (!value) return "No date";
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(value));
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
 }
 
 function RecentList({
@@ -86,25 +36,18 @@ function RecentList({
         {items.length ? (
           items.map((item) => {
             const content = (
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 transition hover:bg-slate-50">
+              <div className="vip-card-hover rounded-2xl border border-slate-200 bg-white p-4">
                 <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                   <div>
                     <h3 className="font-black text-slate-950">{item.title}</h3>
                     <p className="mt-1 text-sm text-slate-600">{item.subtitle}</p>
                   </div>
-
                   {item.status ? <VipStatusBadge status={item.status} /> : null}
                 </div>
               </div>
             );
 
-            return item.href ? (
-              <Link key={item.id} href={item.href} className="block">
-                {content}
-              </Link>
-            ) : (
-              <div key={item.id}>{content}</div>
-            );
+            return item.href ? <Link key={item.id} href={item.href} className="block">{content}</Link> : <div key={item.id}>{content}</div>;
           })
         ) : (
           <div className="rounded-2xl border border-dashed border-slate-300 p-6 text-center">
@@ -123,17 +66,21 @@ function getNextActions(input: {
   campaigns: number;
   preparedActions: number;
 }) {
-  const actions: Array<{
-    title: string;
-    description: string;
-    href: string;
-    cta: string;
-  }> = [];
+  const actions: Array<{ title: string; description: string; href: string; cta: string }> = [];
+
+  if (input.campaigns === 0) {
+    actions.push({
+      title: "Create the first campaign",
+      description: "Start with one focused service, buyer segment, and CTA.",
+      href: "/campaigns",
+      cta: "Create campaign",
+    });
+  }
 
   if (input.pendingAssets > 0) {
     actions.push({
       title: "Review pending assets",
-      description: "Approve, reject, or revise campaign assets before execution.",
+      description: "Approve, reject, or revise assets before execution.",
       href: "/approvals",
       cta: "Open approvals",
     });
@@ -173,28 +120,14 @@ function getNextActions(input: {
     cta: "Open prospects",
   });
 
-  if (input.campaigns === 0) {
-    actions.unshift({
-      title: "Create the first campaign",
-      description: "Start with one focused service, buyer segment, and CTA.",
-      href: "/campaigns",
-      cta: "Create campaign",
-    });
-  }
-
   return actions.slice(0, 4);
 }
 
 export default async function DashboardPage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
   const [
     campaignsResult,
@@ -218,15 +151,15 @@ export default async function DashboardPage() {
     supabase.from("opportunities").select("*").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(25),
   ]);
 
-  const campaigns = (campaignsResult.data ?? []) as CampaignRow[];
-  const pendingAssets = (pendingAssetsResult.data ?? []) as AssetRow[];
-  const approvedAssets = (approvedAssetsResult.data ?? []) as AssetRow[];
-  const publishedAssets = (publishedAssetsResult.data ?? []) as AssetRow[];
-  const galaxyRuns = (galaxyRunsResult.data ?? []) as GalaxyRunRow[];
-  const toolRuns = (toolRunsResult.data ?? []) as ToolRunRow[];
-  const activities = (activityResult.data ?? []) as ActivityRow[];
-  const prospects = prospectsResult.data ?? [];
-  const opportunities = (opportunitiesResult.data ?? []) as OpportunityRow[];
+  const campaigns = (campaignsResult.data ?? []) as any[];
+  const pendingAssets = (pendingAssetsResult.data ?? []) as any[];
+  const approvedAssets = (approvedAssetsResult.data ?? []) as any[];
+  const publishedAssets = (publishedAssetsResult.data ?? []) as any[];
+  const galaxyRuns = (galaxyRunsResult.data ?? []) as any[];
+  const toolRuns = (toolRunsResult.data ?? []) as any[];
+  const activities = (activityResult.data ?? []) as any[];
+  const prospects = (prospectsResult.data ?? []) as any[];
+  const opportunities = (opportunitiesResult.data ?? []) as any[];
 
   const activeGalaxyRuns = galaxyRuns.filter((run) => ["queued", "running"].includes(run.status));
   const failedToolRuns = toolRuns.filter((run) => run.status === "failed");
@@ -272,33 +205,33 @@ export default async function DashboardPage() {
   }));
 
   return (
-    <main className="mx-auto max-w-7xl space-y-8 p-4 md:p-8">
-      <VipPageHeader
+    <VipPageShell>
+      <VipHero
         eyebrow="Rudy's VIP"
         title="Marketing command center"
         description="A polished workspace for generating campaigns, reviewing assets, executing approved actions, and tracking revenue follow-up."
         primaryAction={{ label: "New Campaign", href: "/campaigns" }}
         secondaryAction={{ label: "Review Assets", href: "/approvals" }}
       >
-        <VipWorkflowSteps
+        <VipWorkflowRail
           steps={[
-            { label: "Generate", description: "Create campaign assets using Rudy's clone memory.", complete: campaigns.length > 0 },
-            { label: "Review", description: "Revise or approve only the strongest assets.", active: pendingAssets.length > 0 },
-            { label: "Execute", description: "Run Gmail, Facebook, GalaxyAI, and Zapier safely.", complete: toolRuns.length > 0 },
-            { label: "Track", description: "Connect campaigns to prospects and opportunities.", active: openOpportunities.length > 0 },
+            { label: "Generate", description: "Create campaign assets using Rudy's clone memory.", state: campaigns.length > 0 ? "complete" : "active" },
+            { label: "Review", description: "Revise or approve only the strongest assets.", state: pendingAssets.length > 0 ? "active" : approvedAssets.length > 0 ? "complete" : "idle" },
+            { label: "Execute", description: "Run Gmail, Facebook, GalaxyAI, and Zapier safely.", state: toolRuns.length > 0 ? "complete" : "idle" },
+            { label: "Track", description: "Connect campaigns to prospects and opportunities.", state: openOpportunities.length > 0 ? "active" : "idle" },
           ]}
         />
-      </VipPageHeader>
+      </VipHero>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <VipMetricCard label="Pending Review" value={pendingAssets.length} description="Assets waiting for a decision." href="/approvals" tone="warning" />
         <VipMetricCard label="Approved Assets" value={approvedAssets.length} description="Ready for execution." href="/zapier" tone="success" />
         <VipMetricCard label="Published" value={publishedAssets.length} description="Public actions completed." href="/actions" tone="info" />
         <VipMetricCard label="Prospects" value={prospects.length} description="Revenue targets tracked." href="/prospects" tone="purple" />
-        <VipMetricCard label="Open Deals" value={openOpportunities.length} description="Pipeline opportunities." href="/opportunities" tone="neutral" />
+        <VipMetricCard label="Open Deals" value={openOpportunities.length} description="Pipeline opportunities." href="/opportunities" />
       </section>
 
-      <section className="rounded-[2rem] border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-sky-950 p-6 text-white shadow-sm">
+      <section className="vip-gradient-dark rounded-[2rem] p-6 text-white shadow-sm md:p-8">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-2xl font-black tracking-tight">Recommended next actions</h2>
@@ -312,9 +245,7 @@ export default async function DashboardPage() {
         </div>
 
         <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {nextActions.map((action) => (
-            <VipActionCard key={action.title} {...action} />
-          ))}
+          {nextActions.map((action) => <VipActionCard key={action.title} {...action} dark />)}
         </div>
       </section>
 
@@ -335,6 +266,6 @@ export default async function DashboardPage() {
           action={{ label: "Create Campaign", href: "/campaigns" }}
         />
       ) : null}
-    </main>
+    </VipPageShell>
   );
 }

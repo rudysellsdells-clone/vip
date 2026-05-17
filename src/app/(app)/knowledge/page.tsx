@@ -2,33 +2,25 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { KnowledgeSourceForm } from "@/components/knowledge/KnowledgeSourceForm";
 import { ContentExampleForm } from "@/components/knowledge/ContentExampleForm";
+import { VipEmptyState, VipMetricCard, VipSection } from "@/components/vip-ui/VipCards";
+import { VipHero, VipPageShell } from "@/components/vip-ui/VipPageShell";
 
 function formatDate(value: string | null) {
   if (!value) return "No date";
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(value));
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
 }
 
 function truncate(value: string, maxLength: number) {
+  if (!value) return "";
   if (value.length <= maxLength) return value;
-
   return `${value.slice(0, maxLength).trim()}...`;
 }
 
 export default async function KnowledgePage() {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
+  if (!user) redirect("/login");
 
   const { data: knowledgeSources } = await supabase
     .from("knowledge_sources")
@@ -46,104 +38,78 @@ export default async function KnowledgePage() {
     .order("updated_at", { ascending: false })
     .limit(25);
 
+  const sources = (knowledgeSources ?? []) as any[];
+  const examples = (contentExamples ?? []) as any[];
+
   return (
-    <main className="mx-auto max-w-7xl space-y-8 p-8">
-      <section>
-        <p className="text-sm uppercase tracking-wide text-slate-500">
-          Sprint 5.6
-        </p>
-        <h1 className="text-3xl font-bold">Knowledge Library</h1>
-        <p className="mt-2 max-w-3xl text-slate-600">
-          Store website copy, service pages, social examples, scripts, testimonials, and business context so VIP can create stronger campaigns.
-        </p>
+    <VipPageShell>
+      <VipHero
+        eyebrow="Business Memory"
+        title="Knowledge library"
+        description="Store website copy, service pages, scripts, testimonials, proof points, and examples so VIP can create stronger campaigns."
+        primaryAction={{ label: "Brand Voice", href: "/brand-voice" }}
+        secondaryAction={{ label: "Dashboard", href: "/dashboard" }}
+      />
+
+      <section className="grid gap-4 md:grid-cols-3">
+        <VipMetricCard label="Knowledge Sources" value={sources.length} description="Business memory entries." tone="info" />
+        <VipMetricCard label="Content Examples" value={examples.length} description="Approved style examples." tone="purple" />
+        <VipMetricCard label="Memory Status" value={sources.length || examples.length ? "Growing" : "Empty"} description="More context creates better outputs." tone={sources.length || examples.length ? "success" : "warning"} />
       </section>
 
       <section className="grid gap-6 xl:grid-cols-2">
-        <KnowledgeSourceForm />
-        <ContentExampleForm />
+        <div className="vip-card rounded-[1.75rem] p-1">
+          <KnowledgeSourceForm />
+        </div>
+        <div className="vip-card rounded-[1.75rem] p-1">
+          <ContentExampleForm />
+        </div>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-2">
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-semibold">Knowledge Sources</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Business memory VIP can use for strategy and campaign generation.
-          </p>
-
-          <div className="mt-5 space-y-3">
-            {knowledgeSources?.length ? (
-              knowledgeSources.map((source) => (
-                <article key={source.id} className="rounded-xl border p-4">
+        <VipSection title="Knowledge sources" description="Business memory VIP can use for strategy and campaign generation.">
+          <div className="space-y-3">
+            {sources.length ? (
+              sources.map((source) => (
+                <article key={source.id} className="vip-card-hover rounded-2xl border border-slate-200 bg-white p-4">
                   <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                     <div>
-                      <p className="text-xs uppercase tracking-wide text-slate-500">
-                        {source.source_type}
+                      <p className="text-xs font-black uppercase tracking-[0.18em] text-sky-700">{source.source_type}</p>
+                      <h3 className="mt-1 font-black text-slate-950">{source.title}</h3>
+                      <p className="mt-2 text-sm leading-6 text-slate-600">
+                        {source.summary ? source.summary : truncate(source.content, 220)}
                       </p>
-                      <h3 className="mt-1 font-semibold">{source.title}</h3>
-                      {source.summary ? (
-                        <p className="mt-2 text-sm text-slate-600">{source.summary}</p>
-                      ) : (
-                        <p className="mt-2 text-sm text-slate-600">
-                          {truncate(source.content, 220)}
-                        </p>
-                      )}
-                      {source.source_url ? (
-                        <p className="mt-2 text-xs text-slate-500">{source.source_url}</p>
-                      ) : null}
+                      {source.source_url ? <p className="mt-2 break-all text-xs text-sky-700">{source.source_url}</p> : null}
                     </div>
-                    <span className="text-xs text-slate-500">
-                      {formatDate(source.updated_at)}
-                    </span>
+                    <span className="text-xs font-bold text-slate-400">{formatDate(source.updated_at)}</span>
                   </div>
                 </article>
               ))
             ) : (
-              <div className="rounded-xl border border-dashed p-6 text-center text-sm text-slate-500">
-                No knowledge sources yet.
-              </div>
+              <VipEmptyState title="No knowledge sources yet" description="Add service pages, website copy, notes, testimonials, or scripts." />
             )}
           </div>
-        </div>
+        </VipSection>
 
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-semibold">Content Examples</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Approved examples of Rudy&apos;s style, sales language, and campaign tone.
-          </p>
-
-          <div className="mt-5 space-y-3">
-            {contentExamples?.length ? (
-              contentExamples.map((example) => (
-                <article key={example.id} className="rounded-xl border p-4">
-                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <p className="text-xs uppercase tracking-wide text-slate-500">
-                        {example.content_type}
-                      </p>
-                      <h3 className="mt-1 font-semibold">{example.title}</h3>
-                      <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">
-                        {truncate(example.content, 260)}
-                      </p>
-                      {example.source ? (
-                        <p className="mt-2 text-xs text-slate-500">
-                          Source: {example.source}
-                        </p>
-                      ) : null}
-                    </div>
-                    <span className="text-xs text-slate-500">
-                      {formatDate(example.updated_at)}
-                    </span>
-                  </div>
+        <VipSection title="Content examples" description="Approved examples of Rudy's style, sales language, and campaign tone.">
+          <div className="space-y-3">
+            {examples.length ? (
+              examples.map((example) => (
+                <article key={example.id} className="vip-card-hover rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-700">{example.content_type}</p>
+                  <h3 className="mt-1 font-black text-slate-950">{example.title}</h3>
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">
+                    {truncate(example.content, 260)}
+                  </p>
+                  {example.source ? <p className="mt-2 text-xs font-bold text-slate-400">Source: {example.source}</p> : null}
                 </article>
               ))
             ) : (
-              <div className="rounded-xl border border-dashed p-6 text-center text-sm text-slate-500">
-                No content examples yet.
-              </div>
+              <VipEmptyState title="No content examples yet" description="Add emails, social posts, scripts, or sales copy that sound like Rudy." />
             )}
           </div>
-        </div>
+        </VipSection>
       </section>
-    </main>
+    </VipPageShell>
   );
 }
