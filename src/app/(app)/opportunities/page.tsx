@@ -1,9 +1,14 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { OpportunityForm } from "@/components/opportunities/OpportunityForm";
-import { VipEmptyState, VipMetricCard, VipSection } from "@/components/vip-ui/VipCards";
-import { VipHero, VipPageShell } from "@/components/vip-ui/VipPageShell";
-import { VipStatusBadge } from "@/components/vip-ui/VipStatusBadge";
+import {
+  WebsiteBadge,
+  WebsiteHero,
+  WebsiteMetric,
+  WebsitePage,
+  WebsiteSection,
+  websiteStyles,
+} from "@/components/website-ui/WebsitePage";
 
 type Option = {
   id: string;
@@ -40,79 +45,80 @@ export default async function OpportunitiesPage() {
 
   if (opportunitiesResult.error) console.error("Failed to load opportunities", opportunitiesResult.error);
 
-  const opportunities = (opportunitiesResult.data ?? []) as any[];
-  const prospects: Option[] = ((prospectsResult.data ?? []) as any[]).map((prospect) => ({
+  const opportunities = (opportunitiesResult.data ?? []) as Array<Record<string, any>>;
+  const prospects: Option[] = ((prospectsResult.data ?? []) as Array<Record<string, any>>).map((prospect) => ({
     id: prospect.id,
     name: prospect.company_name ?? "Unnamed prospect",
   }));
-  const serviceLines: Option[] = ((serviceLinesResult.data ?? []) as any[]).map((serviceLine) => ({ id: serviceLine.id, name: serviceLine.name }));
-  const offers: Option[] = ((offersResult.data ?? []) as any[]).map((offer) => ({ id: offer.id, name: offer.name }));
+  const serviceLines: Option[] = ((serviceLinesResult.data ?? []) as Array<Record<string, any>>).map((serviceLine) => ({ id: serviceLine.id, name: serviceLine.name }));
+  const offers: Option[] = ((offersResult.data ?? []) as Array<Record<string, any>>).map((offer) => ({ id: offer.id, name: offer.name }));
 
   const openOpportunities = opportunities.filter((opportunity) => !["won", "lost", "paused"].includes(opportunity.stage));
   const wonOpportunities = opportunities.filter((opportunity) => opportunity.stage === "won");
   const totalOpenValue = openOpportunities.reduce((sum, opportunity) => sum + Number(opportunity.estimated_value ?? 0), 0);
 
   return (
-    <VipPageShell>
-      <VipHero
+    <WebsitePage>
+      <WebsiteHero
         eyebrow="Revenue Pipeline"
-        title="Opportunities and pipeline"
+        title="Turn marketing activity into real opportunities."
         description="Track project, retainer, audit, and consulting opportunities that come from campaigns, prospecting, and follow-up."
         primaryAction={{ label: "Add Prospects", href: "/prospects" }}
         secondaryAction={{ label: "Dashboard", href: "/dashboard" }}
       />
 
-      <section className="grid gap-4 md:grid-cols-4">
-        <VipMetricCard label="Open Deals" value={openOpportunities.length} description="Active sales conversations." tone="info" />
-        <VipMetricCard label="Open Value" value={formatCurrency(totalOpenValue)} description="Estimated pipeline value." tone="success" />
-        <VipMetricCard label="Won" value={wonOpportunities.length} description="Closed successful opportunities." tone="purple" />
-        <VipMetricCard label="Tracked" value={opportunities.length} description="All opportunities in VIP." />
+      <section className={websiteStyles.metricsGrid}>
+        <WebsiteMetric label="Open Deals" value={openOpportunities.length} description="Active sales conversations." dot="blue" />
+        <WebsiteMetric label="Open Value" value={formatCurrency(totalOpenValue)} description="Estimated pipeline value." dot="green" />
+        <WebsiteMetric label="Won" value={wonOpportunities.length} description="Closed successful opportunities." dot="purple" />
+        <WebsiteMetric label="Tracked" value={opportunities.length} description="All opportunities in VIP." dot="gold" />
       </section>
 
-      <div className="vip-card rounded-[1.75rem] p-1">
+      <div className={websiteStyles.formFrame}>
         <OpportunityForm prospects={prospects} serviceLines={serviceLines} offers={offers} />
       </div>
 
-      <VipSection title="Pipeline board" description="A clean deal board before we add deeper CRM automation.">
+      <WebsiteSection
+        eyebrow="Deal Board"
+        title="Opportunity pipeline"
+        description="A simple visual pipeline before deeper CRM automation."
+      >
         {opportunities.length ? (
-          <div className="space-y-4">
+          <div className={websiteStyles.cardGrid}>
             {opportunities.map((opportunity) => (
-              <article key={opportunity.id} className="vip-card-hover rounded-[1.5rem] border border-slate-200 bg-white p-5">
-                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-lg font-black text-slate-950">{opportunity.name}</h3>
-                      <VipStatusBadge status={opportunity.stage} size="xs" />
-                    </div>
-                    <p className="mt-2 text-sm font-medium text-slate-600">
-                      {formatLabel(opportunity.opportunity_type)} • {formatCurrency(Number(opportunity.estimated_value ?? 0))}
-                    </p>
-                    {opportunity.next_step ? (
-                      <p className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold leading-6 text-amber-900">
-                        Next step: {opportunity.next_step}
-                      </p>
-                    ) : null}
-                    {opportunity.notes ? (
-                      <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">{opportunity.notes}</p>
-                    ) : null}
-                  </div>
-
-                  <div className="text-sm text-slate-500 md:text-right">
-                    <p>Updated {formatDate(opportunity.updated_at)}</p>
-                    {opportunity.close_date ? <p className="mt-1">Close date {formatDate(opportunity.close_date)}</p> : null}
-                  </div>
+              <article key={opportunity.id} className={websiteStyles.card}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className={websiteStyles.cardTitle}>{opportunity.name}</h3>
+                  <WebsiteBadge status={opportunity.stage} />
                 </div>
+
+                <p className={websiteStyles.cardMeta}>
+                  {formatLabel(opportunity.opportunity_type)} • {formatCurrency(Number(opportunity.estimated_value ?? 0))}
+                </p>
+
+                {opportunity.next_step ? (
+                  <p className={websiteStyles.cardText}>
+                    <strong>Next step:</strong> {opportunity.next_step}
+                  </p>
+                ) : null}
+
+                {opportunity.notes ? (
+                  <p className={websiteStyles.cardText}>{opportunity.notes}</p>
+                ) : null}
+
+                <p className={websiteStyles.cardMeta}>Updated {formatDate(opportunity.updated_at)}</p>
+                {opportunity.close_date ? (
+                  <p className={websiteStyles.cardMeta}>Close date {formatDate(opportunity.close_date)}</p>
+                ) : null}
               </article>
             ))}
           </div>
         ) : (
-          <VipEmptyState
-            title="No opportunities yet"
-            description="Create the first opportunity when a prospect becomes a real sales conversation."
-            action={{ label: "Add Prospect", href: "/prospects" }}
-          />
+          <div className={websiteStyles.empty}>
+            No opportunities yet. Create the first opportunity when a prospect becomes a real sales conversation.
+          </div>
         )}
-      </VipSection>
-    </VipPageShell>
+      </WebsiteSection>
+    </WebsitePage>
   );
 }

@@ -3,8 +3,13 @@ import { createClient } from "@/lib/supabase/server";
 import { DigitalCloneProfileForm } from "@/components/clone/DigitalCloneProfileForm";
 import { BrandRuleForm } from "@/components/clone/BrandRuleForm";
 import { DEFAULT_DIGITAL_CLONE_PROFILE } from "@/lib/clone/defaults";
-import { VipEmptyState, VipMetricCard, VipSection } from "@/components/vip-ui/VipCards";
-import { VipHero, VipPageShell } from "@/components/vip-ui/VipPageShell";
+import {
+  WebsiteHero,
+  WebsiteMetric,
+  WebsitePage,
+  WebsiteSection,
+  websiteStyles,
+} from "@/components/website-ui/WebsitePage";
 
 export default async function BrandVoicePage() {
   const supabase = await createClient();
@@ -30,56 +35,52 @@ export default async function BrandVoicePage() {
     .order("created_at", { ascending: true });
 
   const workingProfile = profile ?? { ...DEFAULT_DIGITAL_CLONE_PROFILE };
-  const rules = (brandRules ?? []) as any[];
+  const rules = (brandRules ?? []) as Array<Record<string, any>>;
 
   return (
-    <VipPageShell>
-      <VipHero
+    <WebsitePage>
+      <WebsiteHero
         eyebrow="Business Memory"
-        title="Brand voice and clone profile"
-        description="Control how VIP thinks, writes, positions Rudy's services, and respects approval guardrails."
+        title="Shape how VIP thinks and writes."
+        description="Manage the brand voice, positioning, rules, and guardrails that make VIP sound more like Rudy and less like generic AI."
         primaryAction={{ label: "Knowledge Library", href: "/knowledge" }}
         secondaryAction={{ label: "Dashboard", href: "/dashboard" }}
       />
 
-      <section className="grid gap-4 md:grid-cols-3">
-        <VipMetricCard label="Clone Profile" value={profile ? "Active" : "Default"} description="The core memory layer." tone={profile ? "success" : "warning"} />
-        <VipMetricCard label="Brand Rules" value={rules.length} description="Voice and behavior guardrails." tone="info" />
-        <VipMetricCard label="Safety Mode" value="On" description="External actions require approval." tone="success" />
+      <section className={websiteStyles.metricsGrid}>
+        <WebsiteMetric label="Clone Profile" value={profile ? "Active" : "Default"} description="The core voice and positioning layer." dot={profile ? "green" : "gold"} />
+        <WebsiteMetric label="Brand Rules" value={rules.length} description="Voice and behavior guardrails." dot="blue" />
+        <WebsiteMetric label="Safety Mode" value="On" description="External actions require approval." dot="green" />
+        <WebsiteMetric label="Next Step" value="Refine" description="Add rules and examples over time." dot="purple" />
       </section>
 
-      <div className="vip-card rounded-[1.75rem] p-1">
+      <div className={websiteStyles.formFrame}>
         <DigitalCloneProfileForm profile={workingProfile} />
       </div>
 
-      <VipSection title="Brand rules" description="Rules that guide tone, positioning, safety, and business behavior.">
-        <div className="space-y-3">
+      <WebsiteSection
+        eyebrow="Rules"
+        title="Brand rules"
+        description="Use rules to keep VIP clear, human, revenue-focused, and safe."
+      >
+        <div className={websiteStyles.cardGrid}>
           {rules.length ? (
             rules.map((rule) => (
-              <article key={rule.id} className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <p className="text-xs font-black uppercase tracking-[0.18em] text-sky-700">{rule.category}</p>
-                    <p className="mt-2 text-sm leading-6 text-slate-700">{rule.rule_text}</p>
-                  </div>
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">
-                    Priority {rule.priority}
-                  </span>
-                </div>
+              <article key={rule.id} className={websiteStyles.card}>
+                <p className={websiteStyles.sectionEyebrow}>{rule.category}</p>
+                <h3 className={websiteStyles.cardTitle}>Priority {rule.priority}</h3>
+                <p className={websiteStyles.cardText}>{rule.rule_text}</p>
               </article>
             ))
           ) : (
-            <VipEmptyState
-              title="No custom rules yet"
-              description="Add rules that describe how VIP should sound, sell, and behave."
-            />
+            <div className={websiteStyles.empty}>No brand rules yet. Add a few rules below.</div>
           )}
         </div>
 
-        <div className="mt-5">
+        <div style={{ marginTop: 24 }}>
           <BrandRuleForm />
         </div>
-      </VipSection>
-    </VipPageShell>
+      </WebsiteSection>
+    </WebsitePage>
   );
 }
