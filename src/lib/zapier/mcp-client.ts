@@ -1,3 +1,5 @@
+import { getZapierToolArgs, getZapierToolName } from "@/lib/zapier/action-registry";
+
 type JsonRpcResponse = {
   jsonrpc?: string;
   id?: string | number | null;
@@ -29,8 +31,9 @@ function getMcpToken() {
 }
 
 function responseLooksLikeHtml(value: string) {
-  return value.trim().toLowerCase().startsWith("<!doctype html") ||
-    value.trim().toLowerCase().startsWith("<html");
+  const normalized = value.trim().toLowerCase();
+
+  return normalized.startsWith("<!doctype html") || normalized.startsWith("<html");
 }
 
 function parseMcpResponse(text: string): JsonRpcResponse {
@@ -66,11 +69,91 @@ function extractNestedToolError(result: unknown) {
   }
 
   try {
-    const parsed = JSON.parse(textContent) as { error?: string; message?: string };
+    const parsed = JSON.parse(textContent) as {
+      error?: string;
+      message?: string;
+    };
+
     return parsed.error ?? parsed.message ?? textContent;
   } catch {
     return textContent;
   }
+}
+
+function readOptionString(options: Record<string, any>, keys: string[]) {
+  for (const key of keys) {
+    const value = options[key];
+
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return "";
+}
+
+function getCompatInput(options: Record<string, any>) {
+  return (
+    options.input ??
+    options.mcpInput ??
+    options.zapierInput ??
+    options.toolRun?.input ??
+    {}
+  );
+}
+
+function getCompatActionName(options: Record<string, any>) {
+  return (
+    readOptionString(options, ["actionName", "action_name"]) ||
+    readOptionString(options.toolRun ?? {}, ["actionName", "action_name"]) ||
+    null
+  );
+}
+
+function getCompatRequestId(options: Record<string, any>) {
+  return (
+    readOptionString(options, ["requestId", "toolRunId", "id"]) ||
+    readOptionString(options.toolRun ?? {}, ["id"]) ||
+    `zapier-${Date.now()}`
+  );
+}
+
+function getCompatToolName(options: Record<string, any>, input: unknown, actionName: string | null) {
+  const explicitToolName = readOptionString(options, [
+    "toolName",
+    "mcpToolName",
+    "zapierToolName",
+  ]);
+
+  if (explicitToolName) {
+    return explicitToolName;
+  }
+
+  const toolRunToolName = readOptionString(options.toolRun ?? {}, [
+    "toolName",
+    "mcpToolName",
+    "zapierToolName",
+  ]);
+
+  if (toolRunToolName) {
+    return toolRunToolName;
+  }
+
+  return getZapierToolName(input, actionName);
+}
+
+function getCompatToolArgs(options: Record<string, any>, input: unknown) {
+  const explicitArgs =
+    options.toolArgs ??
+    options.arguments ??
+    options.mcpArgs ??
+    options.zapierArgs;
+
+  if (explicitArgs && typeof explicitArgs === "object" && !Array.isArray(explicitArgs)) {
+    return explicitArgs as Record<string, unknown>;
+  }
+
+  return getZapierToolArgs(input);
 }
 
 export async function callZapierMcpTool({
@@ -130,4 +213,30 @@ export async function callZapierMcpTool({
   }
 
   return payload.result;
+}
+
+/**
+ * Backwards-compatible export for older Zapier execution routes.
+ *
+ * Some existing routes, especially the Gmail draft executor, import
+ * executeZapierMcpWriteAction directly. The LinkedIn execution patch added the
+ * newer generic callZapierMcpTool function, but older routes still need this
+ * named export to exist.
+ *
+ * This wrapper accepts flexible legacy option shapes and forwards the request
+ * into the shared MCP JSON-RPC caller.
+ */
+export async function executeZapierMcpWriteAction(...args: any[]): Promise<any> {
+  const options = (args[0] ?? {}) as Record<string, any>;
+  const input = getCompatInput(options);
+  const actionName = getCompatActionName(options);
+  const requestId = getCompatRequestId(options);
+  const toolName = getCompatToolName(options, input, actionName);
+  const toolArgs = getCompatToolArgs(options, input);
+
+  return callZapierMcpTool({
+    toolName,
+    args: toolArgs,
+    requestId,
+  });
 }
