@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { productConfig } from "@/lib/config/product";
 import styles from "./SidebarNav.module.css";
 
 type NavGroup = {
@@ -53,8 +54,8 @@ function Logo() {
     <Link href="/dashboard" className={styles.logoLink}>
       <span className={styles.logoMark}>VIP</span>
       <span>
-        <p className={styles.logoTitle}>Rudy&apos;s VIP</p>
-        <p className={styles.logoSub}>Web Search Pros OS</p>
+        <p className={styles.logoTitle}>{productConfig.appName}</p>
+        <p className={styles.logoSub}>{productConfig.brandName}</p>
       </span>
     </Link>
   );

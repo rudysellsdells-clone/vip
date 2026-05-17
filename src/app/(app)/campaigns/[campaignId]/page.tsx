@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { DeleteCampaignButton } from "@/components/campaigns/DeleteCampaignButton";
 import { GenerateCampaignAssetsButton } from "@/components/campaigns/GenerateCampaignAssetsButton";
 import {
   WebsiteBadge,
@@ -19,15 +20,24 @@ type PageProps = {
 
 function formatDate(value: string | null) {
   if (!value) return "No date";
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(value));
 }
 
 export default async function CampaignDetailPage({ params }: PageProps) {
   const { campaignId } = await params;
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
 
-  if (!user) redirect("/login");
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
 
   const { data: campaign, error } = await supabase
     .from("campaigns")
@@ -36,7 +46,9 @@ export default async function CampaignDetailPage({ params }: PageProps) {
     .eq("user_id", user.id)
     .single();
 
-  if (error || !campaign) redirect("/campaigns");
+  if (error || !campaign) {
+    redirect("/campaigns");
+  }
 
   const { data: assetsData } = await supabase
     .from("generated_assets")
@@ -61,10 +73,30 @@ export default async function CampaignDetailPage({ params }: PageProps) {
       />
 
       <section className={websiteStyles.metricsGrid}>
-        <WebsiteMetric label="Assets" value={assets.length} description="Generated campaign assets." dot="blue" />
-        <WebsiteMetric label="Needs Review" value={needsReview} description="Waiting for approval or revision." dot="gold" />
-        <WebsiteMetric label="Approved" value={approved} description="Ready for execution." dot="green" />
-        <WebsiteMetric label="Executed" value={executed} description="Published or sent assets." dot="purple" />
+        <WebsiteMetric
+          label="Assets"
+          value={assets.length}
+          description="Generated campaign assets."
+          dot="blue"
+        />
+        <WebsiteMetric
+          label="Needs Review"
+          value={needsReview}
+          description="Waiting for approval or revision."
+          dot="gold"
+        />
+        <WebsiteMetric
+          label="Approved"
+          value={approved}
+          description="Ready for execution."
+          dot="green"
+        />
+        <WebsiteMetric
+          label="Executed"
+          value={executed}
+          description="Published or sent assets."
+          dot="purple"
+        />
       </section>
 
       <section className={websiteStyles.twoColumn}>
@@ -83,6 +115,7 @@ export default async function CampaignDetailPage({ params }: PageProps) {
                 <strong>Audience:</strong> {campaign.audience ?? "Not specified"}
               </p>
             </article>
+
             <article className={websiteStyles.card}>
               <h3 className={websiteStyles.cardTitle}>Goal and CTA</h3>
               <p className={websiteStyles.cardText}>
@@ -93,6 +126,7 @@ export default async function CampaignDetailPage({ params }: PageProps) {
               </p>
             </article>
           </div>
+
           <div className={websiteStyles.actionRow}>
             <GenerateCampaignAssetsButton campaignId={campaign.id} />
           </div>
@@ -100,8 +134,8 @@ export default async function CampaignDetailPage({ params }: PageProps) {
 
         <WebsiteSection
           eyebrow="Status"
-          title="Campaign readiness"
-          description="Use this area to understand where the campaign sits in the workflow."
+          title="Campaign controls"
+          description="Generate assets, review the campaign state, or delete this campaign if it was created by mistake."
         >
           <article className={websiteStyles.card}>
             <WebsiteBadge status={campaign.status} />
@@ -110,6 +144,13 @@ export default async function CampaignDetailPage({ params }: PageProps) {
             </p>
             {campaign.notes ? <p className={websiteStyles.cardText}>{campaign.notes}</p> : null}
           </article>
+
+          <div className={websiteStyles.actionRow}>
+            <DeleteCampaignButton
+              campaignId={campaign.id}
+              campaignName={campaign.name}
+            />
+          </div>
         </WebsiteSection>
       </section>
 
@@ -129,7 +170,9 @@ export default async function CampaignDetailPage({ params }: PageProps) {
                 <p className={websiteStyles.cardMeta}>
                   {asset.asset_type} • Version {asset.version} • {formatDate(asset.created_at)}
                 </p>
-                <p className={websiteStyles.cardText}>{String(asset.content).slice(0, 220)}...</p>
+                <p className={websiteStyles.cardText}>
+                  {String(asset.content).slice(0, 220)}...
+                </p>
               </Link>
             ))}
           </div>
