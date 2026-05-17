@@ -1,20 +1,18 @@
+@import url("https://fonts.googleapis.com/css2?family=Lato:wght@700;900&family=Montserrat:wght@400;500;600;700;800;900&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
+  --vip-heading-font: "Lato", Arial, sans-serif;
+  --vip-body-font: "Montserrat", Arial, sans-serif;
   --vip-ink: #0f172a;
   --vip-muted: #64748b;
+  --vip-blue: #0b4a7a;
+  --vip-gold: #f5b642;
   --vip-line: #dbe5ef;
-  --vip-paper: #ffffff;
-  --vip-soft: #f8fafc;
-  --vip-navy: #0b1220;
-  --vip-blue: #2563eb;
-  --vip-sky: #0284c7;
-  --vip-gold: #f59e0b;
-  --vip-green: #059669;
-  --vip-red: #e11d48;
-  --vip-purple: #7c3aed;
+  --vip-bg: #f6f9fc;
 }
 
 * {
@@ -23,150 +21,44 @@
 
 html {
   min-height: 100%;
-  background: #eef4fb;
+  background: var(--vip-bg);
 }
 
 body {
   min-height: 100%;
   margin: 0;
+  background: var(--vip-bg);
   color: var(--vip-ink);
-  background:
-    radial-gradient(circle at 8% 0%, rgba(37, 99, 235, 0.12), transparent 26rem),
-    radial-gradient(circle at 92% 8%, rgba(245, 158, 11, 0.16), transparent 24rem),
-    linear-gradient(180deg, #f8fbff 0%, #edf4fb 45%, #e9eff7 100%);
-  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  font-family: var(--vip-body-font);
+  font-size: 16px;
+  font-weight: 500;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.vip-heading {
+  font-family: var(--vip-heading-font);
+  letter-spacing: -0.025em;
 }
 
 button,
 input,
 textarea,
 select {
-  font: inherit;
+  font-family: var(--vip-body-font);
+}
+
+input,
+textarea,
+select {
+  font-size: 16px;
 }
 
 ::selection {
-  background: rgba(37, 99, 235, 0.18);
-}
-
-.vip-app-bg {
-  min-height: 100vh;
-  background:
-    radial-gradient(circle at top right, rgba(14, 165, 233, 0.16), transparent 22rem),
-    radial-gradient(circle at 15% 10%, rgba(245, 158, 11, 0.13), transparent 18rem),
-    linear-gradient(180deg, rgba(255,255,255,0.7), rgba(241,245,249,0.7));
-}
-
-.vip-main {
-  width: 100%;
-}
-
-.vip-page {
-  width: min(100%, 1440px);
-  margin: 0 auto;
-  padding: 1.25rem;
-}
-
-@media (min-width: 768px) {
-  .vip-page {
-    padding: 2rem;
-  }
-}
-
-.vip-surface {
-  border: 1px solid rgba(203, 213, 225, 0.8);
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 22px 70px rgba(15, 23, 42, 0.08);
-  backdrop-filter: blur(16px);
-}
-
-.vip-card {
-  border: 1px solid rgba(203, 213, 225, 0.82);
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.06);
-  backdrop-filter: blur(10px);
-}
-
-.vip-card-hover {
-  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
-}
-
-.vip-card-hover:hover {
-  transform: translateY(-2px);
-  border-color: rgba(59, 130, 246, 0.32);
-  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.1);
-}
-
-.vip-gradient-dark {
-  background:
-    radial-gradient(circle at 12% 0%, rgba(59, 130, 246, 0.22), transparent 22rem),
-    radial-gradient(circle at 100% 10%, rgba(245, 158, 11, 0.16), transparent 18rem),
-    linear-gradient(135deg, #07111f 0%, #0f172a 52%, #0b314f 100%);
-}
-
-.vip-input {
-  width: 100%;
-  border-radius: 1rem;
-  border: 1px solid rgba(203, 213, 225, 0.95);
-  background: rgba(255, 255, 255, 0.96);
-  padding: 0.75rem 0.9rem;
-  color: #0f172a;
-  outline: none;
-  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
-}
-
-.vip-input:focus {
-  border-color: rgba(37, 99, 235, 0.7);
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
-  background: #ffffff;
-}
-
-.vip-label {
-  display: block;
-  margin-bottom: 0.4rem;
-  color: #334155;
-  font-size: 0.875rem;
-  font-weight: 800;
-}
-
-.vip-form-grid {
-  display: grid;
-  gap: 1rem;
-}
-
-@media (min-width: 768px) {
-  .vip-form-grid-2 {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .vip-form-grid-3 {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .vip-form-grid-4 {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
-.vip-prose {
-  line-height: 1.75;
-  color: #334155;
-}
-
-.vip-subtle-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(100, 116, 139, 0.35) transparent;
-}
-
-.vip-subtle-scrollbar::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-.vip-subtle-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, 0.25);
-  border-radius: 999px;
-}
-
-.vip-subtle-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgba(11, 74, 122, 0.16);
 }

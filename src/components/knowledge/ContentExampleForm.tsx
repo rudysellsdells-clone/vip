@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { CONTENT_EXAMPLE_TYPES } from "@/lib/clone/defaults";
+import formStyles from "@/components/forms/VipForm.module.css";
 
 export function ContentExampleForm() {
   const router = useRouter();
@@ -19,8 +20,8 @@ export function ContentExampleForm() {
         body: JSON.stringify({
           title: formData.get("title"),
           source: formData.get("source"),
-          content_type: formData.get("content_type"),
           content: formData.get("content"),
+          content_type: formData.get("content_type"),
           tags: String(formData.get("tags") ?? "")
             .split(",")
             .map((tag) => tag.trim())
@@ -46,40 +47,59 @@ export function ContentExampleForm() {
   }
 
   return (
-    <form action={handleSubmit} className="space-y-4 rounded-2xl border bg-white p-6 shadow-sm">
-      <div>
-        <h2 className="text-xl font-semibold">Add Content Example</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Add examples of Rudy&apos;s writing, campaigns, sales language, or approved style.
+    <form action={handleSubmit} className={formStyles.form}>
+      <div className={formStyles.header}>
+        <h2 className={formStyles.title}>Add content example</h2>
+        <p className={formStyles.description}>
+          Add approved emails, posts, scripts, sales copy, or other examples that show VIP how Rudy should sound.
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <input name="title" className="rounded-xl border px-3 py-2" placeholder="Title" required />
-        <select name="content_type" className="rounded-xl border px-3 py-2" required>
-          {CONTENT_EXAMPLE_TYPES.map((type) => (
-            <option key={type} value={type}>
-              {type.replaceAll("_", " ")}
-            </option>
-          ))}
-        </select>
+      <div className={[formStyles.grid, formStyles.grid2].join(" ")}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Title</span>
+          <input name="title" className={formStyles.input} required />
+        </label>
+
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Content Type</span>
+          <select name="content_type" className={formStyles.select} required>
+            {CONTENT_EXAMPLE_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {type.replaceAll("_", " ")}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
-      <input name="source" className="w-full rounded-xl border px-3 py-2" placeholder="Source or context" />
+      <div className={formStyles.row}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Source</span>
+          <input name="source" className={formStyles.input} placeholder="Website, email, LinkedIn, proposal..." />
+        </label>
+      </div>
 
-      <textarea name="content" className="min-h-36 w-full rounded-xl border px-3 py-2" placeholder="Paste the example here..." required />
+      <div className={formStyles.row}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Content</span>
+          <textarea name="content" className={[formStyles.textarea, formStyles.textareaLarge].join(" ")} required />
+        </label>
+      </div>
 
-      <input name="tags" className="w-full rounded-xl border px-3 py-2" placeholder="Tags separated by commas" />
+      <div className={formStyles.row}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Tags</span>
+          <input name="tags" className={formStyles.input} placeholder="email, local seo, contractors" />
+        </label>
+      </div>
 
-      <button
-        type="submit"
-        disabled={saving}
-        className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {saving ? "Saving..." : "Add Content Example"}
-      </button>
-
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      <div className={formStyles.actions}>
+        <button type="submit" disabled={saving} className={formStyles.submit}>
+          {saving ? "Saving..." : "Add Content Example"}
+        </button>
+        {error ? <p className={formStyles.error}>{error}</p> : null}
+      </div>
     </form>
   );
 }

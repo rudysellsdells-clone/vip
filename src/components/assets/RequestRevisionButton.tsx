@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
+import formStyles from "@/components/forms/VipForm.module.css";
 
 type RequestRevisionButtonProps = {
   assetId: string;
@@ -63,7 +64,7 @@ export function RequestRevisionButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+        className={formStyles.secondaryButton}
       >
         Request Revision
       </button>
@@ -71,28 +72,27 @@ export function RequestRevisionButton({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3 rounded-xl border bg-slate-50 p-4">
-      <div>
-        <h4 className="font-semibold">Request Revision</h4>
-        <p className="mt-1 text-xs text-slate-500">
+    <form onSubmit={handleSubmit} className={formStyles.compactForm}>
+      <div className={formStyles.header}>
+        <h4 className={formStyles.smallTitle}>Request revision</h4>
+        <p className={formStyles.description}>
           {assetTitle ? `Revise: ${assetTitle}` : "Create a revised version of this asset."}
         </p>
       </div>
 
-      <textarea
-        value={instructions}
-        onChange={(event) => setInstructions(event.target.value)}
-        className="min-h-28 w-full rounded-lg border px-3 py-2 text-sm"
-        placeholder="Example: Make this more direct, add a stronger CTA, and make it sound less generic."
-      />
+      <label className={formStyles.field}>
+        <span className={formStyles.label}>Revision instructions</span>
+        <textarea
+          value={instructions}
+          onChange={(event) => setInstructions(event.target.value)}
+          className={formStyles.textarea}
+          placeholder="Example: Make this more direct, add a stronger CTA, and make it sound less generic."
+        />
+      </label>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="submit"
-          disabled={loading}
-          className="rounded-lg bg-slate-950 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {loading ? "Creating Revision..." : "Create Revised Version"}
+      <div className={formStyles.actions}>
+        <button type="submit" disabled={loading} className={formStyles.submit}>
+          {loading ? "Creating..." : "Create Revised Version"}
         </button>
 
         <button
@@ -102,14 +102,14 @@ export function RequestRevisionButton({
             setError(null);
             setMessage(null);
           }}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700"
+          className={formStyles.secondaryButton}
         >
           Cancel
         </button>
       </div>
 
-      {message ? <p className="text-xs text-emerald-700">{message}</p> : null}
-      {error ? <p className="text-xs text-red-600">{error}</p> : null}
+      {message ? <p className={formStyles.message}>{message}</p> : null}
+      {error ? <p className={formStyles.error}>{error}</p> : null}
     </form>
   );
 }

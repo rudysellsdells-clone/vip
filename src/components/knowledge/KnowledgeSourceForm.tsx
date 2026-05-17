@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { KNOWLEDGE_SOURCE_TYPES } from "@/lib/clone/defaults";
+import formStyles from "@/components/forms/VipForm.module.css";
 
 export function KnowledgeSourceForm() {
   const router = useRouter();
@@ -47,23 +48,23 @@ export function KnowledgeSourceForm() {
   }
 
   return (
-    <form action={handleSubmit} className="space-y-4 rounded-2xl border bg-white p-6 shadow-sm">
-      <div>
-        <h2 className="text-xl font-semibold">Add Knowledge Source</h2>
-        <p className="mt-1 text-sm text-slate-500">
+    <form action={handleSubmit} className={formStyles.form}>
+      <div className={formStyles.header}>
+        <h2 className={formStyles.title}>Add knowledge source</h2>
+        <p className={formStyles.description}>
           Add website copy, service pages, scripts, case studies, testimonials, or notes that VIP should use as business memory.
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Title</span>
-          <input name="title" className="mt-1 w-full rounded-xl border px-3 py-2" required />
+      <div className={[formStyles.grid, formStyles.grid2].join(" ")}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Title</span>
+          <input name="title" className={formStyles.input} required />
         </label>
 
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Source Type</span>
-          <select name="source_type" className="mt-1 w-full rounded-xl border px-3 py-2" required>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Source Type</span>
+          <select name="source_type" className={formStyles.select} required>
             {KNOWLEDGE_SOURCE_TYPES.map((type) => (
               <option key={type} value={type}>
                 {type.replaceAll("_", " ")}
@@ -73,35 +74,40 @@ export function KnowledgeSourceForm() {
         </label>
       </div>
 
-      <label className="block">
-        <span className="text-sm font-medium text-slate-700">Source URL</span>
-        <input name="source_url" className="mt-1 w-full rounded-xl border px-3 py-2" placeholder="https://..." />
-      </label>
+      <div className={formStyles.row}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Source URL</span>
+          <input name="source_url" className={formStyles.input} placeholder="https://..." />
+        </label>
+      </div>
 
-      <label className="block">
-        <span className="text-sm font-medium text-slate-700">Summary</span>
-        <textarea name="summary" className="mt-1 min-h-20 w-full rounded-xl border px-3 py-2" />
-      </label>
+      <div className={formStyles.row}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Summary</span>
+          <textarea name="summary" className={[formStyles.textarea, formStyles.textareaSmall].join(" ")} />
+        </label>
+      </div>
 
-      <label className="block">
-        <span className="text-sm font-medium text-slate-700">Content</span>
-        <textarea name="content" className="mt-1 min-h-44 w-full rounded-xl border px-3 py-2" required />
-      </label>
+      <div className={formStyles.row}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Content</span>
+          <textarea name="content" className={[formStyles.textarea, formStyles.textareaLarge].join(" ")} required />
+        </label>
+      </div>
 
-      <label className="block">
-        <span className="text-sm font-medium text-slate-700">Tags</span>
-        <input name="tags" className="mt-1 w-full rounded-xl border px-3 py-2" placeholder="seo, contractors, case study" />
-      </label>
+      <div className={formStyles.row}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Tags</span>
+          <input name="tags" className={formStyles.input} placeholder="seo, contractors, case study" />
+        </label>
+      </div>
 
-      <button
-        type="submit"
-        disabled={saving}
-        className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {saving ? "Saving..." : "Add Knowledge Source"}
-      </button>
-
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      <div className={formStyles.actions}>
+        <button type="submit" disabled={saving} className={formStyles.submit}>
+          {saving ? "Saving..." : "Add Knowledge Source"}
+        </button>
+        {error ? <p className={formStyles.error}>{error}</p> : null}
+      </div>
     </form>
   );
 }

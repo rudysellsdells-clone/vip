@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import formStyles from "@/components/forms/VipForm.module.css";
 
 type Option = {
   id: string;
@@ -79,23 +80,23 @@ export function OpportunityForm({
   }
 
   return (
-    <form action={handleSubmit} className="space-y-4 rounded-2xl border bg-white p-6 shadow-sm">
-      <div>
-        <h2 className="text-xl font-semibold">Add Opportunity</h2>
-        <p className="mt-1 text-sm text-slate-500">
+    <form action={handleSubmit} className={formStyles.form}>
+      <div className={formStyles.header}>
+        <h2 className={formStyles.title}>Add opportunity</h2>
+        <p className={formStyles.description}>
           Track potential projects, retainers, audits, and consulting deals.
         </p>
       </div>
 
-      <label className="block">
-        <span className="text-sm font-medium text-slate-700">Opportunity Name</span>
-        <input name="name" className="mt-1 w-full rounded-xl border px-3 py-2" required />
+      <label className={formStyles.field}>
+        <span className={formStyles.label}>Opportunity Name</span>
+        <input name="name" className={formStyles.input} required />
       </label>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Prospect</span>
-          <select name="prospect_id" className="mt-1 w-full rounded-xl border px-3 py-2">
+      <div className={[formStyles.row, formStyles.grid3].join(" ")}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Prospect</span>
+          <select name="prospect_id" className={formStyles.select}>
             <option value="">No prospect selected</option>
             {prospects.map((prospect) => (
               <option key={prospect.id} value={prospect.id}>
@@ -105,9 +106,9 @@ export function OpportunityForm({
           </select>
         </label>
 
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Service Line</span>
-          <select name="service_line_id" className="mt-1 w-full rounded-xl border px-3 py-2">
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Service Line</span>
+          <select name="service_line_id" className={formStyles.select}>
             <option value="">No service line selected</option>
             {serviceLines.map((serviceLine) => (
               <option key={serviceLine.id} value={serviceLine.id}>
@@ -117,9 +118,9 @@ export function OpportunityForm({
           </select>
         </label>
 
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Offer</span>
-          <select name="offer_id" className="mt-1 w-full rounded-xl border px-3 py-2">
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Offer</span>
+          <select name="offer_id" className={formStyles.select}>
             <option value="">No offer selected</option>
             {offers.map((offer) => (
               <option key={offer.id} value={offer.id}>
@@ -130,10 +131,10 @@ export function OpportunityForm({
         </label>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Type</span>
-          <select name="opportunity_type" defaultValue="project" className="mt-1 w-full rounded-xl border px-3 py-2">
+      <div className={[formStyles.row, formStyles.grid4].join(" ")}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Type</span>
+          <select name="opportunity_type" defaultValue="project" className={formStyles.select}>
             {OPPORTUNITY_TYPES.map((type) => (
               <option key={type} value={type}>
                 {type.replaceAll("_", " ")}
@@ -142,9 +143,9 @@ export function OpportunityForm({
           </select>
         </label>
 
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Stage</span>
-          <select name="stage" defaultValue="new" className="mt-1 w-full rounded-xl border px-3 py-2">
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Stage</span>
+          <select name="stage" defaultValue="new" className={formStyles.select}>
             {OPPORTUNITY_STAGES.map((stage) => (
               <option key={stage} value={stage}>
                 {stage.replaceAll("_", " ")}
@@ -153,38 +154,37 @@ export function OpportunityForm({
           </select>
         </label>
 
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Estimated Value</span>
-          <input name="estimated_value" type="number" min="0" step="0.01" className="mt-1 w-full rounded-xl border px-3 py-2" />
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Estimated Value</span>
+          <input name="estimated_value" type="number" min="0" step="0.01" className={formStyles.input} />
         </label>
 
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Close Date</span>
-          <input name="close_date" type="date" className="mt-1 w-full rounded-xl border px-3 py-2" />
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Close Date</span>
+          <input name="close_date" type="date" className={formStyles.input} />
         </label>
       </div>
 
-      <label className="block">
-        <span className="text-sm font-medium text-slate-700">Next Step</span>
-        <input name="next_step" className="mt-1 w-full rounded-xl border px-3 py-2" placeholder="Schedule discovery call..." />
-      </label>
+      <div className={formStyles.row}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Next Step</span>
+          <input name="next_step" className={formStyles.input} placeholder="Schedule discovery call..." />
+        </label>
+      </div>
 
-      <label className="block">
-        <span className="text-sm font-medium text-slate-700">Notes</span>
-        <textarea name="notes" className="mt-1 min-h-24 w-full rounded-xl border px-3 py-2" />
-      </label>
+      <div className={formStyles.row}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Notes</span>
+          <textarea name="notes" className={formStyles.textarea} />
+        </label>
+      </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-        >
+      <div className={formStyles.actions}>
+        <button type="submit" disabled={saving} className={formStyles.submit}>
           {saving ? "Saving..." : "Create Opportunity"}
         </button>
-
-        {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
-        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        {message ? <p className={formStyles.message}>{message}</p> : null}
+        {error ? <p className={formStyles.error}>{error}</p> : null}
       </div>
     </form>
   );

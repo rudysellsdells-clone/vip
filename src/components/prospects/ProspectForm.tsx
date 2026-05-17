@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import formStyles from "@/components/forms/VipForm.module.css";
 
 const PROSPECT_STATUSES = [
   "new",
@@ -61,62 +62,62 @@ export function ProspectForm() {
   }
 
   return (
-    <form action={handleSubmit} className="space-y-4 rounded-2xl border bg-white p-6 shadow-sm">
-      <div>
-        <h2 className="text-xl font-semibold">Add Prospect</h2>
-        <p className="mt-1 text-sm text-slate-500">
+    <form action={handleSubmit} className={formStyles.form}>
+      <div className={formStyles.header}>
+        <h2 className={formStyles.title}>Add prospect</h2>
+        <p className={formStyles.description}>
           Track companies and contacts that could become projects or retainers.
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Company Name</span>
-          <input name="company_name" className="mt-1 w-full rounded-xl border px-3 py-2" required />
+      <div className={[formStyles.grid, formStyles.grid2].join(" ")}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Company Name</span>
+          <input name="company_name" className={formStyles.input} required />
         </label>
 
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Contact Name</span>
-          <input name="contact_name" className="mt-1 w-full rounded-xl border px-3 py-2" />
-        </label>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Email</span>
-          <input name="email" type="email" className="mt-1 w-full rounded-xl border px-3 py-2" />
-        </label>
-
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Phone</span>
-          <input name="phone" className="mt-1 w-full rounded-xl border px-3 py-2" />
-        </label>
-
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Website</span>
-          <input name="website" className="mt-1 w-full rounded-xl border px-3 py-2" placeholder="https://..." />
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Contact Name</span>
+          <input name="contact_name" className={formStyles.input} />
         </label>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Industry</span>
-          <input name="industry" className="mt-1 w-full rounded-xl border px-3 py-2" />
+      <div className={[formStyles.row, formStyles.grid3].join(" ")}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Email</span>
+          <input name="email" type="email" className={formStyles.input} />
         </label>
 
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Buyer Segment</span>
-          <input name="buyer_segment" className="mt-1 w-full rounded-xl border px-3 py-2" placeholder="Contractors" />
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Phone</span>
+          <input name="phone" className={formStyles.input} />
         </label>
 
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Source</span>
-          <input name="source" className="mt-1 w-full rounded-xl border px-3 py-2" placeholder="Campaign, referral, search..." />
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Website</span>
+          <input name="website" className={formStyles.input} placeholder="https://..." />
+        </label>
+      </div>
+
+      <div className={[formStyles.row, formStyles.grid4].join(" ")}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Industry</span>
+          <input name="industry" className={formStyles.input} />
         </label>
 
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Status</span>
-          <select name="status" defaultValue="new" className="mt-1 w-full rounded-xl border px-3 py-2">
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Buyer Segment</span>
+          <input name="buyer_segment" className={formStyles.input} placeholder="Contractors" />
+        </label>
+
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Source</span>
+          <input name="source" className={formStyles.input} placeholder="Campaign, referral, search..." />
+        </label>
+
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Status</span>
+          <select name="status" defaultValue="new" className={formStyles.select}>
             {PROSPECT_STATUSES.map((status) => (
               <option key={status} value={status}>
                 {status.replaceAll("_", " ")}
@@ -126,22 +127,19 @@ export function ProspectForm() {
         </label>
       </div>
 
-      <label className="block">
-        <span className="text-sm font-medium text-slate-700">Notes</span>
-        <textarea name="notes" className="mt-1 min-h-24 w-full rounded-xl border px-3 py-2" />
-      </label>
+      <div className={formStyles.row}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Notes</span>
+          <textarea name="notes" className={formStyles.textarea} />
+        </label>
+      </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-        >
+      <div className={formStyles.actions}>
+        <button type="submit" disabled={saving} className={formStyles.submit}>
           {saving ? "Saving..." : "Create Prospect"}
         </button>
-
-        {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
-        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        {message ? <p className={formStyles.message}>{message}</p> : null}
+        {error ? <p className={formStyles.error}>{error}</p> : null}
       </div>
     </form>
   );

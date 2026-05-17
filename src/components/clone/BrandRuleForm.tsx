@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import formStyles from "@/components/forms/VipForm.module.css";
 
 export function BrandRuleForm() {
   const router = useRouter();
@@ -40,41 +41,45 @@ export function BrandRuleForm() {
   }
 
   return (
-    <form action={handleSubmit} className="space-y-3 rounded-xl border bg-slate-50 p-4">
-      <h3 className="font-semibold">Add Brand Rule</h3>
-
-      <div className="grid gap-3 md:grid-cols-3">
-        <input
-          name="category"
-          defaultValue="voice"
-          placeholder="Category"
-          className="rounded-lg border px-3 py-2 text-sm"
-          required
-        />
-        <input
-          name="priority"
-          type="number"
-          defaultValue={1}
-          className="rounded-lg border px-3 py-2 text-sm"
-          required
-        />
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded-lg bg-slate-950 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-        >
-          {saving ? "Saving..." : "Add Rule"}
-        </button>
+    <form action={handleSubmit} className={formStyles.compactForm}>
+      <div className={formStyles.header}>
+        <h3 className={formStyles.smallTitle}>Add brand rule</h3>
+        <p className={formStyles.description}>
+          Add one clear behavior rule for tone, positioning, safety, or approval.
+        </p>
       </div>
 
-      <textarea
-        name="rule_text"
-        placeholder="Example: Keep calls-to-action specific and tied to revenue outcomes."
-        className="min-h-20 w-full rounded-lg border px-3 py-2 text-sm"
-        required
-      />
+      <div className={[formStyles.grid, formStyles.grid3].join(" ")}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Category</span>
+          <input name="category" defaultValue="voice" className={formStyles.input} required />
+        </label>
 
-      {error ? <p className="text-xs text-red-600">{error}</p> : null}
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Priority</span>
+          <input name="priority" type="number" defaultValue={1} className={formStyles.input} required />
+        </label>
+
+        <div className={formStyles.actions} style={{ marginTop: 0 }}>
+          <button type="submit" disabled={saving} className={formStyles.submit}>
+            {saving ? "Saving..." : "Add Rule"}
+          </button>
+        </div>
+      </div>
+
+      <div className={formStyles.row}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Rule</span>
+          <textarea
+            name="rule_text"
+            placeholder="Example: Keep calls-to-action specific and tied to revenue outcomes."
+            className={[formStyles.textarea, formStyles.textareaSmall].join(" ")}
+            required
+          />
+        </label>
+      </div>
+
+      {error ? <p className={formStyles.error}>{error}</p> : null}
     </form>
   );
 }

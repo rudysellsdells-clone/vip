@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import formStyles from "@/components/forms/VipForm.module.css";
 
 type DigitalCloneProfileFormProps = {
   profile: {
@@ -60,92 +61,95 @@ export function DigitalCloneProfileForm({ profile }: DigitalCloneProfileFormProp
   }
 
   return (
-    <form action={handleSubmit} className="space-y-5 rounded-2xl border bg-white p-6 shadow-sm">
-      <div>
-        <h2 className="text-xl font-semibold">Digital Clone Profile</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          This is the core memory VIP uses to understand Rudy&apos;s voice, business, offers, and buyers.
+    <form action={handleSubmit} className={formStyles.form}>
+      <div className={formStyles.header}>
+        <h2 className={formStyles.title}>Digital clone profile</h2>
+        <p className={formStyles.description}>
+          This is the core memory VIP uses to understand Rudy&apos;s voice, business, offers, buyers, and sales outcomes.
         </p>
       </div>
 
-      <label className="block">
-        <span className="text-sm font-medium text-slate-700">Clone Name</span>
+      <label className={formStyles.field}>
+        <span className={formStyles.label}>Clone Name</span>
         <input
           name="name"
           defaultValue={profile?.name ?? "Rudy’s Marketing Twin"}
-          className="mt-1 w-full rounded-xl border px-3 py-2"
+          className={formStyles.input}
           required
         />
       </label>
 
-      <label className="block">
-        <span className="text-sm font-medium text-slate-700">Purpose</span>
-        <textarea
-          name="purpose"
-          defaultValue={profile?.purpose ?? ""}
-          className="mt-1 min-h-24 w-full rounded-xl border px-3 py-2"
-          required
-        />
-      </label>
-
-      <label className="block">
-        <span className="text-sm font-medium text-slate-700">Voice Summary</span>
-        <textarea
-          name="voice_summary"
-          defaultValue={profile?.voice_summary ?? ""}
-          className="mt-1 min-h-24 w-full rounded-xl border px-3 py-2"
-        />
-      </label>
-
-      <label className="block">
-        <span className="text-sm font-medium text-slate-700">Business Summary</span>
-        <textarea
-          name="business_summary"
-          defaultValue={profile?.business_summary ?? ""}
-          className="mt-1 min-h-24 w-full rounded-xl border px-3 py-2"
-        />
-      </label>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Audience Summary</span>
+      <div className={formStyles.row}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Purpose</span>
           <textarea
-            name="audience_summary"
-            defaultValue={profile?.audience_summary ?? ""}
-            className="mt-1 min-h-24 w-full rounded-xl border px-3 py-2"
-          />
-        </label>
-
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Offer Summary</span>
-          <textarea
-            name="offer_summary"
-            defaultValue={profile?.offer_summary ?? ""}
-            className="mt-1 min-h-24 w-full rounded-xl border px-3 py-2"
+            name="purpose"
+            defaultValue={profile?.purpose ?? ""}
+            className={formStyles.textarea}
+            required
           />
         </label>
       </div>
 
-      <label className="block">
-        <span className="text-sm font-medium text-slate-700">Sales Outcome Summary</span>
-        <textarea
-          name="sales_outcome_summary"
-          defaultValue={profile?.sales_outcome_summary ?? ""}
-          className="mt-1 min-h-20 w-full rounded-xl border px-3 py-2"
-        />
-      </label>
+      <div className={formStyles.row}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Voice Summary</span>
+          <textarea
+            name="voice_summary"
+            defaultValue={profile?.voice_summary ?? ""}
+            className={formStyles.textarea}
+          />
+        </label>
+      </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-        >
+      <div className={formStyles.row}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Business Summary</span>
+          <textarea
+            name="business_summary"
+            defaultValue={profile?.business_summary ?? ""}
+            className={formStyles.textarea}
+          />
+        </label>
+      </div>
+
+      <div className={[formStyles.row, formStyles.grid2].join(" ")}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Audience Summary</span>
+          <textarea
+            name="audience_summary"
+            defaultValue={profile?.audience_summary ?? ""}
+            className={formStyles.textarea}
+          />
+        </label>
+
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Offer Summary</span>
+          <textarea
+            name="offer_summary"
+            defaultValue={profile?.offer_summary ?? ""}
+            className={formStyles.textarea}
+          />
+        </label>
+      </div>
+
+      <div className={formStyles.row}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Sales Outcome Summary</span>
+          <textarea
+            name="sales_outcome_summary"
+            defaultValue={profile?.sales_outcome_summary ?? ""}
+            className={formStyles.textarea}
+          />
+        </label>
+      </div>
+
+      <div className={formStyles.actions}>
+        <button type="submit" disabled={saving} className={formStyles.submit}>
           {saving ? "Saving..." : "Save Clone Profile"}
         </button>
-
-        {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
-        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        {message ? <p className={formStyles.message}>{message}</p> : null}
+        {error ? <p className={formStyles.error}>{error}</p> : null}
       </div>
     </form>
   );
