@@ -36,6 +36,21 @@ function responseLooksLikeHtml(value: string) {
   return normalized.startsWith("<!doctype html") || normalized.startsWith("<html");
 }
 
+function extractJsonFromServerSentEvents(text: string) {
+  const dataLines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.replace(/^data:\s?/, "").trim())
+    .filter((line) => line && line !== "[DONE]");
+
+  if (dataLines.length === 0) {
+    return null;
+  }
+
+  return dataLines[dataLines.length - 1];
+}
+
 function parseMcpResponse(text: string): JsonRpcResponse {
   if (responseLooksLikeHtml(text)) {
     throw new Error(
@@ -43,8 +58,12 @@ function parseMcpResponse(text: string): JsonRpcResponse {
     );
   }
 
+  const trimmed = text.trim();
+  const sseJson = extractJsonFromServerSentEvents(trimmed);
+  const candidate = sseJson ?? trimmed;
+
   try {
-    return JSON.parse(text) as JsonRpcResponse;
+    return JSON.parse(candidate) as JsonRpcResponse;
   } catch {
     throw new Error(`Unable to parse MCP response: ${text.slice(0, 500)}`);
   }
@@ -170,6 +189,7 @@ export async function callZapierMcpTool({
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    Accept: "application/json, text/event-stream",
   };
 
   if (token) {
@@ -219,12 +239,8 @@ export async function callZapierMcpTool({
  * Backwards-compatible export for older Zapier execution routes.
  *
  * Some existing routes, especially the Gmail draft executor, import
- * executeZapierMcpWriteAction directly. The LinkedIn execution patch added the
- * newer generic callZapierMcpTool function, but older routes still need this
- * named export to exist.
- *
- * This wrapper accepts flexible legacy option shapes and forwards the request
- * into the shared MCP JSON-RPC caller.
+ * executeZapierMcpWriteAction directly. This wrapper accepts flexible legacy
+ * option shapes and forwards the request into the shared MCP JSON-RPC caller.
  */
 export async function executeZapierMcpWriteAction(...args: any[]): Promise<any> {
   const options = (args[0] ?? {}) as Record<string, any>;
