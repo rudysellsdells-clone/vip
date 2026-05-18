@@ -5,6 +5,8 @@ import {
   scoreDirectoryOpportunity,
 } from "@/lib/link-builder/directory-scoring";
 
+type DiscoveryStatus = "discovered" | "qualified" | "rejected";
+
 export type DiscoveredDirectoryOpportunity = {
   domain: string;
   url: string;
@@ -19,7 +21,7 @@ export type DiscoveredDirectoryOpportunity = {
   ai_summary: string;
   submission_requirements: string | null;
   notes: string;
-  status: "discovered" | "qualified" | "rejected";
+  status: DiscoveryStatus;
 };
 
 const DIRECTORY_SIGNALS = [
@@ -66,6 +68,14 @@ const REJECT_SIGNALS = [
   "500 backlinks",
   "cheap backlinks",
 ];
+
+function normalizeDiscoveryStatus(value: unknown): DiscoveryStatus {
+  if (value === "qualified" || value === "rejected" || value === "discovered") {
+    return value;
+  }
+
+  return "discovered";
+}
 
 function textForResult(result: BraveWebResult) {
   return [
@@ -173,6 +183,8 @@ export function braveResultToDirectoryOpportunity({
     notes: `${result.description ?? ""} ${query}`,
   });
 
+  const status = normalizeDiscoveryStatus(score.recommendedStatus);
+
   return {
     domain,
     url,
@@ -185,13 +197,13 @@ export function braveResultToDirectoryOpportunity({
     quality_score: score.qualityScore,
     risk_score: score.riskScore,
     ai_summary:
-      score.recommendedStatus === "qualified"
+      status === "qualified"
         ? "Auto-discovered from Brave Search and appears relevant enough to review."
         : "Auto-discovered from Brave Search. Needs review before submission.",
     submission_requirements: submitUrl
       ? "Possible submission/add-listing page found in search result."
       : "No clear submission page found yet. Review manually.",
     notes: `Discovered from Brave query: ${query}. Snippet: ${result.description ?? ""}`,
-    status: score.recommendedStatus,
+    status,
   };
 }
