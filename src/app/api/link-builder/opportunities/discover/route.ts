@@ -16,11 +16,12 @@ function defaultQueries(profile?: Record<string, any> | null) {
       : ["SEO", "web design", "digital marketing"];
 
   return [
-    `${businessCategory} directory submit listing`,
-    `${businessCategory} add business listing`,
-    `${services[0]} agency directory add company`,
-    `${services[1] ?? "web design"} directory submit site`,
-    `${services[2] ?? "digital marketing"} business directory add listing`,
+    `${businessCategory} directory`,
+    `${businessCategory} add listing`,
+    `${businessCategory} submit business`,
+    `${services[0]} agency directory`,
+    `${services[1] ?? "web design"} company directory`,
+    `${services[2] ?? "digital marketing"} get listed`,
   ];
 }
 
@@ -54,6 +55,7 @@ export async function POST(request: Request) {
 
   const queries = submittedQuery ? [submittedQuery] : defaultQueries(profile).slice(0, 3);
   const allCandidates = [];
+  let rawResultCount = 0;
 
   for (const query of queries) {
     const response = await searchBraveWeb({
@@ -64,6 +66,7 @@ export async function POST(request: Request) {
     });
 
     const results = response.web?.results ?? [];
+    rawResultCount += results.length;
 
     for (const result of results) {
       const candidate = braveResultToDirectoryOpportunity({
@@ -94,11 +97,12 @@ export async function POST(request: Request) {
       user_id: user.id,
       activity_type: "directory_discovery_completed",
       title: "Directory discovery completed",
-      description: "No directory-like opportunities were found.",
+      description: `Brave returned ${rawResultCount} result(s), but VIP found no directory-like candidates.`,
       metadata: {
         provider: "brave_search",
         queries,
         count,
+        rawResultCount,
         saved: 0,
       },
     });
@@ -107,10 +111,13 @@ export async function POST(request: Request) {
       ok: true,
       provider: "brave_search",
       queries,
+      rawResultCount,
       discovered: 0,
       inserted: 0,
       skippedDuplicates: 0,
       opportunities: [],
+      message:
+        "Brave returned results, but none passed the directory filter. Try a broader query like 'marketing agency directory' or 'web design agency directory'.",
     });
   }
 
@@ -149,11 +156,12 @@ export async function POST(request: Request) {
     user_id: user.id,
     activity_type: "directory_discovery_completed",
     title: "Directory discovery completed",
-    description: `Found ${candidates.length} candidate(s), saved ${insertedRows.length}.`,
+    description: `Brave returned ${rawResultCount} result(s), found ${candidates.length} candidate(s), saved ${insertedRows.length}.`,
     metadata: {
       provider: "brave_search",
       queries,
       count,
+      rawResultCount,
       candidates: candidates.length,
       inserted: insertedRows.length,
       skippedDuplicates: candidates.length - newCandidates.length,
@@ -164,6 +172,7 @@ export async function POST(request: Request) {
     ok: true,
     provider: "brave_search",
     queries,
+    rawResultCount,
     discovered: candidates.length,
     inserted: insertedRows.length,
     skippedDuplicates: candidates.length - newCandidates.length,

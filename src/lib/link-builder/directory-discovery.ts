@@ -34,6 +34,7 @@ const DIRECTORY_SIGNALS = [
   "claim listing",
   "business listing",
   "company profile",
+  "business profile",
   "agency directory",
   "member directory",
   "vendor directory",
@@ -43,6 +44,38 @@ const DIRECTORY_SIGNALS = [
   "association",
   "partners",
   "marketplace",
+  "listing",
+  "listings",
+  "profile",
+  "profiles",
+  "members",
+  "find a",
+  "find an",
+  "top agencies",
+  "best agencies",
+  "agency marketplace",
+  "company directory",
+];
+
+const URL_DIRECTORY_SIGNALS = [
+  "/directory",
+  "/directories",
+  "/add-listing",
+  "/submit",
+  "/submit-site",
+  "/add-business",
+  "/claim",
+  "/businesses",
+  "/companies",
+  "/agencies",
+  "/members",
+  "/vendors",
+  "/partners",
+  "/resources",
+  "/profile",
+  "/profiles",
+  "/listing",
+  "/listings",
 ];
 
 const SUBMIT_SIGNALS = [
@@ -53,6 +86,10 @@ const SUBMIT_SIGNALS = [
   "list your business",
   "create profile",
   "suggest",
+  "add listing",
+  "submit listing",
+  "submit your",
+  "get listed",
 ];
 
 const REJECT_SIGNALS = [
@@ -67,6 +104,8 @@ const REJECT_SIGNALS = [
   "sponsored post marketplace",
   "500 backlinks",
   "cheap backlinks",
+  "free backlinks generator",
+  "automatic backlinks",
 ];
 
 function normalizeDiscoveryStatus(value: unknown): DiscoveryStatus {
@@ -94,6 +133,31 @@ function hasAny(haystack: string, terms: string[]) {
   return terms.some((term) => haystack.includes(term));
 }
 
+function queryHasDirectoryIntent(query: string) {
+  const normalized = query.toLowerCase();
+
+  return hasAny(normalized, [
+    "directory",
+    "directories",
+    "add listing",
+    "submit listing",
+    "add business",
+    "business listing",
+    "agency directory",
+    "company directory",
+    "citation",
+    "chamber",
+    "association",
+    "get listed",
+  ]);
+}
+
+function urlHasDirectorySignal(url: string) {
+  const normalized = url.toLowerCase();
+
+  return URL_DIRECTORY_SIGNALS.some((signal) => normalized.includes(signal));
+}
+
 function inferDirectoryType(text: string) {
   if (text.includes("chamber")) return "local";
   if (text.includes("association") || text.includes("member directory")) return "association";
@@ -102,7 +166,7 @@ function inferDirectoryType(text: string) {
   if (text.includes("resource")) return "resource";
   if (text.includes("citation")) return "citation";
   if (text.includes("local")) return "local";
-  if (text.includes("agency")) return "industry";
+  if (text.includes("agency") || text.includes("marketing") || text.includes("seo")) return "industry";
 
   return "general";
 }
@@ -113,11 +177,38 @@ function inferSubmitUrl(result: BraveWebResult) {
 
   if (!url) return null;
 
-  if (hasAny(haystack, SUBMIT_SIGNALS)) {
+  if (hasAny(haystack, SUBMIT_SIGNALS) || urlHasDirectorySignal(url)) {
     return url;
   }
 
   return null;
+}
+
+function shouldTreatAsCandidate({
+  haystack,
+  url,
+  query,
+}: {
+  haystack: string;
+  url: string;
+  query: string;
+}) {
+  if (hasAny(haystack, DIRECTORY_SIGNALS)) {
+    return true;
+  }
+
+  if (urlHasDirectorySignal(url)) {
+    return true;
+  }
+
+  // Brave often returns useful pages with vague snippets. If Rudy searched with
+  // clear directory/submission intent, keep the result as a lower-confidence
+  // "discovered" item instead of dropping it completely.
+  if (queryHasDirectoryIntent(query)) {
+    return true;
+  }
+
+  return false;
 }
 
 export function braveResultToDirectoryOpportunity({
@@ -156,8 +247,8 @@ export function braveResultToDirectoryOpportunity({
       directory_type: "general",
       category: null,
       discovery_source: "brave_search",
-      relevance_score: score.relevanceScore,
-      quality_score: Math.min(score.qualityScore, 30),
+      relevance_score: Math.min(score.relevanceScore, 25),
+      quality_score: Math.min(score.qualityScore, 25),
       risk_score: Math.max(score.riskScore, 75),
       ai_summary: "Rejected automatically because the result matched risky backlink/spam signals.",
       submission_requirements: null,
@@ -166,9 +257,7 @@ export function braveResultToDirectoryOpportunity({
     };
   }
 
-  const looksLikeDirectory = hasAny(haystack, DIRECTORY_SIGNALS);
-
-  if (!looksLikeDirectory) {
+  if (!shouldTreatAsCandidate({ haystack, url, query })) {
     return null;
   }
 
@@ -183,7 +272,23 @@ export function braveResultToDirectoryOpportunity({
     notes: `${result.description ?? ""} ${query}`,
   });
 
-  const status = normalizeDiscoveryStatus(score.recommendedStatus);
+  const hasStrongDirectorySignal =
+    hasAny(haystack, DIRECTORY_SIGNALS) || urlHasDirectorySignal(url);
+  const status = hasStrongDirectorySignal
+    ? normalizeDiscoveryStatus(score.recommendedStatus)
+    : "discovered";
+
+  const relevanceScore = hasStrongDirectorySignal
+    ? score.relevanceScore
+    : Math.max(35, Math.min(score.relevanceScore, 55));
+
+  const qualityScore = hasStrongDirectorySignal
+    ? score.qualityScore
+    : Math.max(35, Math.min(score.qualityScore, 55));
+
+  const riskScore = hasStrongDirectorySignal
+    ? score.riskScore
+    : Math.max(15, score.riskScore);
 
   return {
     domain,
@@ -193,13 +298,15 @@ export function braveResultToDirectoryOpportunity({
     directory_type: directoryType,
     category: null,
     discovery_source: "brave_search",
-    relevance_score: score.relevanceScore,
-    quality_score: score.qualityScore,
-    risk_score: score.riskScore,
+    relevance_score: relevanceScore,
+    quality_score: qualityScore,
+    risk_score: riskScore,
     ai_summary:
       status === "qualified"
         ? "Auto-discovered from Brave Search and appears relevant enough to review."
-        : "Auto-discovered from Brave Search. Needs review before submission.",
+        : hasStrongDirectorySignal
+          ? "Auto-discovered from Brave Search. Needs review before submission."
+          : "Broad match from a directory-intent search. Review manually before approving.",
     submission_requirements: submitUrl
       ? "Possible submission/add-listing page found in search result."
       : "No clear submission page found yet. Review manually.",

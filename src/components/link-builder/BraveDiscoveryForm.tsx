@@ -5,11 +5,14 @@ import { useState } from "react";
 import formStyles from "@/components/forms/VipForm.module.css";
 
 const TEMPLATE_QUERIES = [
-  "marketing agency directory submit listing",
-  "SEO agency directory add business",
-  "web design agency directory add company",
-  "digital marketing directory submit site",
-  "local business directory add listing marketing agency",
+  "marketing agency directory",
+  "SEO agency directory",
+  "web design agency directory",
+  "digital marketing agency directory",
+  "business directory marketing agency",
+  "agency directory get listed",
+  "marketing company directory",
+  "professional services directory marketing",
 ];
 
 export function BraveDiscoveryForm() {
@@ -37,7 +40,8 @@ export function BraveDiscoveryForm() {
       }
 
       setMessage(
-        `Discovery complete. Found ${result.discovered ?? 0} candidate(s), saved ${result.inserted ?? 0}, skipped ${result.skippedDuplicates ?? 0} duplicate(s).`
+        result.message ??
+          `Discovery complete. Brave returned ${result.rawResultCount ?? 0} raw result(s), found ${result.discovered ?? 0} candidate(s), saved ${result.inserted ?? 0}, skipped ${result.skippedDuplicates ?? 0} duplicate(s).`
       );
 
       router.refresh();
@@ -53,7 +57,7 @@ export function BraveDiscoveryForm() {
       <div className={formStyles.header}>
         <h2 className={formStyles.title}>Discover directory opportunities</h2>
         <p className={formStyles.description}>
-          Use Brave Search to find directory, citation, association, and listing pages. VIP filters, scores, dedupes, and saves likely opportunities for review.
+          Use Brave Search to find directory, citation, association, and listing pages. VIP now keeps broader directory-intent matches so you can review them instead of missing useful opportunities.
         </p>
       </div>
 
@@ -65,10 +69,10 @@ export function BraveDiscoveryForm() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             className={formStyles.input}
-            placeholder="marketing agency directory submit listing"
+            placeholder="marketing agency directory"
           />
           <span className={formStyles.help}>
-            Leave this specific enough to find pages that allow submissions or business listings.
+            Start broad. Queries like “marketing agency directory” often work better than “submit listing.”
           </span>
         </label>
       </div>
@@ -86,7 +90,7 @@ export function BraveDiscoveryForm() {
 
         <label className={formStyles.field}>
           <span className={formStyles.label}>Results</span>
-          <select name="count" defaultValue="10" className={formStyles.select}>
+          <select name="count" defaultValue="20" className={formStyles.select}>
             <option value="5">5</option>
             <option value="10">10</option>
             <option value="15">15</option>
