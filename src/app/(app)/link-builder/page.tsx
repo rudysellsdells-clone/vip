@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { BacklinkVerifyForm } from "@/components/link-builder/BacklinkVerifyForm";
+import { BraveDiscoveryForm } from "@/components/link-builder/BraveDiscoveryForm";
 import { DirectoryOpportunityActions } from "@/components/link-builder/DirectoryOpportunityActions";
 import { DirectoryOpportunityForm } from "@/components/link-builder/DirectoryOpportunityForm";
 import { DirectoryProfileForm } from "@/components/link-builder/DirectoryProfileForm";
@@ -151,7 +152,7 @@ export default async function LinkBuilderPage() {
         eyebrow="Directory Link Builder"
         title="Build legitimate directory backlinks with a controlled workflow."
         description="Find relevant directories, prepare submission copy, track statuses, and verify live backlinks without turning VIP into a spam bot."
-        primaryAction={{ label: "Add Opportunity", href: "#add-opportunity" }}
+        primaryAction={{ label: "Discover Opportunities", href: "#discover-opportunities" }}
         secondaryAction={{ label: "Verify Backlink", href: "#verify-backlink" }}
       />
 
@@ -181,6 +182,10 @@ export default async function LinkBuilderPage() {
           dot="green"
         />
       </section>
+
+      <div id="discover-opportunities">
+        <BraveDiscoveryForm />
+      </div>
 
       <section className={websiteStyles.twoColumn}>
         <div id="profile">
@@ -244,7 +249,7 @@ export default async function LinkBuilderPage() {
           </div>
         ) : (
           <div className={websiteStyles.empty}>
-            No directory opportunities yet. Add the first one above.
+            No directory opportunities yet. Use automatic discovery or add the first one manually.
           </div>
         )}
       </WebsiteSection>
