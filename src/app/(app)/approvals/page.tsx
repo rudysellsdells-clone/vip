@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { ApproveAllAssetsButton } from "@/components/approvals/ApproveAllAssetsButton";
+import { AssetReviewActions } from "@/components/approvals/AssetReviewActions";
 import { AssetTitleLink } from "@/components/assets/AssetTitleLink";
 import { RequestRevisionButton } from "@/components/assets/RequestRevisionButton";
-import { AssetReviewActions } from "@/components/approvals/AssetReviewActions";
 import {
   WebsiteBadge,
   WebsiteHero,
@@ -76,7 +77,7 @@ export default async function ApprovalsPage() {
       <WebsiteHero
         eyebrow="Approval Queue"
         title="Review assets before anything goes live."
-        description="Approve, reject, or revise generated assets with a clear decision workflow. Asset titles now link directly to the full asset review page."
+        description="Approve, reject, revise, or bulk approve assets from one queue. Approve All speeds up testing, but it does not publish anything by itself."
         primaryAction={{ label: "Create Campaign", href: "/campaigns" }}
         secondaryAction={{ label: "View Actions", href: "/actions" }}
       />
@@ -102,11 +103,21 @@ export default async function ApprovalsPage() {
         />
         <WebsiteMetric
           label="Next Step"
-          value="Review"
-          description="Click any asset title to open the full asset page."
+          value="Approve"
+          description="Approve one at a time or approve the whole review queue."
           dot="green"
         />
       </section>
+
+      <WebsiteSection
+        eyebrow="Bulk Approval"
+        title="Speed up trusted review batches"
+        description="Use this when a batch looks good and you want to move everything in the review queue to approved. This does not publish, send, or execute external actions."
+      >
+        <div className={websiteStyles.actionRow}>
+          <ApproveAllAssetsButton count={assets.length} />
+        </div>
+      </WebsiteSection>
 
       <WebsiteSection
         eyebrow="Decision Workspace"
