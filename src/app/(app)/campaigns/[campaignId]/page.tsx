@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { AssetTitleLink } from "@/components/assets/AssetTitleLink";
 import { DeleteCampaignButton } from "@/components/campaigns/DeleteCampaignButton";
 import { GenerateCampaignAssetsButton } from "@/components/campaigns/GenerateCampaignAssetsButton";
+import { StartLumaYoutubeVideoButton } from "@/components/campaigns/StartLumaYoutubeVideoButton";
+import { SyncLumaVideoRunButton } from "@/components/campaigns/SyncLumaVideoRunButton";
 import {
   WebsiteBadge,
   WebsiteHero,
@@ -12,6 +14,7 @@ import {
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
 import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
 
 type PageProps = {
   params: Promise<{
@@ -29,9 +32,20 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
+function sceneProgress(run: Record<string, any>) {
+  const current = Number(run.current_scene_index ?? 0) + 1;
+  const total = Number(run.scene_count ?? 4);
+
+  if (run.status === "completed") {
+    return `${total}/${total}`;
+  }
+
+  return `${Math.min(current, total)}/${total}`;
+}
+
 export default async function CampaignDetailPage({ params }: PageProps) {
   const { campaignId } = await params;
-  const supabase = await createClient();
+  const supabase = untypedSupabase(await createClient());
 
   const {
     data: { user },
@@ -59,10 +73,20 @@ export default async function CampaignDetailPage({ params }: PageProps) {
     .eq("campaign_id", campaign.id)
     .order("created_at", { ascending: false });
 
+  const { data: lumaRunsData } = await supabase
+    .from("luma_video_runs")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("campaign_id", campaign.id)
+    .order("created_at", { ascending: false })
+    .limit(5);
+
   const assets = (assetsData ?? []) as Array<Record<string, any>>;
+  const lumaRuns = (lumaRunsData ?? []) as Array<Record<string, any>>;
   const needsReview = assets.filter((asset) => asset.status === "needs_review").length;
   const approved = assets.filter((asset) => asset.status === "approved").length;
   const executed = assets.filter((asset) => ["published", "sent"].includes(asset.status)).length;
+  const completedLumaRuns = lumaRuns.filter((run) => run.status === "completed").length;
 
   return (
     <WebsitePage>
@@ -94,9 +118,9 @@ export default async function CampaignDetailPage({ params }: PageProps) {
           dot="green"
         />
         <WebsiteMetric
-          label="Executed"
-          value={executed}
-          description="Published or sent assets."
+          label="Luma Videos"
+          value={completedLumaRuns}
+          description="Completed 20-second YouTube video outputs."
           dot="purple"
         />
       </section>
@@ -137,7 +161,7 @@ export default async function CampaignDetailPage({ params }: PageProps) {
         <WebsiteSection
           eyebrow="Status"
           title="Campaign controls"
-          description="Generate assets, review the campaign state, or delete this campaign if it was created by mistake."
+          description="Generate assets, create a Luma YouTube video, or delete this campaign if it was created by mistake."
         >
           <article className={websiteStyles.card}>
             <WebsiteBadge status={campaign.status} />
@@ -148,6 +172,7 @@ export default async function CampaignDetailPage({ params }: PageProps) {
           </article>
 
           <div className={websiteStyles.actionRow}>
+            <StartLumaYoutubeVideoButton campaignId={campaign.id} />
             <DeleteCampaignButton
               campaignId={campaign.id}
               campaignName={campaign.name}
@@ -155,6 +180,63 @@ export default async function CampaignDetailPage({ params }: PageProps) {
           </div>
         </WebsiteSection>
       </section>
+
+      <WebsiteSection
+        eyebrow="YouTube Video Lane"
+        title="Luma 20-second campaign video"
+        description="Use Luma for the longer-form YouTube video while GalaxyAI remains the fast social media lane for Facebook and LinkedIn."
+      >
+        {lumaRuns.length ? (
+          <div className={websiteStyles.cardGrid}>
+            {lumaRuns.map((run) => (
+              <article key={run.id} className={websiteStyles.card}>
+                <div className="flex flex-wrap gap-2">
+                  <WebsiteBadge status={run.status} />
+                  <span className={websiteStyles.badge}>
+                    Scene {sceneProgress(run)}
+                  </span>
+                  <span className={websiteStyles.badge}>{run.model}</span>
+                  <span className={websiteStyles.badge}>{run.resolution}</span>
+                </div>
+
+                <h3 className={websiteStyles.cardTitle} style={{ marginTop: 16 }}>
+                  20-second YouTube video run
+                </h3>
+
+                <p className={websiteStyles.cardMeta}>
+                  Created {formatDate(run.created_at)} • Target {run.target_seconds}s
+                </p>
+
+                {run.error ? (
+                  <p className={websiteStyles.cardText}>
+                    <strong>Error:</strong> {run.error}
+                  </p>
+                ) : null}
+
+                {run.final_video_url ? (
+                  <p className={websiteStyles.cardText}>
+                    <Link href={run.final_video_url} className={websiteStyles.link}>
+                      Open final Luma video →
+                    </Link>
+                  </p>
+                ) : (
+                  <p className={websiteStyles.cardText}>
+                    Sync this run after each Luma scene completes. Scene 1 is text-to-video; scenes 2–4 extend the prior completed generation.
+                  </p>
+                )}
+
+                {run.status !== "completed" && run.status !== "failed" && run.status !== "cancelled" ? (
+                  <SyncLumaVideoRunButton runId={run.id} />
+                ) : null}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className={websiteStyles.empty}>
+            No Luma YouTube video runs yet. Start one from Campaign Controls.
+          </div>
+        )}
+      </WebsiteSection>
 
       <WebsiteSection
         eyebrow="Asset Pack"
