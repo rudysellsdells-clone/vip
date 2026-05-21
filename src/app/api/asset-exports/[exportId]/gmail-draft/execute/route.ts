@@ -9,6 +9,13 @@ type RouteContext = {
   }>;
 };
 
+type AuditAttempt = {
+  label: string;
+  ok: boolean;
+  error?: string | null;
+  data?: Record<string, unknown> | null;
+};
+
 function readForm(formData: FormData, key: string) {
   return String(formData.get(key) || "").trim();
 }
@@ -57,6 +64,68 @@ function buildInstructions({
     .join("\n");
 }
 
+async function getToolRunsSample({
+  supabase,
+  userId,
+}: {
+  supabase: any;
+  userId: string;
+}) {
+  const { data, error } = await supabase
+    .from("tool_runs")
+    .select("*")
+    .eq("user_id", userId)
+    .limit(1);
+
+  if (error) {
+    return {
+      ok: false,
+      error: error.message,
+      sampleKeys: [],
+    };
+  }
+
+  const first = Array.isArray(data) && data.length ? data[0] : null;
+
+  return {
+    ok: true,
+    error: null,
+    sampleKeys: first ? Object.keys(first) : [],
+  };
+}
+
+async function tryInsertToolRun({
+  supabase,
+  payload,
+  label,
+}: {
+  supabase: any;
+  payload: Record<string, unknown>;
+  label: string;
+}): Promise<AuditAttempt> {
+  const { data, error } = await supabase
+    .from("tool_runs")
+    .insert(payload)
+    .select("*")
+    .maybeSingle();
+
+  if (error) {
+    return {
+      label,
+      ok: false,
+      error: error.message,
+      data: null,
+    };
+  }
+
+  return {
+    label,
+    ok: true,
+    error: null,
+    data: data ?? null,
+  };
+}
+
 async function recordZapierToolRun({
   supabase,
   userId,
@@ -80,14 +149,16 @@ async function recordZapierToolRun({
   output?: Record<string, unknown> | null;
   error?: string | null;
 }) {
-  // This mirrors the normal Zapier action audit pattern so the What-If PDF
-  // Gmail draft appears in recent Zapier/actions views. If the project's
-  // tool_runs schema is slightly different, we do not block draft creation.
-  const payload = {
+  const toolName = `${app}.${action}`;
+  const now = new Date().toISOString();
+
+  const attempts: AuditAttempt[] = [];
+
+  const primaryPayload = {
     user_id: userId,
     source_asset_id: assetId,
     provider: "zapier_mcp",
-    tool_name: `${app}.${action}`,
+    tool_name: toolName,
     status,
     input,
     output: output ?? null,
@@ -97,49 +168,163 @@ async function recordZapierToolRun({
       app,
       action,
       feature: "what_if_pdf_gmail_draft",
+      createdBy: "asset_exports_gmail_draft_execute",
     },
   };
 
-  const { error: insertError } = await supabase.from("tool_runs").insert(payload);
+  attempts.push(
+    await tryInsertToolRun({
+      supabase,
+      payload: primaryPayload,
+      label: "primary_tool_runs_payload",
+    })
+  );
 
-  if (!insertError) {
-    return;
+  if (attempts[attempts.length - 1].ok) {
+    return {
+      ok: true,
+      inserted: attempts[attempts.length - 1],
+      attempts,
+      sample: null,
+    };
   }
 
-  // Fallback for older/minimal tool_runs schemas that may not include metadata.
   const fallbackPayload = {
     user_id: userId,
     source_asset_id: assetId,
     provider: "zapier_mcp",
-    tool_name: `${app}.${action}`,
+    tool_name: toolName,
     status,
     input,
     output: output ?? null,
     error: error ?? null,
   };
 
-  const { error: fallbackError } = await supabase
-    .from("tool_runs")
-    .insert(fallbackPayload);
+  attempts.push(
+    await tryInsertToolRun({
+      supabase,
+      payload: fallbackPayload,
+      label: "fallback_without_metadata",
+    })
+  );
 
-  if (fallbackError) {
-    await supabase.from("activity_log").insert({
-      user_id: userId,
-      activity_type: "zapier_tool_run_audit_warning",
-      title: "Zapier action audit warning",
-      description:
-        "Gmail draft execution completed, but VIP could not insert the matching tool_runs record.",
-      metadata: {
-        assetId,
-        exportId,
-        app,
-        action,
-        status,
-        insertError: insertError.message,
-        fallbackError: fallbackError.message,
-      },
-    });
+  if (attempts[attempts.length - 1].ok) {
+    return {
+      ok: true,
+      inserted: attempts[attempts.length - 1],
+      attempts,
+      sample: null,
+    };
   }
+
+  const alternateProviderPayload = {
+    user_id: userId,
+    source_asset_id: assetId,
+    tool_provider: "zapier_mcp",
+    tool_name: toolName,
+    status,
+    input,
+    output: output ?? null,
+    error_message: error ?? null,
+  };
+
+  attempts.push(
+    await tryInsertToolRun({
+      supabase,
+      payload: alternateProviderPayload,
+      label: "alternate_tool_provider_error_message",
+    })
+  );
+
+  if (attempts[attempts.length - 1].ok) {
+    return {
+      ok: true,
+      inserted: attempts[attempts.length - 1],
+      attempts,
+      sample: null,
+    };
+  }
+
+  const minimalPayload = {
+    user_id: userId,
+    tool_name: toolName,
+    status,
+    input,
+    output: output ?? null,
+  };
+
+  attempts.push(
+    await tryInsertToolRun({
+      supabase,
+      payload: minimalPayload,
+      label: "minimal_tool_runs_payload",
+    })
+  );
+
+  if (attempts[attempts.length - 1].ok) {
+    return {
+      ok: true,
+      inserted: attempts[attempts.length - 1],
+      attempts,
+      sample: null,
+    };
+  }
+
+  const legacyPayload = {
+    user_id: userId,
+    action_type: toolName,
+    status,
+    request_payload: input,
+    response_payload: output ?? null,
+    error_message: error ?? null,
+    created_at: now,
+  };
+
+  attempts.push(
+    await tryInsertToolRun({
+      supabase,
+      payload: legacyPayload,
+      label: "legacy_action_type_payload",
+    })
+  );
+
+  if (attempts[attempts.length - 1].ok) {
+    return {
+      ok: true,
+      inserted: attempts[attempts.length - 1],
+      attempts,
+      sample: null,
+    };
+  }
+
+  const sample = await getToolRunsSample({
+    supabase,
+    userId,
+  });
+
+  await supabase.from("activity_log").insert({
+    user_id: userId,
+    activity_type: "zapier_tool_run_audit_failed",
+    title: "Zapier action audit failed",
+    description:
+      "Gmail draft execution finished, but VIP could not insert a matching tool_runs record.",
+    metadata: {
+      assetId,
+      exportId,
+      app,
+      action,
+      status,
+      attempts,
+      sample,
+    },
+  });
+
+  return {
+    ok: false,
+    inserted: null,
+    attempts,
+    sample,
+  };
 }
 
 export async function POST(request: Request, context: RouteContext) {
@@ -265,7 +450,7 @@ export async function POST(request: Request, context: RouteContext) {
         "Return the Gmail draft ID, draft URL if available, message ID if available, and whether the PDF attachment was included.",
     });
 
-    await recordZapierToolRun({
+    const auditResult = await recordZapierToolRun({
       supabase,
       userId: user.id,
       assetId: exportRow.asset_id,
@@ -291,6 +476,7 @@ export async function POST(request: Request, context: RouteContext) {
           zapierAction: action,
           executedAt: new Date().toISOString(),
           zapierResult: result,
+          toolRunsAudit: auditResult,
         },
       })
       .eq("id", exportRow.id)
@@ -317,6 +503,7 @@ export async function POST(request: Request, context: RouteContext) {
         zapierApp: app,
         zapierAction: action,
         result,
+        toolRunsAudit: auditResult,
       },
     });
 
@@ -324,11 +511,12 @@ export async function POST(request: Request, context: RouteContext) {
       ok: true,
       export: updatedExport,
       result,
+      toolRunsAudit: auditResult,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected Gmail draft execution error.";
 
-    await recordZapierToolRun({
+    const auditResult = await recordZapierToolRun({
       supabase,
       userId: user.id,
       assetId: exportRow.asset_id,
@@ -354,6 +542,7 @@ export async function POST(request: Request, context: RouteContext) {
           zapierAction: action,
           failedAt: new Date().toISOString(),
           error: message,
+          toolRunsAudit: auditResult,
         },
       })
       .eq("id", exportRow.id)
@@ -372,9 +561,10 @@ export async function POST(request: Request, context: RouteContext) {
         zapierApp: app,
         zapierAction: action,
         error: message,
+        toolRunsAudit: auditResult,
       },
     });
 
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json({ error: message, toolRunsAudit: auditResult }, { status: 400 });
   }
 }
