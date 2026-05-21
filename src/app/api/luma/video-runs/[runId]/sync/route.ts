@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isLumaYoutubeLaneEnabled } from "@/lib/config/media-providers";
 import {
   createLumaGeneration,
   getLumaGeneration,
@@ -35,6 +36,16 @@ function asArray(value: unknown) {
 }
 
 export async function POST(_request: Request, context: RouteContext) {
+  if (!isLumaYoutubeLaneEnabled()) {
+    return NextResponse.json(
+      {
+        error:
+          "Luma YouTube lane is disabled. GalaxyAI remains the active media provider.",
+      },
+      { status: 403 }
+    );
+  }
+
   const { runId } = await context.params;
   const supabase = untypedSupabase(await createClient());
 

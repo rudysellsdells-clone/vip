@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isLumaYoutubeLaneEnabled } from "@/lib/config/media-providers";
 import { createLumaGeneration } from "@/lib/luma/client";
 import {
   buildLumaYoutubeScenePlan,
@@ -19,6 +20,16 @@ function readEnv(name: string, fallback: string) {
 }
 
 export async function POST(_request: Request, context: RouteContext) {
+  if (!isLumaYoutubeLaneEnabled()) {
+    return NextResponse.json(
+      {
+        error:
+          "Luma YouTube lane is disabled. GalaxyAI remains the active media provider.",
+      },
+      { status: 403 }
+    );
+  }
+
   const { campaignId } = await context.params;
   const supabase = untypedSupabase(await createClient());
 
@@ -61,7 +72,8 @@ export async function POST(_request: Request, context: RouteContext) {
       aspect_ratio: aspectRatio,
       scene_plan: scenePlan,
       generations: [],
-      notes: "Luma 20-second YouTube video run. Scene 1 starts from text; scenes 2-4 extend the prior completed generation.",
+      notes:
+        "Luma 20-second YouTube video run. Scene 1 starts from text; scenes 2-4 extend the prior completed generation.",
     })
     .select("*")
     .single();
