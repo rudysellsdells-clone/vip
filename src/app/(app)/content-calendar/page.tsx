@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CalendarItemStatusForm } from "@/components/content-calendar/CalendarItemStatusForm";
+import { GenerateCalendarItemAssetButton } from "@/components/content-calendar/GenerateCalendarItemAssetButton";
 import { GenerateMonthlyPlanForm } from "@/components/content-calendar/GenerateMonthlyPlanForm";
 import {
   WebsiteBadge,
@@ -23,6 +25,10 @@ function formatDate(value: string | null) {
 
 function itemTypeLabel(value: string | null | undefined) {
   return String(value ?? "other").replaceAll("_", " ");
+}
+
+function generatedAssetId(item: Record<string, any>) {
+  return item?.metadata?.generatedAssetId ? String(item.metadata.generatedAssetId) : null;
 }
 
 export default async function ContentCalendarPage() {
@@ -58,7 +64,7 @@ export default async function ContentCalendarPage() {
   const items = (itemsData ?? []) as Array<Record<string, any>>;
   const campaigns = items.filter((item) => item.item_type === "weekly_campaign").length;
   const planned = items.filter((item) => item.status === "planned").length;
-  const approved = items.filter((item) => item.status === "approved").length;
+  const generated = items.filter((item) => item.status === "generated").length;
   const published = items.filter((item) => item.status === "published").length;
 
   const itemsByWeek = new Map<number, Array<Record<string, any>>>();
@@ -74,8 +80,8 @@ export default async function ContentCalendarPage() {
     <WebsitePage>
       <WebsiteHero
         eyebrow="Strategic Content Calendar"
-        title="Plan the month before creating the assets."
-        description="Generate one distinct campaign per week, then use the calendar to feed blog posts, authority content, social posts, video concepts, outreach, and What-If Stories."
+        title="Plan the month, then generate the assets."
+        description="Generate one distinct campaign per week, then turn planned calendar items into campaigns and review-ready assets."
         primaryAction={{ label: "Generate Plan", href: "#generate-plan" }}
         secondaryAction={{ label: "Review Assets", href: "/approvals" }}
       />
@@ -94,9 +100,9 @@ export default async function ContentCalendarPage() {
           dot="gold"
         />
         <WebsiteMetric
-          label="Planned Items"
-          value={planned}
-          description="Content waiting to be created."
+          label="Generated"
+          value={generated}
+          description="Calendar items already turned into campaigns or assets."
           dot="purple"
         />
         <WebsiteMetric
@@ -145,7 +151,7 @@ export default async function ContentCalendarPage() {
       <WebsiteSection
         eyebrow="Calendar"
         title="Monthly content plan"
-        description="Review and update planned content items by week. The next sprint will turn these items into real generated assets."
+        description="Create weekly campaign records, generate review-ready assets, and track each planned item."
       >
         {items.length ? (
           <div className={websiteStyles.cardGrid}>
@@ -160,44 +166,73 @@ export default async function ContentCalendarPage() {
                   </p>
 
                   <div className="grid gap-3">
-                    {weekItems.map((item) => (
-                      <div
-                        key={item.id}
-                        className="rounded-2xl border border-slate-200 bg-white/80 p-4"
-                      >
-                        <div className="mb-2 flex flex-wrap gap-2">
-                          <WebsiteBadge status={item.status ?? "planned"} />
-                          <span className={websiteStyles.badge}>
-                            {itemTypeLabel(item.item_type)}
-                          </span>
-                          {item.platform ? (
-                            <span className={websiteStyles.badge}>{item.platform}</span>
+                    {weekItems.map((item) => {
+                      const assetId = generatedAssetId(item);
+
+                      return (
+                        <div
+                          key={item.id}
+                          className="rounded-2xl border border-slate-200 bg-white/80 p-4"
+                        >
+                          <div className="mb-2 flex flex-wrap gap-2">
+                            <WebsiteBadge status={item.status ?? "planned"} />
+                            <span className={websiteStyles.badge}>
+                              {itemTypeLabel(item.item_type)}
+                            </span>
+                            {item.platform ? (
+                              <span className={websiteStyles.badge}>{item.platform}</span>
+                            ) : null}
+                            <span className={websiteStyles.badge}>
+                              {formatDate(item.scheduled_date)}
+                            </span>
+                          </div>
+
+                          <h4 className="font-['Lato'] text-base font-black text-slate-950">
+                            {item.title}
+                          </h4>
+
+                          {item.description ? (
+                            <p className={websiteStyles.cardText}>{item.description}</p>
                           ) : null}
-                          <span className={websiteStyles.badge}>
-                            {formatDate(item.scheduled_date)}
-                          </span>
+
+                          {item.cta ? (
+                            <p className={websiteStyles.cardText}>
+                              <strong>CTA:</strong> {item.cta}
+                            </p>
+                          ) : null}
+
+                          <div className={websiteStyles.actionRow}>
+                            <GenerateCalendarItemAssetButton
+                              itemId={item.id}
+                              itemType={item.item_type}
+                              disabled={item.status === "generated"}
+                            />
+
+                            <CalendarItemStatusForm
+                              itemId={item.id}
+                              currentStatus={item.status ?? "planned"}
+                            />
+                          </div>
+
+                          <div className={websiteStyles.actionRow}>
+                            {item.campaign_id ? (
+                              <Link
+                                href={`/campaigns/${item.campaign_id}`}
+                                className={websiteStyles.link}
+                              >
+                                Open campaign →
+                              </Link>
+                            ) : null}
+
+                            {assetId ? (
+                              <Link href={`/assets/${assetId}`} className={websiteStyles.link}>
+                                Open generated asset →
+                              </Link>
+                            ) : null}
+                          </div>
                         </div>
-
-                        <h4 className="font-['Lato'] text-base font-black text-slate-950">
-                          {item.title}
-                        </h4>
-
-                        {item.description ? (
-                          <p className={websiteStyles.cardText}>{item.description}</p>
-                        ) : null}
-
-                        {item.cta ? (
-                          <p className={websiteStyles.cardText}>
-                            <strong>CTA:</strong> {item.cta}
-                          </p>
-                        ) : null}
-
-                        <CalendarItemStatusForm
-                          itemId={item.id}
-                          currentStatus={item.status ?? "planned"}
-                        />
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </article>
               );
