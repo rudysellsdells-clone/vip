@@ -27,6 +27,11 @@ const navGroups: NavGroup[] = [
         description: "Overview, status, and next actions.",
       },
       {
+        label: "Content Calendar",
+        href: "/content-calendar",
+        description: "Monthly strategy, weekly campaigns, and planned assets.",
+      },
+      {
         label: "Campaigns",
         href: "/campaigns",
         description: "Create and manage campaign asset packs.",
