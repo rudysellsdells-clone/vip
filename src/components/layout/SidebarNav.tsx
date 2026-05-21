@@ -62,6 +62,11 @@ const navGroups: NavGroup[] = [
         description: "Manage revenue pipeline opportunities.",
       },
       {
+        label: "What-If Stories",
+        href: "/what-if-stories",
+        description: "Create personalized prospect growth scenarios.",
+      },
+      {
         label: "Link Builder",
         href: "/link-builder",
         description: "Find, prepare, and verify directory backlinks.",
