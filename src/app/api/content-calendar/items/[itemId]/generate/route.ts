@@ -15,6 +15,61 @@ type RouteContext = {
   }>;
 };
 
+type CalendarItemRow = {
+  id: string;
+  title: string;
+  description?: string | null;
+  item_type: string;
+  platform?: string | null;
+  content_angle?: string | null;
+  cta?: string | null;
+  week_number?: number | null;
+  scheduled_date?: string | null;
+  metadata?: Record<string, unknown> | null;
+  plan_id: string;
+  campaign_id?: string | null;
+};
+
+type CalendarPlanRow = {
+  id: string;
+  month_label?: string | null;
+  monthly_theme?: string | null;
+  business_goal?: string | null;
+  target_audience?: string | null;
+  offer_focus?: string | null;
+};
+
+function asCalendarItemRow(value: Record<string, any>): CalendarItemRow {
+  return {
+    id: String(value.id),
+    title: String(value.title ?? "Untitled calendar item"),
+    description: value.description ?? null,
+    item_type: String(value.item_type ?? "other"),
+    platform: value.platform ?? null,
+    content_angle: value.content_angle ?? null,
+    cta: value.cta ?? null,
+    week_number: Number(value.week_number ?? 1),
+    scheduled_date: value.scheduled_date ?? null,
+    metadata:
+      value.metadata && typeof value.metadata === "object"
+        ? value.metadata
+        : {},
+    plan_id: String(value.plan_id),
+    campaign_id: value.campaign_id ?? null,
+  };
+}
+
+function asCalendarPlanRow(value: Record<string, any>): CalendarPlanRow {
+  return {
+    id: String(value.id),
+    month_label: value.month_label ?? null,
+    monthly_theme: value.monthly_theme ?? null,
+    business_goal: value.business_goal ?? null,
+    target_audience: value.target_audience ?? null,
+    offer_focus: value.offer_focus ?? null,
+  };
+}
+
 async function findWeeklyCampaignForItem({
   supabase,
   userId,
@@ -36,7 +91,7 @@ async function findWeeklyCampaignForItem({
     .limit(1)
     .maybeSingle();
 
-  return data ?? null;
+  return data ? asCalendarItemRow(data) : null;
 }
 
 async function ensureCampaignForCalendarItem({
@@ -47,8 +102,8 @@ async function ensureCampaignForCalendarItem({
 }: {
   supabase: any;
   userId: string;
-  item: Record<string, any>;
-  plan: Record<string, any>;
+  item: CalendarItemRow;
+  plan: CalendarPlanRow;
 }) {
   if (item.campaign_id) {
     const { data: existingCampaign } = await supabase
@@ -122,27 +177,31 @@ export async function POST(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: item, error: itemError } = await supabase
+  const { data: rawItem, error: itemError } = await supabase
     .from("content_calendar_items")
     .select("*")
     .eq("id", itemId)
     .eq("user_id", user.id)
     .single();
 
-  if (itemError || !item) {
+  if (itemError || !rawItem) {
     return NextResponse.json({ error: "Calendar item not found." }, { status: 404 });
   }
 
-  const { data: plan, error: planError } = await supabase
+  const item = asCalendarItemRow(rawItem);
+
+  const { data: rawPlan, error: planError } = await supabase
     .from("content_calendar_plans")
     .select("*")
     .eq("id", item.plan_id)
     .eq("user_id", user.id)
     .single();
 
-  if (planError || !plan) {
+  if (planError || !rawPlan) {
     return NextResponse.json({ error: "Content calendar plan not found." }, { status: 404 });
   }
+
+  const plan = asCalendarPlanRow(rawPlan);
 
   try {
     if (isCampaignCalendarItem(item.item_type)) {
