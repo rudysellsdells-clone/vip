@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CalendarItemStatusForm } from "@/components/content-calendar/CalendarItemStatusForm";
 import { GenerateCalendarItemAssetButton } from "@/components/content-calendar/GenerateCalendarItemAssetButton";
+import { GenerateCalendarWeekButton } from "@/components/content-calendar/GenerateCalendarWeekButton";
 import { GenerateMonthlyPlanForm } from "@/components/content-calendar/GenerateMonthlyPlanForm";
 import {
   WebsiteBadge,
@@ -29,6 +30,10 @@ function itemTypeLabel(value: string | null | undefined) {
 
 function generatedAssetId(item: Record<string, any>) {
   return item?.metadata?.generatedAssetId ? String(item.metadata.generatedAssetId) : null;
+}
+
+function generatedItemCount(items: Array<Record<string, any>>) {
+  return items.filter((item) => item.status === "generated").length;
 }
 
 export default async function ContentCalendarPage() {
@@ -63,7 +68,6 @@ export default async function ContentCalendarPage() {
 
   const items = (itemsData ?? []) as Array<Record<string, any>>;
   const campaigns = items.filter((item) => item.item_type === "weekly_campaign").length;
-  const planned = items.filter((item) => item.status === "planned").length;
   const generated = items.filter((item) => item.status === "generated").length;
   const published = items.filter((item) => item.status === "published").length;
 
@@ -151,19 +155,32 @@ export default async function ContentCalendarPage() {
       <WebsiteSection
         eyebrow="Calendar"
         title="Monthly content plan"
-        description="Create weekly campaign records, generate review-ready assets, and track each planned item."
+        description="Create weekly campaign records, generate full week packages, or generate individual review-ready assets."
       >
         {items.length ? (
           <div className={websiteStyles.cardGrid}>
             {[1, 2, 3, 4].map((weekNumber) => {
               const weekItems = itemsByWeek.get(weekNumber) ?? [];
+              const weekGeneratedCount = generatedItemCount(weekItems);
 
               return (
                 <article key={weekNumber} className={websiteStyles.card}>
-                  <h3 className={websiteStyles.cardTitle}>Week {weekNumber}</h3>
-                  <p className={websiteStyles.cardMeta}>
-                    {weekItems.length} planned item{weekItems.length === 1 ? "" : "s"}
-                  </p>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className={websiteStyles.cardTitle}>Week {weekNumber}</h3>
+                      <p className={websiteStyles.cardMeta}>
+                        {weekItems.length} planned item{weekItems.length === 1 ? "" : "s"} • {weekGeneratedCount} generated
+                      </p>
+                    </div>
+
+                    {activePlan ? (
+                      <GenerateCalendarWeekButton
+                        planId={activePlan.id}
+                        weekNumber={weekNumber}
+                        disabled={weekItems.length === 0}
+                      />
+                    ) : null}
+                  </div>
 
                   <div className="grid gap-3">
                     {weekItems.map((item) => {
