@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { ExecuteGmailDraftWithPdfForm } from "@/components/what-if-stories/ExecuteGmailDraftWithPdfForm";
 import { WhatIfPdfActions } from "@/components/what-if-stories/WhatIfPdfActions";
 import { WhatIfStoryGeneratorForm } from "@/components/what-if-stories/WhatIfStoryGeneratorForm";
 import {
@@ -21,12 +22,14 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
-function latestPdfUrlForAsset(exports: Array<Record<string, any>>, assetId: string) {
-  const exportRow = exports.find(
-    (item) => item.asset_id === assetId && item.export_type === "what_if_pdf" && item.file_url
-  );
-
-  return exportRow?.file_url ?? null;
+function latestExportForAsset(
+  exports: Array<Record<string, any>>,
+  assetId: string,
+  exportType: string
+) {
+  return exports.find(
+    (item) => item.asset_id === assetId && item.export_type === exportType
+  ) ?? null;
 }
 
 export default async function WhatIfStoriesPage() {
@@ -64,13 +67,16 @@ export default async function WhatIfStoriesPage() {
   const needsReview = recentStories.filter((story) => story.status === "needs_review").length;
   const approved = recentStories.filter((story) => story.status === "approved").length;
   const pdfCount = exports.filter((item) => item.export_type === "what_if_pdf").length;
+  const completedDrafts = exports.filter(
+    (item) => item.export_type === "gmail_draft_with_pdf" && item.status === "completed"
+  ).length;
 
   return (
     <WebsitePage>
       <WebsiteHero
         eyebrow="What-If Success Stories"
-        title="Create personalized prospect scenarios and package them as branded PDFs."
-        description="Generate the story, review it, render a polished PDF, and prepare a Gmail draft with the PDF attachment URL."
+        title="Create personalized scenarios, package them as PDFs, and draft the outreach."
+        description="Generate the story, render a polished PDF, prepare the email, and create a Gmail draft through Zapier without sending it."
         primaryAction={{ label: "Generate Story", href: "#generate-story" }}
         secondaryAction={{ label: "Review Assets", href: "/approvals" }}
       />
@@ -89,16 +95,16 @@ export default async function WhatIfStoriesPage() {
           dot="gold"
         />
         <WebsiteMetric
-          label="Approved"
-          value={approved}
-          description="Stories ready for outreach or repurposing."
-          dot="green"
-        />
-        <WebsiteMetric
           label="PDF Exports"
           value={pdfCount}
           description="Branded PDF versions created."
           dot="purple"
+        />
+        <WebsiteMetric
+          label="Gmail Drafts"
+          value={completedDrafts}
+          description="Drafts created through Zapier."
+          dot="green"
         />
       </section>
 
@@ -109,19 +115,29 @@ export default async function WhatIfStoriesPage() {
       <WebsiteSection
         eyebrow="Recent Output"
         title="Latest What-If Success Stories"
-        description="Generate a branded PDF after the story looks good, then prepare Gmail draft copy with the PDF attachment URL."
+        description="Generate a branded PDF, prepare Gmail draft copy, then create the draft through Zapier when ready."
       >
         {recentStories.length ? (
           <div className={websiteStyles.cardGrid}>
             {recentStories.map((story) => {
-              const pdfUrl = latestPdfUrlForAsset(exports, story.id);
+              const latestPdf = latestExportForAsset(exports, story.id, "what_if_pdf");
+              const latestDraftPrep = latestExportForAsset(
+                exports,
+                story.id,
+                "gmail_draft_with_pdf"
+              );
 
               return (
                 <article key={story.id} className={websiteStyles.card}>
                   <div className="flex flex-wrap gap-2">
                     <span className={websiteStyles.badge}>{story.status}</span>
                     <span className={websiteStyles.badge}>Version {story.version}</span>
-                    {pdfUrl ? <span className={websiteStyles.badge}>PDF ready</span> : null}
+                    {latestPdf?.file_url ? <span className={websiteStyles.badge}>PDF ready</span> : null}
+                    {latestDraftPrep ? (
+                      <span className={websiteStyles.badge}>
+                        Draft {latestDraftPrep.status}
+                      </span>
+                    ) : null}
                   </div>
 
                   <h3 className={websiteStyles.cardTitle} style={{ marginTop: 16 }}>
@@ -138,7 +154,14 @@ export default async function WhatIfStoriesPage() {
                     {String(story.content ?? "").slice(0, 240)}...
                   </p>
 
-                  <WhatIfPdfActions assetId={story.id} latestPdfUrl={pdfUrl} />
+                  <WhatIfPdfActions assetId={story.id} latestPdfUrl={latestPdf?.file_url ?? null} />
+
+                  {latestDraftPrep ? (
+                    <ExecuteGmailDraftWithPdfForm
+                      exportId={latestDraftPrep.id}
+                      disabled={!latestDraftPrep.file_url}
+                    />
+                  ) : null}
                 </article>
               );
             })}
