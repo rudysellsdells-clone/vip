@@ -16,7 +16,7 @@ function readForm(formData: FormData, key: string) {
 function getGmailZapierConfig() {
   return {
     app: process.env.ZAPIER_GMAIL_APP?.trim() || "gmail",
-    action: process.env.ZAPIER_GMAIL_CREATE_DRAFT_ACTION?.trim() || "gmail_create_draft",
+    action: process.env.ZAPIER_GMAIL_CREATE_DRAFT_ACTION?.trim() || "draft_v2",
   };
 }
 
@@ -113,6 +113,7 @@ export async function POST(request: Request, context: RouteContext) {
     to: toEmail,
     to_email: toEmail,
     email: toEmail,
+    recipient: toEmail,
     cc: ccEmail || undefined,
     bcc: bccEmail || undefined,
     subject,
@@ -121,7 +122,10 @@ export async function POST(request: Request, context: RouteContext) {
     attachment: attachmentUrl,
     attachments: attachmentUrl,
     attachment_url: attachmentUrl,
+    attachmentUrl,
+    file: attachmentUrl,
     file_url: attachmentUrl,
+    fileName: exportRow.file_name || "what-if-success-story.pdf",
     file_name: exportRow.file_name || "what-if-success-story.pdf",
   };
 

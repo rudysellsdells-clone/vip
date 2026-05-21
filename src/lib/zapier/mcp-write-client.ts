@@ -68,6 +68,55 @@ function extractToolText(result: any) {
   return textParts.join("\n").trim() || null;
 }
 
+function throwIfMcpToolError(json: any, toolText: string | null) {
+  if (json?.error) {
+    throw new Error(
+      `MCP error ${json.error.code ?? ""}: ${json.error.message ?? JSON.stringify(json.error)}`
+    );
+  }
+
+  if (json?.result?.isError === true || json?.isError === true) {
+    if (toolText) {
+      try {
+        const parsedToolText = JSON.parse(toolText);
+        throw new Error(
+          parsedToolText?.error ??
+            parsedToolText?.message ??
+            parsedToolText?.errorDetails?.message ??
+            toolText
+        );
+      } catch (error) {
+        if (error instanceof Error && error.message !== "Unexpected end of JSON input") {
+          throw error;
+        }
+
+        throw new Error(toolText);
+      }
+    }
+
+    throw new Error("Zapier MCP tool returned an error.");
+  }
+
+  if (toolText) {
+    try {
+      const parsedToolText = JSON.parse(toolText);
+
+      if (parsedToolText?.isError === true || parsedToolText?.error) {
+        throw new Error(
+          parsedToolText?.error ??
+            parsedToolText?.message ??
+            parsedToolText?.errorDetails?.message ??
+            toolText
+        );
+      }
+    } catch (error) {
+      if (error instanceof Error && !error.message.includes("Unexpected")) {
+        throw error;
+      }
+    }
+  }
+}
+
 export async function executeZapierMcpWriteAction({
   app,
   action,
@@ -122,33 +171,20 @@ export async function executeZapierMcpWriteAction({
   }
 
   const json = parsed as any;
-
-  if (json?.error) {
-    throw new Error(
-      `MCP error ${json.error.code ?? ""}: ${json.error.message ?? JSON.stringify(json.error)}`
-    );
-  }
-
   const toolText = extractToolText(json);
+
+  throwIfMcpToolError(json, toolText);
 
   if (toolText) {
     try {
       const nested = JSON.parse(toolText);
-
-      if (nested?.isError || nested?.error) {
-        throw new Error(nested?.error ?? nested?.errorDetails?.message ?? toolText);
-      }
 
       return {
         raw: json,
         text: toolText,
         parsedText: nested,
       };
-    } catch (error) {
-      if (error instanceof Error && toolText.includes('"isError":true')) {
-        throw error;
-      }
-
+    } catch {
       return {
         raw: json,
         text: toolText,
@@ -159,7 +195,7 @@ export async function executeZapierMcpWriteAction({
 
   return {
     raw: json,
-    text: text,
+    text,
     parsedText: null,
   };
 }
