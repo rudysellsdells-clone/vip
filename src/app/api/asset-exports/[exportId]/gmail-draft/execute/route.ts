@@ -57,6 +57,91 @@ function buildInstructions({
     .join("\n");
 }
 
+async function recordZapierToolRun({
+  supabase,
+  userId,
+  assetId,
+  exportId,
+  app,
+  action,
+  status,
+  input,
+  output,
+  error,
+}: {
+  supabase: any;
+  userId: string;
+  assetId: string;
+  exportId: string;
+  app: string;
+  action: string;
+  status: "completed" | "failed";
+  input: Record<string, unknown>;
+  output?: Record<string, unknown> | null;
+  error?: string | null;
+}) {
+  // This mirrors the normal Zapier action audit pattern so the What-If PDF
+  // Gmail draft appears in recent Zapier/actions views. If the project's
+  // tool_runs schema is slightly different, we do not block draft creation.
+  const payload = {
+    user_id: userId,
+    source_asset_id: assetId,
+    provider: "zapier_mcp",
+    tool_name: `${app}.${action}`,
+    status,
+    input,
+    output: output ?? null,
+    error: error ?? null,
+    metadata: {
+      exportId,
+      app,
+      action,
+      feature: "what_if_pdf_gmail_draft",
+    },
+  };
+
+  const { error: insertError } = await supabase.from("tool_runs").insert(payload);
+
+  if (!insertError) {
+    return;
+  }
+
+  // Fallback for older/minimal tool_runs schemas that may not include metadata.
+  const fallbackPayload = {
+    user_id: userId,
+    source_asset_id: assetId,
+    provider: "zapier_mcp",
+    tool_name: `${app}.${action}`,
+    status,
+    input,
+    output: output ?? null,
+    error: error ?? null,
+  };
+
+  const { error: fallbackError } = await supabase
+    .from("tool_runs")
+    .insert(fallbackPayload);
+
+  if (fallbackError) {
+    await supabase.from("activity_log").insert({
+      user_id: userId,
+      activity_type: "zapier_tool_run_audit_warning",
+      title: "Zapier action audit warning",
+      description:
+        "Gmail draft execution completed, but VIP could not insert the matching tool_runs record.",
+      metadata: {
+        assetId,
+        exportId,
+        app,
+        action,
+        status,
+        insertError: insertError.message,
+        fallbackError: fallbackError.message,
+      },
+    });
+  }
+}
+
 export async function POST(request: Request, context: RouteContext) {
   const { exportId } = await context.params;
   const supabase = untypedSupabase(await createClient());
@@ -139,6 +224,20 @@ export async function POST(request: Request, context: RouteContext) {
     fileName: exportRow.file_name,
   });
 
+  const runInput = {
+    app,
+    action,
+    toEmail,
+    ccEmail,
+    bccEmail,
+    subject,
+    attachmentUrl,
+    fileName: exportRow.file_name || "what-if-success-story.pdf",
+    exportId: exportRow.id,
+    assetId: exportRow.asset_id,
+    params,
+  };
+
   try {
     await supabase
       .from("asset_exports")
@@ -164,6 +263,19 @@ export async function POST(request: Request, context: RouteContext) {
       params,
       output:
         "Return the Gmail draft ID, draft URL if available, message ID if available, and whether the PDF attachment was included.",
+    });
+
+    await recordZapierToolRun({
+      supabase,
+      userId: user.id,
+      assetId: exportRow.asset_id,
+      exportId: exportRow.id,
+      app,
+      action,
+      status: "completed",
+      input: runInput,
+      output: result,
+      error: null,
     });
 
     const { data: updatedExport, error: updateError } = await supabase
@@ -215,6 +327,19 @@ export async function POST(request: Request, context: RouteContext) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected Gmail draft execution error.";
+
+    await recordZapierToolRun({
+      supabase,
+      userId: user.id,
+      assetId: exportRow.asset_id,
+      exportId: exportRow.id,
+      app,
+      action,
+      status: "failed",
+      input: runInput,
+      output: null,
+      error: message,
+    });
 
     await supabase
       .from("asset_exports")
