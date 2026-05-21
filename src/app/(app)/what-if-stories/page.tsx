@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { WhatIfPdfActions } from "@/components/what-if-stories/WhatIfPdfActions";
 import { WhatIfStoryGeneratorForm } from "@/components/what-if-stories/WhatIfStoryGeneratorForm";
 import {
   WebsiteHero,
@@ -18,6 +19,14 @@ function formatDate(value: string | null) {
     day: "numeric",
     year: "numeric",
   }).format(new Date(value));
+}
+
+function latestPdfUrlForAsset(exports: Array<Record<string, any>>, assetId: string) {
+  const exportRow = exports.find(
+    (item) => item.asset_id === assetId && item.export_type === "what_if_pdf" && item.file_url
+  );
+
+  return exportRow?.file_url ?? null;
 }
 
 export default async function WhatIfStoriesPage() {
@@ -40,15 +49,28 @@ export default async function WhatIfStoriesPage() {
     .limit(8);
 
   const recentStories = (recentData ?? []) as Array<Record<string, any>>;
+  const storyIds = recentStories.map((story) => story.id);
+
+  const { data: exportsData } = storyIds.length
+    ? await supabase
+        .from("asset_exports")
+        .select("*")
+        .eq("user_id", user.id)
+        .in("asset_id", storyIds)
+        .order("created_at", { ascending: false })
+    : { data: [] };
+
+  const exports = (exportsData ?? []) as Array<Record<string, any>>;
   const needsReview = recentStories.filter((story) => story.status === "needs_review").length;
   const approved = recentStories.filter((story) => story.status === "approved").length;
+  const pdfCount = exports.filter((item) => item.export_type === "what_if_pdf").length;
 
   return (
     <WebsitePage>
       <WebsiteHero
         eyebrow="What-If Success Stories"
-        title="Create personalized prospect scenarios that open sales conversations."
-        description="Turn a prospect's likely pain point into a clear, honest what-if scenario showing how Web Search Pros could help them build visibility, authority, follow-up, and growth."
+        title="Create personalized prospect scenarios and package them as branded PDFs."
+        description="Generate the story, review it, render a polished PDF, and prepare a Gmail draft with the PDF attachment URL."
         primaryAction={{ label: "Generate Story", href: "#generate-story" }}
         secondaryAction={{ label: "Review Assets", href: "/approvals" }}
       />
@@ -73,9 +95,9 @@ export default async function WhatIfStoriesPage() {
           dot="green"
         />
         <WebsiteMetric
-          label="Guardrail"
-          value="Scenario"
-          description="Clearly hypothetical, never fake proof."
+          label="PDF Exports"
+          value={pdfCount}
+          description="Branded PDF versions created."
           dot="purple"
         />
       </section>
@@ -87,32 +109,39 @@ export default async function WhatIfStoriesPage() {
       <WebsiteSection
         eyebrow="Recent Output"
         title="Latest What-If Success Stories"
-        description="Generated stories flow through the same review and approval system as the rest of VIP."
+        description="Generate a branded PDF after the story looks good, then prepare Gmail draft copy with the PDF attachment URL."
       >
         {recentStories.length ? (
           <div className={websiteStyles.cardGrid}>
-            {recentStories.map((story) => (
-              <article key={story.id} className={websiteStyles.card}>
-                <div className="flex flex-wrap gap-2">
-                  <span className={websiteStyles.badge}>{story.status}</span>
-                  <span className={websiteStyles.badge}>Version {story.version}</span>
-                </div>
+            {recentStories.map((story) => {
+              const pdfUrl = latestPdfUrlForAsset(exports, story.id);
 
-                <h3 className={websiteStyles.cardTitle} style={{ marginTop: 16 }}>
-                  <a href={`/assets/${story.id}`} className={websiteStyles.link}>
-                    {story.title}
-                  </a>
-                </h3>
+              return (
+                <article key={story.id} className={websiteStyles.card}>
+                  <div className="flex flex-wrap gap-2">
+                    <span className={websiteStyles.badge}>{story.status}</span>
+                    <span className={websiteStyles.badge}>Version {story.version}</span>
+                    {pdfUrl ? <span className={websiteStyles.badge}>PDF ready</span> : null}
+                  </div>
 
-                <p className={websiteStyles.cardMeta}>
-                  Created {formatDate(story.created_at)}
-                </p>
+                  <h3 className={websiteStyles.cardTitle} style={{ marginTop: 16 }}>
+                    <a href={`/assets/${story.id}`} className={websiteStyles.link}>
+                      {story.title}
+                    </a>
+                  </h3>
 
-                <p className={websiteStyles.cardText}>
-                  {String(story.content ?? "").slice(0, 240)}...
-                </p>
-              </article>
-            ))}
+                  <p className={websiteStyles.cardMeta}>
+                    Created {formatDate(story.created_at)}
+                  </p>
+
+                  <p className={websiteStyles.cardText}>
+                    {String(story.content ?? "").slice(0, 240)}...
+                  </p>
+
+                  <WhatIfPdfActions assetId={story.id} latestPdfUrl={pdfUrl} />
+                </article>
+              );
+            })}
           </div>
         ) : (
           <div className={websiteStyles.empty}>
