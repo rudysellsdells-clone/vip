@@ -27,9 +27,19 @@ const navGroups: NavGroup[] = [
         description: "Overview, status, and next actions.",
       },
       {
+        label: "Phase Two",
+        href: "/phase-two",
+        description: "Authority, prospecting, repurposing, and execution hub.",
+      },
+      {
         label: "Content Calendar",
         href: "/content-calendar",
         description: "Monthly strategy, weekly campaigns, and planned assets.",
+      },
+      {
+        label: "Publishing Ready",
+        href: "/publishing-ready",
+        description: "Execute approved assets and track runs.",
       },
       {
         label: "Campaigns",
@@ -49,6 +59,26 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    label: "Content",
+    items: [
+      {
+        label: "Authority Content",
+        href: "/authority-content",
+        description: "Create blogs, white papers, and authority assets.",
+      },
+      {
+        label: "Repurposing",
+        href: "/content-repurposing",
+        description: "Turn source assets into channel-ready content.",
+      },
+      {
+        label: "What-If Stories",
+        href: "/what-if-stories",
+        description: "Create personalized prospect growth scenarios.",
+      },
+    ],
+  },
+  {
     label: "Growth",
     items: [
       {
@@ -60,11 +90,6 @@ const navGroups: NavGroup[] = [
         label: "Opportunities",
         href: "/opportunities",
         description: "Manage revenue pipeline opportunities.",
-      },
-      {
-        label: "What-If Stories",
-        href: "/what-if-stories",
-        description: "Create personalized prospect growth scenarios.",
       },
       {
         label: "Link Builder",
