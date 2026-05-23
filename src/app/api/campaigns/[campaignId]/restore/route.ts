@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { archiveTimestamp } from "@/lib/archive/archive-utils";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -12,12 +11,9 @@ export async function POST(_request: Request, context: RouteContext) {
 
   if (userError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const archivedAt = archiveTimestamp();
-  const reason = "Deleted by user; archived instead of hard-deleted";
-
   const { data: campaign, error: campaignError } = await supabase
     .from("campaigns")
-    .update({ archived_at: archivedAt, archived_reason: reason, archived_by: user.id })
+    .update({ archived_at: null, archived_reason: null, archived_by: null })
     .eq("id", campaignId)
     .eq("user_id", user.id)
     .select("*")
@@ -25,27 +21,23 @@ export async function POST(_request: Request, context: RouteContext) {
 
   if (campaignError || !campaign) return NextResponse.json({ error: campaignError?.message ?? "Campaign not found." }, { status: 404 });
 
-  const { data: archivedAssets, error: assetError } = await supabase
+  const { data: restoredAssets, error: assetError } = await supabase
     .from("generated_assets")
-    .update({ archived_at: archivedAt, archived_reason: "Parent campaign deleted/archived", archived_by: user.id })
+    .update({ archived_at: null, archived_reason: null, archived_by: null })
     .eq("user_id", user.id)
     .eq("campaign_id", campaignId)
-    .is("archived_at", null)
+    .not("archived_at", "is", null)
     .select("id,title,asset_type,status");
 
   if (assetError) return NextResponse.json({ error: assetError.message }, { status: 400 });
 
   await supabase.from("activity_log").insert({
     user_id: user.id,
-    activity_type: "campaign_delete_archived",
-    title: "Campaign delete archived",
+    activity_type: "campaign_restored",
+    title: "Campaign restored",
     description: campaign.name ?? campaign.title ?? campaignId,
-    metadata: { campaignId, archivedAt, archivedAssetCount: archivedAssets?.length ?? 0 },
+    metadata: { campaignId, restoredAssetCount: restoredAssets?.length ?? 0 },
   });
 
-  return NextResponse.json({ ok: true, archived: true, campaign, archivedAssets: archivedAssets ?? [] });
-}
-
-export async function DELETE(request: Request, context: RouteContext) {
-  return POST(request, context);
+  return NextResponse.json({ ok: true, campaign, restoredAssets: restoredAssets ?? [] });
 }
