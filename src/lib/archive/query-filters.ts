@@ -6,7 +6,7 @@ export function archivedRecordsOnly(query: any) {
   return query.not("archived_at", "is", null);
 }
 
-export function ensureNotArchived(row: Record<string, any> | null | undefined, label = "Record") {
+export function assertActiveRecord(row: Record<string, any> | null | undefined, label = "Record") {
   if (!row) {
     throw new Error(`${label} not found.`);
   }

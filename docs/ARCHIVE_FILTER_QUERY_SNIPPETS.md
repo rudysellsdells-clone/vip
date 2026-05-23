@@ -1,10 +1,10 @@
 # Archive Filter Query Snippets
 
-Use these snippets to hide archived records from active working pages.
+Use these snippets on older active pages to hide archived campaigns and assets.
 
-## Active campaign queries
+## Campaign list pages
 
-Add this to active campaign lists, dashboard campaign counts, and any campaign selector:
+Add:
 
 ```ts
 .is("archived_at", null)
@@ -21,9 +21,9 @@ const { data: campaigns } = await supabase
   .order("created_at", { ascending: false });
 ```
 
-## Active generated asset queries
+## Approval queues
 
-Add this to approvals, publishing, authority content, repurposing, dashboard widgets, and action queues:
+Add:
 
 ```ts
 .is("archived_at", null)
@@ -37,46 +37,49 @@ const { data: assets } = await supabase
   .select("*")
   .eq("user_id", user.id)
   .is("archived_at", null)
+  .in("status", ["needs_review", "approved"])
   .order("created_at", { ascending: false });
 ```
 
-## Approval queue filter
+## Dashboard metrics
 
-Approval queues should use:
-
-```ts
-.eq("user_id", user.id)
-.is("archived_at", null)
-.in("status", ["needs_review", "draft", "approved"])
-```
-
-or whatever statuses the page already uses.
-
-## Campaign delete behavior
-
-The delete route from the prior patch archives instead of hard-deleting. To use that behavior, the Campaigns UI delete action should call:
+Campaign counts:
 
 ```ts
-fetch(`/api/campaigns/${campaign.id}/delete`, { method: "POST" })
+const { count } = await supabase
+  .from("campaigns")
+  .select("id", { count: "exact", head: true })
+  .eq("user_id", user.id)
+  .is("archived_at", null);
 ```
 
-or DELETE if your button already uses DELETE:
+Asset counts:
 
 ```ts
-fetch(`/api/campaigns/${campaign.id}/delete`, { method: "DELETE" })
+const { count } = await supabase
+  .from("generated_assets")
+  .select("id", { count: "exact", head: true })
+  .eq("user_id", user.id)
+  .is("archived_at", null);
 ```
 
-## Best pages to update next
+## Active asset lists
 
-- `src/app/(app)/campaigns/page.tsx`
-- `src/app/(app)/approvals/page.tsx`
-- `src/app/(app)/dashboard/page.tsx`
-- `src/app/(app)/actions/page.tsx`
-- `src/app/(app)/publishing-ready/page.tsx`
-- `src/app/(app)/content-repurposing/page.tsx`
-- `src/app/(app)/authority-content/page.tsx`
-- `src/app/(app)/phase-two/page.tsx`
+```ts
+const { data: assets } = await supabase
+  .from("generated_assets")
+  .select("*")
+  .eq("user_id", user.id)
+  .is("archived_at", null);
+```
 
-## Why this matters
+## Active campaign assets
 
-Archived campaigns and assets remain available in `/archive`, but they should not clutter active working pages.
+```ts
+const { data: assets } = await supabase
+  .from("generated_assets")
+  .select("*")
+  .eq("user_id", user.id)
+  .eq("campaign_id", campaignId)
+  .is("archived_at", null);
+```

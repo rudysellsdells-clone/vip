@@ -110,10 +110,14 @@ export async function POST(request: Request, context: RouteContext) {
     .select("*")
     .eq("id", assetId)
     .eq("user_id", user.id)
+    .is("archived_at", null)
     .single();
 
   if (assetError || !asset) {
-    return NextResponse.json({ error: "Asset not found." }, { status: 404 });
+    return NextResponse.json(
+      { error: "Asset not found or has been archived." },
+      { status: 404 }
+    );
   }
 
   if (asset.status !== "approved") {
