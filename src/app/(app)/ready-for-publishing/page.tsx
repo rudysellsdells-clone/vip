@@ -19,6 +19,14 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
+type AssetRow = Record<string, any>;
+type DecisionRow = Record<string, any>;
+
+type ReadyRow = {
+  decision: DecisionRow;
+  asset: AssetRow;
+};
+
 function formatDate(value: string | null) {
   if (!value) return "No date";
 
@@ -33,7 +41,7 @@ function typeLabel(value: string | null | undefined) {
   return String(value ?? "asset").replaceAll("_", " ");
 }
 
-function scoreFromDecision(decision: Record<string, any>) {
+function scoreFromDecision(decision: DecisionRow) {
   const snapshot = decision.score_snapshot ?? {};
   const score = snapshot.overall_score;
 
@@ -42,7 +50,7 @@ function scoreFromDecision(decision: Record<string, any>) {
   return `${score}/100`;
 }
 
-function scoreBreakdown(decision: Record<string, any>) {
+function scoreBreakdown(decision: DecisionRow) {
   const score = decision.score_snapshot ?? {};
 
   return [
@@ -52,6 +60,13 @@ function scoreBreakdown(decision: Record<string, any>) {
     `SEO/AIO ${score.seo_aio_score ?? "—"}`,
     `Conversion ${score.conversion_score ?? "—"}`,
   ].join(" • ");
+}
+
+function hasAsset(row: {
+  decision: DecisionRow;
+  asset: AssetRow | undefined;
+}): row is ReadyRow {
+  return Boolean(row.asset);
 }
 
 export default async function ReadyForPublishingPage() {
@@ -74,11 +89,11 @@ export default async function ReadyForPublishingPage() {
     .order("created_at", { ascending: false })
     .limit(100);
 
-  const decisions = (decisionsData ?? []) as Array<Record<string, any>>;
-  const latestDecisionByAssetId = new Map<string, Record<string, any>>();
+  const decisions = (decisionsData ?? []) as DecisionRow[];
+  const latestDecisionByAssetId = new Map<string, DecisionRow>();
 
   for (const decision of decisions) {
-    if (!latestDecisionByAssetId.has(decision.asset_id)) {
+    if (decision.asset_id && !latestDecisionByAssetId.has(decision.asset_id)) {
       latestDecisionByAssetId.set(decision.asset_id, decision);
     }
   }
@@ -96,19 +111,22 @@ export default async function ReadyForPublishingPage() {
         .in("asset_type", PUBLISHABLE_READY_ASSET_TYPES)
     : { data: [] };
 
-  const assets = (assetsData ?? []) as Array<Record<string, any>>;
-  const assetById = new Map(assets.map((asset) => [asset.id, asset]));
-  const readyRows = latestDecisions
+  const assets = (assetsData ?? []) as AssetRow[];
+  const assetById = new Map<string, AssetRow>(
+    assets.map((asset) => [String(asset.id), asset])
+  );
+
+  const readyRows: ReadyRow[] = latestDecisions
     .map((decision) => ({
       decision,
-      asset: assetById.get(decision.asset_id),
+      asset: assetById.get(String(decision.asset_id)),
     }))
-    .filter((row) => row.asset);
+    .filter(hasAsset);
 
-  const approvedRows = readyRows.filter((row) => row.asset?.status === "approved");
-  const waitingApprovalRows = readyRows.filter((row) => row.asset?.status !== "approved");
+  const approvedRows = readyRows.filter((row) => row.asset.status === "approved");
+  const waitingApprovalRows = readyRows.filter((row) => row.asset.status !== "approved");
   const socialRows = readyRows.filter((row) =>
-    ["linkedin_post", "facebook_post", "email", "video_script"].includes(row.asset?.asset_type)
+    ["linkedin_post", "facebook_post", "email", "video_script"].includes(row.asset.asset_type)
   );
 
   return (
