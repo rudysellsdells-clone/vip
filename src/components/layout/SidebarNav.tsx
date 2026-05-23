@@ -82,6 +82,11 @@ const navGroups: NavGroup[] = [
         description: "Turn source assets into channel-ready content.",
       },
       {
+        label: "Content Quality",
+        href: "/content-quality",
+        description: "Score brand fit, clarity, CTA strength, and SEO/AIO readiness.",
+      },
+      {
         label: "What-If Stories",
         href: "/what-if-stories",
         description: "Create personalized prospect growth scenarios.",
