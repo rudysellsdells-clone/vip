@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ApproveAllAssetsButton } from "@/components/approvals/ApproveAllAssetsButton";
-import { AssetReviewActions } from "@/components/approvals/AssetReviewActions";
-import { AssetTitleLink } from "@/components/assets/AssetTitleLink";
-import { RequestRevisionButton } from "@/components/assets/RequestRevisionButton";
+import { ApprovalQualityWidget } from "@/components/approvals/ApprovalQualityWidget";
+import { ApprovalStatusActions } from "@/components/approvals/ApprovalStatusActions";
+import { ApproveAllVisibleAssetsButton } from "@/components/approvals/ApproveAllVisibleAssetsButton";
 import {
   WebsiteBadge,
   WebsiteHero,
@@ -13,6 +12,26 @@ import {
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
 import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
+
+const REVIEWABLE_TYPES = [
+  "facebook_post",
+  "linkedin_post",
+  "email",
+  "gmail_draft",
+  "image_prompt",
+  "image",
+  "video_prompt",
+  "video_script",
+  "youtube_video",
+  "ad_copy",
+  "social_post",
+  "campaign_asset",
+  "blog_post",
+  "white_paper",
+  "authority_asset",
+  "prospect_what_if_story",
+];
 
 function formatDate(value: string | null) {
   if (!value) return "No date";
@@ -24,8 +43,12 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
+function typeLabel(value: string | null | undefined) {
+  return String(value ?? "asset").replaceAll("_", " ");
+}
+
 export default async function ApprovalsPage() {
-  const supabase = await createClient();
+  const supabase = untypedSupabase(await createClient());
 
   const {
     data: { user },
@@ -35,138 +58,123 @@ export default async function ApprovalsPage() {
     redirect("/login");
   }
 
-  const { data: assetsData, error } = await supabase
-    .from("generated_assets")
-    .select("*")
-    .eq("user_id", user.id)
-    .in("status", ["needs_review", "revision_requested"])
-    .order("updated_at", { ascending: false })
-    .limit(50);
-
-  if (error) {
-    console.error("Failed to load approval assets", error);
-  }
+  const [{ count: needsReviewCount }, { count: approvedCount }, { data: assetsData }] =
+    await Promise.all([
+      supabase
+        .from("generated_assets")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .is("archived_at", null)
+        .eq("status", "needs_review"),
+      supabase
+        .from("generated_assets")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .is("archived_at", null)
+        .eq("status", "approved"),
+      supabase
+        .from("generated_assets")
+        .select("*")
+        .eq("user_id", user.id)
+        .is("archived_at", null)
+        .eq("status", "needs_review")
+        .in("asset_type", REVIEWABLE_TYPES)
+        .order("created_at", { ascending: false })
+        .limit(60),
+    ]);
 
   const assets = (assetsData ?? []) as Array<Record<string, any>>;
-  const needsReviewCount = assets.filter((asset) => asset.status === "needs_review").length;
-  const revisionCount = assets.filter((asset) => asset.status === "revision_requested").length;
-
-  const campaignIds = Array.from(
-    new Set(assets.map((asset) => asset.campaign_id).filter(Boolean))
-  ) as string[];
-
-  let campaignNameById = new Map<string, string>();
-
-  if (campaignIds.length > 0) {
-    const { data: campaignsData } = await supabase
-      .from("campaigns")
-      .select("id,name")
-      .eq("user_id", user.id)
-      .in("id", campaignIds);
-
-    campaignNameById = new Map(
-      ((campaignsData ?? []) as Array<Record<string, any>>).map((campaign) => [
-        campaign.id,
-        campaign.name,
-      ])
-    );
-  }
 
   return (
     <WebsitePage>
       <WebsiteHero
-        eyebrow="Approval Queue"
-        title="Review assets before anything goes live."
-        description="Approve, reject, revise, or bulk approve assets from one queue. Approve All speeds up testing, but it does not publish anything by itself."
-        primaryAction={{ label: "Create Campaign", href: "/campaigns" }}
-        secondaryAction={{ label: "View Actions", href: "/actions" }}
+        eyebrow="Approvals"
+        title="Review, score, improve, and approve generated assets."
+        description="Use quality scoring directly inside the approval flow. Approve strong assets, or request an improved version when the review notes show the content can be better."
+        primaryAction={{ label: "Content Quality", href: "/content-quality" }}
+        secondaryAction={{ label: "Publishing Ready", href: "/publishing-ready" }}
       />
 
       <section className={websiteStyles.metricsGrid}>
         <WebsiteMetric
           label="Needs Review"
-          value={needsReviewCount}
-          description="Fresh assets waiting for your decision."
-          dot="gold"
-        />
-        <WebsiteMetric
-          label="Revision Requested"
-          value={revisionCount}
-          description="Original versions with a revision path."
-          dot="purple"
-        />
-        <WebsiteMetric
-          label="Total Queue"
-          value={assets.length}
-          description="All visible review items."
+          value={needsReviewCount ?? 0}
+          description="Active assets waiting for approval."
           dot="blue"
         />
         <WebsiteMetric
-          label="Next Step"
-          value="Approve"
-          description="Approve one at a time or approve the whole review queue."
+          label="Approved"
+          value={approvedCount ?? 0}
+          description="Active assets approved for next steps."
           dot="green"
+        />
+        <WebsiteMetric
+          label="Visible Queue"
+          value={assets.length}
+          description="Reviewable assets shown on this page."
+          dot="gold"
+        />
+        <WebsiteMetric
+          label="Quality Layer"
+          value="On"
+          description="Quality review controls are visible on each card."
+          dot="purple"
         />
       </section>
 
       <WebsiteSection
-        eyebrow="Bulk Approval"
-        title="Speed up trusted review batches"
-        description="Use this when a batch looks good and you want to move everything in the review queue to approved. This does not publish, send, or execute external actions."
+        eyebrow="Review Queue"
+        title="Assets awaiting approval"
+        description="Each card now includes a Quality Check panel with Review Quality and Request Improved Version controls."
       >
         <div className={websiteStyles.actionRow}>
-          <ApproveAllAssetsButton count={assets.length} />
+          <ApproveAllVisibleAssetsButton disabled={!assets.length} />
+          <Link href="/content-quality" className={websiteStyles.link}>
+            Open Content Quality →
+          </Link>
+          <Link href="/phase-two-reporting" className={websiteStyles.link}>
+            Open Reporting →
+          </Link>
         </div>
-      </WebsiteSection>
 
-      <WebsiteSection
-        eyebrow="Decision Workspace"
-        title="Assets waiting for review"
-        description="Each asset has clear content, status, version, history link, and action controls."
-      >
         {assets.length ? (
           <div className={websiteStyles.cardGrid}>
-            {assets.map((asset) => {
-              const campaignName = asset.campaign_id
-                ? campaignNameById.get(asset.campaign_id) ?? "Campaign unavailable"
-                : "No campaign";
+            {assets.map((asset) => (
+              <article key={asset.id} className={websiteStyles.card}>
+                <div className="flex flex-wrap gap-2">
+                  <WebsiteBadge status={asset.status ?? "needs_review"} />
+                  <span className={websiteStyles.badge}>{typeLabel(asset.asset_type)}</span>
+                  <span className={websiteStyles.badge}>Version {asset.version ?? 1}</span>
+                </div>
 
-              return (
-                <article key={asset.id} className={websiteStyles.card}>
-                  <div className="flex flex-wrap gap-2">
-                    <WebsiteBadge status={asset.status} />
-                    <span className={websiteStyles.badge}>Version {asset.version}</span>
-                    <span className={websiteStyles.badge}>{asset.asset_type}</span>
-                  </div>
+                <h3 className={websiteStyles.cardTitle} style={{ marginTop: 16 }}>
+                  <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
+                    {asset.title}
+                  </Link>
+                </h3>
 
-                  <h3 className={websiteStyles.cardTitle} style={{ marginTop: 16 }}>
-                    <AssetTitleLink
-                      assetId={asset.id}
-                      title={asset.title ?? `${asset.asset_type} asset`}
-                      className="text-slate-950 underline-offset-4 transition hover:text-[#0b4a7a] hover:underline"
-                    />
-                  </h3>
+                <p className={websiteStyles.cardMeta}>
+                  Created {formatDate(asset.created_at)}
+                </p>
 
-                  <p className={websiteStyles.cardMeta}>
-                    {campaignName} • Updated {formatDate(asset.updated_at)}
-                  </p>
+                <p className={websiteStyles.cardText}>
+                  {String(asset.content ?? "").slice(0, 360)}...
+                </p>
 
-                  <pre className={websiteStyles.cardContentBox}>{asset.content}</pre>
+                <ApprovalQualityWidget assetId={asset.id} />
 
-                  <div className={websiteStyles.cardActions}>
-                    <AssetReviewActions assetId={asset.id} />
-                    <RequestRevisionButton assetId={asset.id} assetTitle={asset.title} />
-                    <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
-                      View full asset and revision history →
-                    </Link>
-                  </div>
-                </article>
-              );
-            })}
+                <div className={websiteStyles.actionRow}>
+                  <ApprovalStatusActions assetId={asset.id} />
+                  <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
+                    Open full asset →
+                  </Link>
+                </div>
+              </article>
+            ))}
           </div>
         ) : (
           <div className={websiteStyles.empty}>
-            Nothing needs review right now. Generate a campaign asset pack and review items will appear here.
+            No active assets need review right now.
           </div>
         )}
       </WebsiteSection>
