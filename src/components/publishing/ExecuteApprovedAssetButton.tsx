@@ -11,15 +11,15 @@ function needsRecipient(assetType: string) {
 function buttonLabel(assetType: string) {
   switch (assetType) {
     case "linkedin_post":
-      return "Run LinkedIn Action";
+      return "Execute LinkedIn";
     case "facebook_post":
-      return "Run Facebook Action";
+      return "Execute Facebook";
     case "email":
       return "Create Gmail Draft";
     case "video_script":
-      return "Prepare GalaxyAI Request";
+      return "Prepare GalaxyAI";
     default:
-      return "Execute";
+      return "Execute Asset";
   }
 }
 
@@ -27,31 +27,32 @@ export function ExecuteApprovedAssetButton({
   assetId,
   assetType,
   disabled = false,
+  disabledReason,
 }: {
   assetId: string;
   assetType: string;
   disabled?: boolean;
+  disabledReason?: string | null;
 }) {
   const router = useRouter();
-  const [running, setRunning] = useState(false);
   const [recipientEmail, setRecipientEmail] = useState("");
+  const [running, setRunning] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleExecute() {
-    const formData = new FormData();
+  async function executeAsset() {
+    if (disabled) {
+      setError(disabledReason ?? "This asset is not ready to execute.");
+      return;
+    }
 
-    if (needsRecipient(assetType)) {
-      if (!recipientEmail.trim()) {
-        setError("Recipient email is required for Gmail drafts.");
-        return;
-      }
-
-      formData.set("recipient_email", recipientEmail.trim());
+    if (needsRecipient(assetType) && !recipientEmail.trim()) {
+      setError("Recipient email is required for Gmail drafts.");
+      return;
     }
 
     const confirmed = window.confirm(
-      "Execute this approved asset? VIP will record the run and prevent duplicate completed executions for this asset/channel."
+      "Execute this approved asset now? This should only be used when the asset is due according to its publishing schedule."
     );
 
     if (!confirmed) return;
@@ -61,6 +62,12 @@ export function ExecuteApprovedAssetButton({
     setError(null);
 
     try {
+      const formData = new FormData();
+
+      if (recipientEmail.trim()) {
+        formData.set("recipient_email", recipientEmail.trim());
+      }
+
       const response = await fetch(`/api/publishing/assets/${assetId}/execute`, {
         method: "POST",
         body: formData,
@@ -73,11 +80,11 @@ export function ExecuteApprovedAssetButton({
       }
 
       if (result.duplicatePrevented) {
-        setMessage("Already executed for this channel. No duplicate was created.");
+        setMessage(result.message ?? "Duplicate execution prevented.");
       } else if (result.preparedOnly) {
-        setMessage("GalaxyAI media request prepared.");
+        setMessage("Asset prepared for the next provider step.");
       } else {
-        setMessage("Execution completed and recorded.");
+        setMessage("Asset execution completed.");
       }
 
       router.refresh();
@@ -89,25 +96,31 @@ export function ExecuteApprovedAssetButton({
   }
 
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-2">
       {needsRecipient(assetType) ? (
         <input
-          type="email"
           value={recipientEmail}
           onChange={(event) => setRecipientEmail(event.target.value)}
           placeholder="Recipient email"
           className={formStyles.input}
+          type="email"
+          disabled={disabled || running}
         />
       ) : null}
 
       <button
         type="button"
-        onClick={handleExecute}
-        disabled={disabled || running}
+        onClick={executeAsset}
+        disabled={running || disabled}
         className={formStyles.submit}
+        title={disabledReason ?? undefined}
       >
-        {running ? "Running..." : buttonLabel(assetType)}
+        {running ? "Working..." : buttonLabel(assetType)}
       </button>
+
+      {disabled && disabledReason ? (
+        <p className={formStyles.description}>{disabledReason}</p>
+      ) : null}
 
       {message ? <p className={formStyles.message}>{message}</p> : null}
       {error ? <p className={formStyles.error}>{error}</p> : null}

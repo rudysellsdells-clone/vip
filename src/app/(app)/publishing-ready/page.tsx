@@ -9,7 +9,13 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
-import { PUBLISHABLE_ASSET_TYPES } from "@/lib/publishing/asset-routing";
+import { getPublishingRoute, PUBLISHABLE_ASSET_TYPES } from "@/lib/publishing/asset-routing";
+import {
+  formatScheduleTime,
+  getScheduleStatus,
+  scheduleBlockReason,
+  scheduleStatusLabel,
+} from "@/lib/publishing/schedule-status";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -43,6 +49,140 @@ function channelLabel(assetType: string) {
   }
 }
 
+function completedRunKey(asset: Record<string, any>) {
+  const route = getPublishingRoute(asset.asset_type);
+  return `${asset.id}:${route?.channel ?? channelLabel(asset.asset_type).toLowerCase()}`;
+}
+
+function groupAssets({
+  assets,
+  completedKeys,
+}: {
+  assets: Array<Record<string, any>>;
+  completedKeys: Set<string>;
+}) {
+  const dueNow: Array<Record<string, any>> = [];
+  const upcoming: Array<Record<string, any>> = [];
+  const unscheduled: Array<Record<string, any>> = [];
+  const alreadyExecuted: Array<Record<string, any>> = [];
+
+  for (const asset of assets) {
+    if (completedKeys.has(completedRunKey(asset))) {
+      alreadyExecuted.push(asset);
+      continue;
+    }
+
+    const scheduleStatus = getScheduleStatus(asset);
+
+    if (scheduleStatus === "due_now") {
+      dueNow.push(asset);
+    } else if (scheduleStatus === "upcoming") {
+      upcoming.push(asset);
+    } else {
+      unscheduled.push(asset);
+    }
+  }
+
+  return {
+    dueNow,
+    upcoming,
+    unscheduled,
+    alreadyExecuted,
+  };
+}
+
+function AssetCard({
+  asset,
+  executable,
+  disabledReason,
+}: {
+  asset: Record<string, any>;
+  executable: boolean;
+  disabledReason?: string | null;
+}) {
+  const scheduleStatus = getScheduleStatus(asset);
+
+  return (
+    <article className={websiteStyles.card}>
+      <div className="flex flex-wrap gap-2">
+        <WebsiteBadge status={asset.status ?? "approved"} />
+        <span className={websiteStyles.badge}>{typeLabel(asset.asset_type)}</span>
+        <span className={websiteStyles.badge}>{channelLabel(asset.asset_type)}</span>
+        <span className={websiteStyles.badge}>{scheduleStatusLabel(scheduleStatus)}</span>
+      </div>
+
+      <h3 className={websiteStyles.cardTitle} style={{ marginTop: 16 }}>
+        <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
+          {asset.title}
+        </Link>
+      </h3>
+
+      <p className={websiteStyles.cardMeta}>
+        Scheduled: {formatScheduleTime(asset.scheduled_publish_at)} •{" "}
+        {asset.publish_timezone ?? "America/Chicago"}
+      </p>
+
+      <p className={websiteStyles.cardText}>
+        {String(asset.content ?? "").slice(0, 220)}...
+      </p>
+
+      {asset.scheduling_notes ? (
+        <p className={websiteStyles.cardText}>
+          <strong>Schedule notes:</strong> {asset.scheduling_notes}
+        </p>
+      ) : null}
+
+      <div className={websiteStyles.actionRow}>
+        <ExecuteApprovedAssetButton
+          assetId={asset.id}
+          assetType={asset.asset_type}
+          disabled={!executable}
+          disabledReason={disabledReason}
+        />
+        <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
+          Open asset →
+        </Link>
+        <Link href="/publishing-schedule" className={websiteStyles.link}>
+          Adjust schedule →
+        </Link>
+      </div>
+    </article>
+  );
+}
+
+function AssetSection({
+  eyebrow,
+  title,
+  description,
+  assets,
+  executable,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  assets: Array<Record<string, any>>;
+  executable: boolean;
+}) {
+  return (
+    <WebsiteSection eyebrow={eyebrow} title={title} description={description}>
+      {assets.length ? (
+        <div className={websiteStyles.cardGrid}>
+          {assets.map((asset) => (
+            <AssetCard
+              key={asset.id}
+              asset={asset}
+              executable={executable}
+              disabledReason={executable ? null : scheduleBlockReason(asset)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className={websiteStyles.empty}>No assets in this section.</div>
+      )}
+    </WebsiteSection>
+  );
+}
+
 export default async function PublishingReadyPage() {
   const supabase = untypedSupabase(await createClient());
 
@@ -59,122 +199,102 @@ export default async function PublishingReadyPage() {
     .select("*")
     .eq("user_id", user.id)
     .eq("status", "approved")
+    .is("archived_at", null)
     .in("asset_type", PUBLISHABLE_ASSET_TYPES)
+    .order("scheduled_publish_at", { ascending: true, nullsFirst: false })
     .order("updated_at", { ascending: false })
-    .limit(24);
+    .limit(60);
 
   const { data: runsData } = await supabase
     .from("publishing_execution_runs")
     .select("*")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
-    .limit(20);
+    .limit(30);
 
   const approvedAssets = (approvedData ?? []) as Array<Record<string, any>>;
   const runs = (runsData ?? []) as Array<Record<string, any>>;
-  const completed = runs.filter((run) => run.status === "completed").length;
+  const completedRuns = runs.filter((run) => run.status === "completed");
   const failed = runs.filter((run) => run.status === "failed").length;
   const prepared = runs.filter((run) => run.status === "prepared").length;
 
   const completedKeys = new Set(
-    runs
-      .filter((run) => run.status === "completed")
-      .map((run) => `${run.asset_id}:${run.channel}`)
+    completedRuns.map((run) => `${run.asset_id}:${run.channel}`)
   );
+
+  const { dueNow, upcoming, unscheduled, alreadyExecuted } = groupAssets({
+    assets: approvedAssets,
+    completedKeys,
+  });
 
   return (
     <WebsitePage>
       <WebsiteHero
         eyebrow="Publishing Readiness"
-        title="Execute approved assets safely."
-        description="Approved repurposed assets can now move toward LinkedIn, Facebook, Gmail drafts, or GalaxyAI media requests with execution tracking and duplicate protection."
-        primaryAction={{ label: "Review Assets", href: "/approvals" }}
-        secondaryAction={{ label: "Repurposing", href: "/content-repurposing" }}
+        title="Execute approved assets only when they are due."
+        description="Publishing Ready is now schedule-aware. Approved assets are grouped by due now, upcoming, unscheduled, and already executed so VIP does not blast everything at once."
+        primaryAction={{ label: "Publishing Schedule", href: "/publishing-schedule" }}
+        secondaryAction={{ label: "Ready Queue", href: "/ready-for-publishing" }}
       />
 
       <section className={websiteStyles.metricsGrid}>
         <WebsiteMetric
-          label="Approved Assets"
-          value={approvedAssets.length}
-          description="Ready for execution."
-          dot="blue"
-        />
-        <WebsiteMetric
-          label="Completed Runs"
-          value={completed}
-          description="Execution records completed."
+          label="Due Now"
+          value={dueNow.length}
+          description="Approved assets ready to execute."
           dot="green"
         />
         <WebsiteMetric
-          label="Prepared"
-          value={prepared}
-          description="Prepared but not fully executed."
+          label="Upcoming"
+          value={upcoming.length}
+          description="Approved assets scheduled for later."
+          dot="blue"
+        />
+        <WebsiteMetric
+          label="Unscheduled"
+          value={unscheduled.length}
+          description="Approved assets missing publish time."
           dot="gold"
         />
         <WebsiteMetric
-          label="Failed"
-          value={failed}
-          description="Needs review or reconfiguration."
+          label="Executed"
+          value={alreadyExecuted.length}
+          description="Approved assets with completed runs."
           dot="purple"
         />
       </section>
 
-      <WebsiteSection
-        eyebrow="Ready"
-        title="Approved assets ready to run"
-        description="VIP only executes approved assets. Completed runs are tracked to help prevent duplicate execution."
-      >
-        {approvedAssets.length ? (
-          <div className={websiteStyles.cardGrid}>
-            {approvedAssets.map((asset) => {
-              const channel = channelLabel(asset.asset_type).toLowerCase();
-              const alreadyCompleted = completedKeys.has(`${asset.id}:${channel}`);
+      <AssetSection
+        eyebrow="Due Now"
+        title="Approved assets ready to execute"
+        description="Only this section allows execution. These assets are approved and their scheduled publish time has arrived."
+        assets={dueNow}
+        executable={true}
+      />
 
-              return (
-                <article key={asset.id} className={websiteStyles.card}>
-                  <div className="flex flex-wrap gap-2">
-                    <WebsiteBadge status={asset.status ?? "approved"} />
-                    <span className={websiteStyles.badge}>{typeLabel(asset.asset_type)}</span>
-                    <span className={websiteStyles.badge}>{channelLabel(asset.asset_type)}</span>
-                    {alreadyCompleted ? (
-                      <span className={websiteStyles.badge}>Completed run exists</span>
-                    ) : null}
-                  </div>
+      <AssetSection
+        eyebrow="Upcoming"
+        title="Approved assets scheduled for later"
+        description="These assets are approved, but their scheduled publish time has not arrived yet."
+        assets={upcoming}
+        executable={false}
+      />
 
-                  <h3 className={websiteStyles.cardTitle} style={{ marginTop: 16 }}>
-                    <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
-                      {asset.title}
-                    </Link>
-                  </h3>
+      <AssetSection
+        eyebrow="Unscheduled"
+        title="Approved assets missing publish time"
+        description="These assets need a scheduled publish date/time before execution is allowed."
+        assets={unscheduled}
+        executable={false}
+      />
 
-                  <p className={websiteStyles.cardMeta}>
-                    Updated {formatDate(asset.updated_at ?? asset.created_at)}
-                  </p>
-
-                  <p className={websiteStyles.cardText}>
-                    {String(asset.content ?? "").slice(0, 220)}...
-                  </p>
-
-                  <div className={websiteStyles.actionRow}>
-                    <ExecuteApprovedAssetButton
-                      assetId={asset.id}
-                      assetType={asset.asset_type}
-                      disabled={alreadyCompleted}
-                    />
-                    <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
-                      Open asset →
-                    </Link>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        ) : (
-          <div className={websiteStyles.empty}>
-            No approved publishable assets yet. Approve LinkedIn, Facebook, email, or video assets to see them here.
-          </div>
-        )}
-      </WebsiteSection>
+      <AssetSection
+        eyebrow="Completed"
+        title="Already executed assets"
+        description="These approved assets already have completed publishing execution runs."
+        assets={alreadyExecuted}
+        executable={false}
+      />
 
       <WebsiteSection
         eyebrow="History"

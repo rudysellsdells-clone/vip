@@ -5,6 +5,7 @@ import {
   getPublishingRoute,
   getZapierAppForChannel,
 } from "@/lib/publishing/asset-routing";
+import { canExecuteBySchedule, scheduleBlockReason } from "@/lib/publishing/schedule-status";
 import { executeZapierMcpWriteAction } from "@/lib/zapier/mcp-write-client";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
@@ -77,6 +78,9 @@ async function createRun({
         assetType: asset.asset_type,
         assetTitle: asset.title,
         recipientEmail: recipientEmail || null,
+        scheduled_publish_at: asset.scheduled_publish_at ?? null,
+        publish_timezone: asset.publish_timezone ?? null,
+        scheduleAwareExecution: true,
       },
     })
     .select("*")
@@ -123,6 +127,18 @@ export async function POST(request: Request, context: RouteContext) {
   if (asset.status !== "approved") {
     return NextResponse.json(
       { error: "Only approved assets can be executed." },
+      { status: 400 }
+    );
+  }
+
+  if (!canExecuteBySchedule(asset)) {
+    return NextResponse.json(
+      {
+        error: scheduleBlockReason(asset),
+        scheduled_publish_at: asset.scheduled_publish_at ?? null,
+        publish_timezone: asset.publish_timezone ?? null,
+        scheduling_status: asset.scheduling_status ?? null,
+      },
       { status: 400 }
     );
   }
@@ -213,6 +229,7 @@ export async function POST(request: Request, context: RouteContext) {
           assetId: asset.id,
           channel: route.channel,
           provider: route.provider,
+          scheduled_publish_at: asset.scheduled_publish_at ?? null,
         },
       });
 
@@ -262,6 +279,15 @@ export async function POST(request: Request, context: RouteContext) {
       return NextResponse.json({ error: completedError.message }, { status: 400 });
     }
 
+    await supabase
+      .from("generated_assets")
+      .update({
+        scheduling_status: "published",
+      })
+      .eq("id", asset.id)
+      .eq("user_id", user.id)
+      .is("archived_at", null);
+
     await supabase.from("activity_log").insert({
       user_id: user.id,
       activity_type: "publishing_execution_completed",
@@ -273,6 +299,7 @@ export async function POST(request: Request, context: RouteContext) {
         channel: route.channel,
         provider: route.provider,
         actionKey: route.actionKey,
+        scheduled_publish_at: asset.scheduled_publish_at ?? null,
         result,
       },
     });
@@ -295,6 +322,7 @@ export async function POST(request: Request, context: RouteContext) {
         assetTitle: asset.title,
         assetType: asset.asset_type,
         route,
+        scheduled_publish_at: asset.scheduled_publish_at ?? null,
       },
     });
 
