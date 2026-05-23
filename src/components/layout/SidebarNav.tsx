@@ -42,6 +42,11 @@ const navGroups: NavGroup[] = [
         description: "Monthly strategy, weekly campaigns, and planned assets.",
       },
       {
+        label: "Publishing Schedule",
+        href: "/publishing-schedule",
+        description: "Assign publish dates and times across the month.",
+      },
+      {
         label: "Quality Automation",
         href: "/quality-automation",
         description: "Apply quality gates to reviewed assets in bulk.",
