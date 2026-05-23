@@ -42,6 +42,11 @@ const navGroups: NavGroup[] = [
         description: "Monthly strategy, weekly campaigns, and planned assets.",
       },
       {
+        label: "Ready Queue",
+        href: "/ready-for-publishing",
+        description: "Assets that passed quality gates and are ready for next steps.",
+      },
+      {
         label: "Publishing Ready",
         href: "/publishing-ready",
         description: "Execute approved assets and track runs.",
@@ -144,7 +149,7 @@ const navGroups: NavGroup[] = [
       {
         label: "Settings",
         href: "/settings",
-        description: "Manage setup and product configuration.",
+        description: "Manage setup, quality thresholds, and product configuration.",
       },
     ],
   },
