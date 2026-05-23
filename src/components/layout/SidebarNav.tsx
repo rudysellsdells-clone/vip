@@ -32,6 +32,11 @@ const navGroups: NavGroup[] = [
         description: "Authority, prospecting, repurposing, and execution hub.",
       },
       {
+        label: "Reporting",
+        href: "/phase-two-reporting",
+        description: "Proof of work for planning, assets, drafts, and execution.",
+      },
+      {
         label: "Content Calendar",
         href: "/content-calendar",
         description: "Monthly strategy, weekly campaigns, and planned assets.",
@@ -55,6 +60,11 @@ const navGroups: NavGroup[] = [
         label: "Actions",
         href: "/actions",
         description: "Execute approved external actions.",
+      },
+      {
+        label: "Archive",
+        href: "/archive",
+        description: "Review archived campaigns and assets.",
       },
     ],
   },
