@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { QualityReviewButton } from "@/components/content-quality/QualityReviewButton";
+import { RequestQualityResubmissionButton } from "@/components/content-quality/RequestQualityResubmissionButton";
 import {
   WebsiteBadge,
   WebsiteHero,
@@ -107,8 +108,8 @@ export default async function ContentQualityPage() {
     <WebsitePage>
       <WebsiteHero
         eyebrow="Content Quality"
-        title="Score content before it reaches the real world."
-        description="Review active assets for brand voice, clarity, CTA strength, SEO/AIO readiness, and conversion usefulness."
+        title="Score content, then request a stronger version."
+        description="Review active assets for brand voice, clarity, CTA strength, SEO/AIO readiness, and conversion usefulness. Then request an improved resubmission based on the review notes."
         primaryAction={{ label: "Review Queue", href: "/approvals" }}
         secondaryAction={{ label: "Reporting", href: "/phase-two-reporting" }}
       />
@@ -133,17 +134,17 @@ export default async function ContentQualityPage() {
           dot="purple"
         />
         <WebsiteMetric
-          label="Strong"
-          value={strongCount}
-          description="Reviews with strong status."
+          label="Needs Revision"
+          value={needsRevisionCount}
+          description="Reviews that recommend improvement."
           dot="green"
         />
       </section>
 
       <WebsiteSection
         eyebrow="Review"
-        title="Active assets to score"
-        description="Run a review any time. VIP keeps previous reviews, so you can compare quality over time."
+        title="Active assets to score and improve"
+        description="Run a quality review, then request an improved version when the notes show the content can be stronger."
       >
         {assets.length ? (
           <div className={websiteStyles.cardGrid}>
@@ -193,6 +194,9 @@ export default async function ContentQualityPage() {
 
                   <div className={websiteStyles.actionRow}>
                     <QualityReviewButton assetId={asset.id} />
+                    {latestReview ? (
+                      <RequestQualityResubmissionButton reviewId={latestReview.id} />
+                    ) : null}
                     <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
                       Open asset →
                     </Link>
@@ -216,7 +220,7 @@ export default async function ContentQualityPage() {
       <WebsiteSection
         eyebrow="Recent Reviews"
         title="Latest quality reviews"
-        description="Use the review notes to tighten content before approval, publishing, or outreach."
+        description="Use the review notes to request a stronger version before approval, publishing, or outreach."
       >
         {reviews.length ? (
           <div className={websiteStyles.cardGrid}>
@@ -259,9 +263,12 @@ export default async function ContentQualityPage() {
                   </p>
                 ) : null}
 
-                <Link href={`/assets/${review.asset_id}`} className={websiteStyles.link}>
-                  Open asset →
-                </Link>
+                <div className={websiteStyles.actionRow}>
+                  <RequestQualityResubmissionButton reviewId={review.id} />
+                  <Link href={`/assets/${review.asset_id}`} className={websiteStyles.link}>
+                    Open asset →
+                  </Link>
+                </div>
               </article>
             ))}
           </div>
