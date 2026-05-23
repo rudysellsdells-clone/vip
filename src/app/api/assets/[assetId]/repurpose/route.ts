@@ -34,10 +34,14 @@ export async function POST(_request: Request, context: RouteContext) {
     .select("*")
     .eq("id", assetId)
     .eq("user_id", user.id)
+    .is("archived_at", null)
     .single();
 
   if (sourceError || !sourceAsset) {
-    return NextResponse.json({ error: "Source asset not found." }, { status: 404 });
+    return NextResponse.json(
+      { error: "Source asset not found or has been archived." },
+      { status: 404 }
+    );
   }
 
   if (!SOURCE_TYPES.has(sourceAsset.asset_type)) {
