@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { QualityGateActionPanel } from "@/components/content-quality/QualityGateActionPanel";
 import formStyles from "@/components/forms/VipForm.module.css";
 import { websiteStyles } from "@/components/website-ui/WebsitePage";
 
@@ -62,6 +63,7 @@ export function ApprovalQualityWidget({
   const [runningReview, setRunningReview] = useState(false);
   const [runningResubmit, setRunningResubmit] = useState(false);
   const [newAssetId, setNewAssetId] = useState<string | null>(null);
+  const [gateRefreshKey, setGateRefreshKey] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -122,6 +124,7 @@ export function ApprovalQualityWidget({
       }
 
       setReview(result.review ?? null);
+      setGateRefreshKey((value) => value + 1);
       setMessage(`Quality review complete. Score: ${result.review?.overall_score ?? "N/A"}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected review error.");
@@ -219,6 +222,19 @@ export function ApprovalQualityWidget({
         </>
       )}
 
+      <div className={websiteStyles.card} style={{ marginTop: 12 }}>
+        <h4 className={websiteStyles.cardTitle}>Quality Gate</h4>
+        <p className={websiteStyles.cardText}>
+          Compare this review against the editable thresholds in Settings.
+        </p>
+        <QualityGateActionPanel
+          key={`${assetId}-${review?.id ?? "none"}-${gateRefreshKey}`}
+          assetId={assetId}
+          reviewId={review?.id ?? null}
+          disabled={!review}
+        />
+      </div>
+
       <div className={websiteStyles.actionRow}>
         <button
           type="button"
@@ -237,6 +253,10 @@ export function ApprovalQualityWidget({
         >
           {runningResubmit ? "Creating Version..." : "Request Improved Version"}
         </button>
+
+        <Link href="/settings" className={websiteStyles.link}>
+          Quality Settings →
+        </Link>
 
         <Link href="/content-quality" className={websiteStyles.link}>
           Open Content Quality →

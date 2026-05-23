@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { QualityReviewButton } from "@/components/content-quality/QualityReviewButton";
 import { RequestQualityResubmissionButton } from "@/components/content-quality/RequestQualityResubmissionButton";
+import { QualityGateActionPanel } from "@/components/content-quality/QualityGateActionPanel";
 import {
   WebsiteBadge,
   WebsiteHero,
@@ -108,10 +109,10 @@ export default async function ContentQualityPage() {
     <WebsitePage>
       <WebsiteHero
         eyebrow="Content Quality"
-        title="Score content, then request a stronger version."
-        description="Review active assets for brand voice, clarity, CTA strength, SEO/AIO readiness, and conversion usefulness. Then request an improved resubmission based on the review notes."
-        primaryAction={{ label: "Review Queue", href: "/approvals" }}
-        secondaryAction={{ label: "Reporting", href: "/phase-two-reporting" }}
+        title="Score content, gate it, then request a stronger version."
+        description="Review active assets, compare them against editable thresholds, and request improved resubmissions when needed."
+        primaryAction={{ label: "Quality Settings", href: "/settings" }}
+        secondaryAction={{ label: "Approvals", href: "/approvals" }}
       />
 
       <section className={websiteStyles.metricsGrid}>
@@ -143,8 +144,8 @@ export default async function ContentQualityPage() {
 
       <WebsiteSection
         eyebrow="Review"
-        title="Active assets to score and improve"
-        description="Run a quality review, then request an improved version when the notes show the content can be stronger."
+        title="Active assets to score, gate, and improve"
+        description="Run a quality review, apply the current quality gate thresholds, then request an improved version when needed."
       >
         {assets.length ? (
           <div className={websiteStyles.cardGrid}>
@@ -189,6 +190,14 @@ export default async function ContentQualityPage() {
                         SEO/AIO {latestReview.seo_aio_score}/100 • Conversion{" "}
                         {latestReview.conversion_score}/100
                       </p>
+
+                      <div className={websiteStyles.card} style={{ marginTop: 12 }}>
+                        <h4 className={websiteStyles.cardTitle}>Quality Gate</h4>
+                        <QualityGateActionPanel
+                          assetId={asset.id}
+                          reviewId={latestReview.id}
+                        />
+                      </div>
                     </div>
                   ) : null}
 
@@ -255,6 +264,14 @@ export default async function ContentQualityPage() {
                     </div>
                   </div>
                 ) : null}
+
+                <div className={websiteStyles.card} style={{ marginTop: 12 }}>
+                  <h4 className={websiteStyles.cardTitle}>Quality Gate</h4>
+                  <QualityGateActionPanel
+                    assetId={review.asset_id}
+                    reviewId={review.id}
+                  />
+                </div>
 
                 {review.suggested_revision ? (
                   <p className={websiteStyles.cardText}>
