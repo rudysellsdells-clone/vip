@@ -42,6 +42,11 @@ const navGroups: NavGroup[] = [
         description: "Monthly strategy, weekly campaigns, and planned assets.",
       },
       {
+        label: "Quality Automation",
+        href: "/quality-automation",
+        description: "Apply quality gates to reviewed assets in bulk.",
+      },
+      {
         label: "Ready Queue",
         href: "/ready-for-publishing",
         description: "Assets that passed quality gates and are ready for next steps.",
