@@ -14,13 +14,87 @@ function normalizeMonth(value: unknown) {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function campaignDescription(week: ReturnType<typeof buildMonthlyCampaignPlan>[number]) {
+function campaignSummary(week: ReturnType<typeof buildMonthlyCampaignPlan>[number]) {
   return [
     week.campaignAngle,
     "",
     `Campaign week ${week.weekNumber}: ${week.weekStartDate} to ${week.weekEndDate}.`,
     "Includes 1 blog post, 5 LinkedIn posts, 5 Facebook posts, 1 email, and 1 video script.",
   ].join("\n");
+}
+
+async function createCampaign({
+  supabase,
+  userId,
+  month,
+  campaignTheme,
+  businessContext,
+  week,
+}: {
+  supabase: any;
+  userId: string;
+  month: string;
+  campaignTheme: string;
+  businessContext: string;
+  week: ReturnType<typeof buildMonthlyCampaignPlan>[number];
+}) {
+  /*
+    Keep the campaigns insert intentionally minimal.
+
+    Your campaigns table has shown that it may not include columns like:
+    - title
+    - description
+    - calendar_notes
+
+    So this route only inserts fields we explicitly added or already know are needed:
+    - user_id
+    - name
+    - campaign_month
+    - campaign_week_number
+    - campaign_week_start_date
+    - campaign_week_end_date
+    - planned_start_date
+    - planned_end_date
+    - metadata
+
+    All rich text/details are stored in metadata so the generator does not fail on optional columns.
+  */
+  const campaignPayload = {
+    user_id: userId,
+    name: week.campaignName,
+    campaign_month: month,
+    campaign_week_number: week.weekNumber,
+    campaign_week_start_date: week.weekStartDate,
+    campaign_week_end_date: week.weekEndDate,
+    planned_start_date: week.weekStartDate,
+    planned_end_date: week.weekEndDate,
+    metadata: {
+      generatedFrom: "monthly_campaign_calendar",
+      campaignTheme,
+      businessContext,
+      campaignName: week.campaignName,
+      campaignAngle: week.campaignAngle,
+      campaignSummary: campaignSummary(week),
+      weeklyAssetPackage: {
+        blog_post: 1,
+        linkedin_post: 5,
+        facebook_post: 5,
+        email: 1,
+        video_script: 1,
+      },
+    },
+  };
+
+  const { data, error } = await supabase
+    .from("campaigns")
+    .insert(campaignPayload)
+    .select("*")
+    .single();
+
+  return {
+    data,
+    error,
+  };
 }
 
 export async function POST(request: Request) {
@@ -72,41 +146,14 @@ export async function POST(request: Request) {
   const errors: string[] = [];
 
   for (const week of plan) {
-    /*
-      Keep this insert conservative.
-      Supabase/PostgREST can lag on newly added columns in its schema cache, so this route avoids
-      nonessential campaign columns like calendar_notes. Campaign notes are still preserved inside
-      metadata.calendarNotes.
-    */
-    const { data: campaign, error: campaignError } = await supabase
-      .from("campaigns")
-      .insert({
-        user_id: user.id,
-        title: week.campaignName,
-        name: week.campaignName,
-        description: campaignDescription(week),
-        campaign_month: month,
-        campaign_week_number: week.weekNumber,
-        campaign_week_start_date: week.weekStartDate,
-        campaign_week_end_date: week.weekEndDate,
-        planned_start_date: week.weekStartDate,
-        planned_end_date: week.weekEndDate,
-        metadata: {
-          generatedFrom: "monthly_campaign_calendar",
-          campaignTheme,
-          businessContext,
-          calendarNotes: week.campaignAngle,
-          weeklyAssetPackage: {
-            blog_post: 1,
-            linkedin_post: 5,
-            facebook_post: 5,
-            email: 1,
-            video_script: 1,
-          },
-        },
-      })
-      .select("*")
-      .single();
+    const { data: campaign, error: campaignError } = await createCampaign({
+      supabase,
+      userId: user.id,
+      month,
+      campaignTheme,
+      businessContext,
+      week,
+    });
 
     if (campaignError || !campaign) {
       errors.push(`Week ${week.weekNumber}: ${campaignError?.message ?? "Unable to create campaign."}`);
