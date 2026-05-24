@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { DeleteMonthlyCampaignButton } from "@/components/content-calendar/DeleteMonthlyCampaignButton";
 import { GenerateMonthlyCampaignsButton } from "@/components/content-calendar/GenerateMonthlyCampaignsButton";
 import { MonthSelector } from "@/components/content-calendar/MonthSelector";
 import { MonthlyCalendarDayBox } from "@/components/content-calendar/MonthlyCalendarDayBox";
@@ -194,7 +195,7 @@ export default async function MonthlyContentCalendarPage({ searchParams }: PageP
       <WebsiteHero
         eyebrow="Monthly Content Calendar"
         title={`${monthLabel(selectedMonth)} campaign calendar`}
-        description="View campaigns, planned content, and generated assets by intended publish month. Missing-date records are now shown below instead of disappearing."
+        description="View campaigns, planned content, and generated assets by intended publish month. Reset a month if you want to change strategy before anything goes out."
         primaryAction={{ label: "Content Calendar", href: "/content-calendar" }}
         secondaryAction={{ label: "Publishing Schedule", href: "/publishing-schedule" }}
       />
@@ -202,7 +203,7 @@ export default async function MonthlyContentCalendarPage({ searchParams }: PageP
       <WebsiteSection
         eyebrow="Month"
         title="Select or generate a campaign month"
-        description="The dropdown includes rolling months and detected content months. Use the unplaced records section to find content missing calendar metadata."
+        description="The dropdown includes rolling months and detected content months. Generate a package, review it, or reset the month before publishing."
       >
         <div className={websiteStyles.cardGrid}>
           <article className={websiteStyles.card}>
@@ -223,6 +224,10 @@ export default async function MonthlyContentCalendarPage({ searchParams }: PageP
 
           <article className={websiteStyles.card}>
             <GenerateMonthlyCampaignsButton defaultMonth={selectedMonth || monthValueFromDate(new Date())} />
+          </article>
+
+          <article className={websiteStyles.card}>
+            <DeleteMonthlyCampaignButton month={selectedMonth} />
           </article>
         </div>
       </WebsiteSection>
@@ -281,7 +286,7 @@ export default async function MonthlyContentCalendarPage({ searchParams }: PageP
         <WebsiteSection
           eyebrow="Needs Placement"
           title="Unplaced records"
-          description="These records loaded from the database but do not have enough calendar metadata to appear in a month. Run the rehome SQL to assign them to June."
+          description="These records loaded from the database but do not have enough calendar metadata to appear in a month."
         >
           <div className={websiteStyles.cardGrid}>
             {unplacedRecords.slice(0, 36).map(({ source, row }) => (
