@@ -1,7 +1,6 @@
 import { PUBLISHABLE_ASSET_TYPES } from "@/lib/publishing/asset-routing";
 
 export const MANUAL_PUBLISHING_READY_ASSET_TYPES = [
-  "blog_post",
   "white_paper",
   "authority_asset",
   "prospect_what_if_story",
@@ -17,8 +16,6 @@ export function isManualPublishingAssetType(assetType: string | null | undefined
 
 export function manualPublishingLabel(assetType: string | null | undefined) {
   switch (assetType) {
-    case "blog_post":
-      return "Website / Blog";
     case "white_paper":
       return "Lead Magnet / Sales Enablement";
     case "authority_asset":
@@ -32,8 +29,6 @@ export function manualPublishingLabel(assetType: string | null | undefined) {
 
 export function manualPublishingNextStep(assetType: string | null | undefined) {
   switch (assetType) {
-    case "blog_post":
-      return "Publish this manually to the website/blog, then mark it published.";
     case "white_paper":
       return "Upload or attach this to the correct lead magnet/sales enablement workflow, then mark it published.";
     case "authority_asset":

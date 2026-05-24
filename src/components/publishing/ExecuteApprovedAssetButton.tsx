@@ -18,9 +18,19 @@ function buttonLabel(assetType: string) {
       return "Create Gmail Draft";
     case "video_script":
       return "Prepare GalaxyAI";
+    case "blog_post":
+      return "Create WordPress Draft";
     default:
       return "Execute Asset";
   }
+}
+
+function confirmText(assetType: string) {
+  if (assetType === "blog_post") {
+    return "Send this approved blog post to WordPress through Zapier? The recommended first step is creating a WordPress draft.";
+  }
+
+  return "Execute this approved asset now? This should only be used when the asset is due according to its publishing schedule.";
 }
 
 export function ExecuteApprovedAssetButton({
@@ -51,9 +61,7 @@ export function ExecuteApprovedAssetButton({
       return;
     }
 
-    const confirmed = window.confirm(
-      "Execute this approved asset now? This should only be used when the asset is due according to its publishing schedule."
-    );
+    const confirmed = window.confirm(confirmText(assetType));
 
     if (!confirmed) return;
 
@@ -83,6 +91,8 @@ export function ExecuteApprovedAssetButton({
         setMessage(result.message ?? "Duplicate execution prevented.");
       } else if (result.preparedOnly) {
         setMessage("Asset prepared for the next provider step.");
+      } else if (assetType === "blog_post") {
+        setMessage("WordPress draft request completed.");
       } else {
         setMessage("Asset execution completed.");
       }

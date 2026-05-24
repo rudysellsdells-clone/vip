@@ -51,6 +51,8 @@ function channelLabel(assetType: string) {
       return "Gmail";
     case "video_script":
       return "GalaxyAI";
+    case "blog_post":
+      return "WordPress";
     default:
       return manualPublishingLabel(assetType);
   }
@@ -120,9 +122,8 @@ function AssetCard({
         <span className={websiteStyles.badge}>{typeLabel(asset.asset_type)}</span>
         <span className={websiteStyles.badge}>{channelLabel(asset.asset_type)}</span>
         <span className={websiteStyles.badge}>{scheduleStatusLabel(scheduleStatus)}</span>
-        {manualPublishing ? (
-          <span className={websiteStyles.badge}>Manual publish</span>
-        ) : null}
+        {manualPublishing ? <span className={websiteStyles.badge}>Manual publish</span> : null}
+        {asset.asset_type === "blog_post" ? <span className={websiteStyles.badge}>Zapier → WordPress</span> : null}
       </div>
 
       <h3 className={websiteStyles.cardTitle} style={{ marginTop: 16 }}>
@@ -132,8 +133,7 @@ function AssetCard({
       </h3>
 
       <p className={websiteStyles.cardMeta}>
-        Scheduled: {formatScheduleTime(asset.scheduled_publish_at)} •{" "}
-        {asset.publish_timezone ?? "America/Chicago"}
+        Scheduled: {formatScheduleTime(asset.scheduled_publish_at)} • {asset.publish_timezone ?? "America/Chicago"}
       </p>
 
       <p className={websiteStyles.cardText}>
@@ -143,6 +143,12 @@ function AssetCard({
       {asset.scheduling_notes ? (
         <p className={websiteStyles.cardText}>
           <strong>Schedule notes:</strong> {asset.scheduling_notes}
+        </p>
+      ) : null}
+
+      {asset.asset_type === "blog_post" ? (
+        <p className={websiteStyles.cardText}>
+          <strong>Next:</strong> Create a WordPress draft through Zapier, then review/publish in WordPress.
         </p>
       ) : null}
 
@@ -189,7 +195,7 @@ function AssetCard({
         ) : null}
       </div>
 
-      {manualPublishing && !executable && disabledReason ? (
+      {(manualPublishing || asset.asset_type === "blog_post") && !executable && disabledReason ? (
         <p className={websiteStyles.cardMeta}>{disabledReason}</p>
       ) : null}
     </article>
@@ -271,15 +277,15 @@ export default async function PublishingReadyPage() {
     completedKeys,
   });
 
-  const manualItems = approvedAssets.filter((asset) => isManualPublishingAssetType(asset.asset_type));
+  const wordpressItems = approvedAssets.filter((asset) => asset.asset_type === "blog_post");
   const executableItems = approvedAssets.filter((asset) => !isManualPublishingAssetType(asset.asset_type));
 
   return (
     <WebsitePage>
       <WebsiteHero
         eyebrow="Publishing Readiness"
-        title="Execute or manually publish approved assets when they are due."
-        description="Publishing Ready is schedule-aware and now includes manual publishing items like blog posts, white papers, authority assets, and What-If outreach."
+        title="Execute approved assets when they are due."
+        description="Publishing Ready is schedule-aware and now includes Zapier-powered WordPress drafts for approved blog posts."
         primaryAction={{ label: "Publishing Schedule", href: "/publishing-schedule" }}
         secondaryAction={{ label: "Ready Queue", href: "/ready-for-publishing" }}
       />
@@ -298,15 +304,15 @@ export default async function PublishingReadyPage() {
           dot="blue"
         />
         <WebsiteMetric
-          label="Manual Items"
-          value={manualItems.length}
-          description="Blog, white paper, authority, and outreach items."
+          label="WordPress"
+          value={wordpressItems.length}
+          description="Blog posts ready for Zapier/WordPress."
           dot="gold"
         />
         <WebsiteMetric
           label="Executable Items"
           value={executableItems.length}
-          description="Social, email, and video actions."
+          description="Automated or provider-connected actions."
           dot="purple"
         />
       </section>
@@ -314,7 +320,7 @@ export default async function PublishingReadyPage() {
       <AssetSection
         eyebrow="Due Now"
         title="Approved assets ready for action"
-        description="Only this section allows execution or manual publish completion. These assets are approved and their scheduled publish time has arrived."
+        description="Only this section allows execution. Blog posts here can be sent to WordPress through Zapier as drafts."
         assets={dueNow}
         executable={true}
       />
@@ -330,7 +336,7 @@ export default async function PublishingReadyPage() {
       <AssetSection
         eyebrow="Unscheduled"
         title="Approved assets missing publish time"
-        description="These assets need a scheduled publish date/time before execution or manual publish completion is allowed."
+        description="These assets need a scheduled publish date/time before execution is allowed."
         assets={unscheduled}
         executable={false}
       />
@@ -338,7 +344,7 @@ export default async function PublishingReadyPage() {
       <AssetSection
         eyebrow="Completed"
         title="Already executed or marked published"
-        description="These approved assets already have completed publishing execution runs or have been manually marked published/sent."
+        description="These approved assets already have completed execution runs or have been manually marked published/sent."
         assets={alreadyExecuted}
         executable={false}
       />

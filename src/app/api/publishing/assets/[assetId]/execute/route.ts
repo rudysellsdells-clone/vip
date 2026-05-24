@@ -81,6 +81,10 @@ async function createRun({
         scheduled_publish_at: asset.scheduled_publish_at ?? null,
         publish_timezone: asset.publish_timezone ?? null,
         scheduleAwareExecution: true,
+        wordpressPostStatus:
+          route.channel === "wordpress"
+            ? process.env.WORDPRESS_DEFAULT_POST_STATUS?.trim() || "draft"
+            : null,
       },
     })
     .select("*")
@@ -156,6 +160,7 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json(
       {
         error: `${route.destinationLabel} execution is not configured yet. Add the matching Zapier action key in Vercel.`,
+        missingEnv: route.channel === "wordpress" ? "ZAPIER_WORDPRESS_CREATE_POST_ACTION_KEY" : undefined,
       },
       { status: 400 }
     );
@@ -279,19 +284,27 @@ export async function POST(request: Request, context: RouteContext) {
       return NextResponse.json({ error: completedError.message }, { status: 400 });
     }
 
-    await supabase
-      .from("generated_assets")
-      .update({
-        scheduling_status: "published",
-      })
-      .eq("id", asset.id)
-      .eq("user_id", user.id)
-      .is("archived_at", null);
+    if (route.channel !== "wordpress") {
+      await supabase
+        .from("generated_assets")
+        .update({
+          scheduling_status: "published",
+        })
+        .eq("id", asset.id)
+        .eq("user_id", user.id)
+        .is("archived_at", null);
+    }
 
     await supabase.from("activity_log").insert({
       user_id: user.id,
-      activity_type: "publishing_execution_completed",
-      title: `${route.destinationLabel} execution completed`,
+      activity_type:
+        route.channel === "wordpress"
+          ? "wordpress_draft_created"
+          : "publishing_execution_completed",
+      title:
+        route.channel === "wordpress"
+          ? "WordPress draft request completed"
+          : `${route.destinationLabel} execution completed`,
       description: asset.title,
       metadata: {
         runId: run.id,
