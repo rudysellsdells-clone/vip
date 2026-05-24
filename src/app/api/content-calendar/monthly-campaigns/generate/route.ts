@@ -72,6 +72,12 @@ export async function POST(request: Request) {
   const errors: string[] = [];
 
   for (const week of plan) {
+    /*
+      Keep this insert conservative.
+      Supabase/PostgREST can lag on newly added columns in its schema cache, so this route avoids
+      nonessential campaign columns like calendar_notes. Campaign notes are still preserved inside
+      metadata.calendarNotes.
+    */
     const { data: campaign, error: campaignError } = await supabase
       .from("campaigns")
       .insert({
@@ -85,11 +91,11 @@ export async function POST(request: Request) {
         campaign_week_end_date: week.weekEndDate,
         planned_start_date: week.weekStartDate,
         planned_end_date: week.weekEndDate,
-        calendar_notes: week.campaignAngle,
         metadata: {
           generatedFrom: "monthly_campaign_calendar",
           campaignTheme,
           businessContext,
+          calendarNotes: week.campaignAngle,
           weeklyAssetPackage: {
             blog_post: 1,
             linkedin_post: 5,
