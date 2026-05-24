@@ -66,6 +66,32 @@ function chooseDefaultMonth({
   return contentMonths[contentMonths.length - 1] ?? current;
 }
 
+function unplacedReason(row: Record<string, any>) {
+  const hasAnyDate =
+    row.intended_publish_month ||
+    row.campaign_month ||
+    row.planned_publish_date ||
+    row.scheduled_publish_at ||
+    row.target_publish_at ||
+    row.publish_at ||
+    row.planned_date ||
+    row.campaign_week_start_date;
+
+  if (!hasAnyDate) {
+    return "Missing intended month, planned date, scheduled time, and campaign week.";
+  }
+
+  return "Has partial calendar metadata, but no usable display date.";
+}
+
+function rowTitle(row: Record<string, any>) {
+  return row.title ?? row.name ?? row.item_title ?? row.asset_title ?? "Untitled record";
+}
+
+function rowType(row: Record<string, any>) {
+  return row.item_type ?? row.asset_type ?? row.type ?? "content";
+}
+
 export default async function MonthlyContentCalendarPage({ searchParams }: PageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const requested = requestedMonth(resolvedSearchParams);
@@ -119,6 +145,25 @@ export default async function MonthlyContentCalendarPage({ searchParams }: PageP
     campaigns.map((campaign) => [String(campaign.id), campaign])
   );
 
+  const campaignEntriesRaw = campaigns.map(calendarEntryFromCampaign);
+  const itemEntriesRaw = allItems.map((item) => calendarEntryFromItem({ item, campaignById }));
+  const assetEntriesRaw = allAssets.map((asset) => calendarEntryFromAsset({ asset, campaignById }));
+
+  const allEntries = [
+    ...campaignEntriesRaw.filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)),
+    ...itemEntriesRaw.filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)),
+    ...assetEntriesRaw.filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)),
+  ];
+
+  const unplacedCampaigns = campaigns.filter((_, index) => !campaignEntriesRaw[index]);
+  const unplacedItems = allItems.filter((_, index) => !itemEntriesRaw[index]);
+  const unplacedAssets = allAssets.filter((_, index) => !assetEntriesRaw[index]);
+  const unplacedRecords = [
+    ...unplacedCampaigns.map((row) => ({ source: "Campaign", row })),
+    ...unplacedItems.map((row) => ({ source: "Planned Item", row })),
+    ...unplacedAssets.map((row) => ({ source: "Generated Asset", row })),
+  ];
+
   const monthOptions = buildMonthOptionsFromRows(allRows);
   const selectedInOptions = monthOptions.some((option) => option.value === selectedMonth);
   const options = selectedInOptions
@@ -130,18 +175,6 @@ export default async function MonthlyContentCalendarPage({ searchParams }: PageP
         },
         ...monthOptions,
       ].sort((a, b) => a.value.localeCompare(b.value));
-
-  const allEntries = [
-    ...campaigns
-      .map(calendarEntryFromCampaign)
-      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)),
-    ...allItems
-      .map((item) => calendarEntryFromItem({ item, campaignById }))
-      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)),
-    ...allAssets
-      .map((asset) => calendarEntryFromAsset({ asset, campaignById }))
-      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)),
-  ];
 
   const entries = allEntries.filter((entry) => belongsToSelectedMonth(entry, selectedMonth));
 
@@ -161,7 +194,7 @@ export default async function MonthlyContentCalendarPage({ searchParams }: PageP
       <WebsiteHero
         eyebrow="Monthly Content Calendar"
         title={`${monthLabel(selectedMonth)} campaign calendar`}
-        description="View campaigns, planned content, and generated assets by intended publish month. The month picker now includes rolling months and detected content months."
+        description="View campaigns, planned content, and generated assets by intended publish month. Missing-date records are now shown below instead of disappearing."
         primaryAction={{ label: "Content Calendar", href: "/content-calendar" }}
         secondaryAction={{ label: "Publishing Schedule", href: "/publishing-schedule" }}
       />
@@ -169,7 +202,7 @@ export default async function MonthlyContentCalendarPage({ searchParams }: PageP
       <WebsiteSection
         eyebrow="Month"
         title="Select or generate a campaign month"
-        description="If generated content is missing calendar fields, this view falls back to campaign month, campaign week, scheduled date, and then creation date."
+        description="The dropdown includes rolling months and detected content months. Use the unplaced records section to find content missing calendar metadata."
       >
         <div className={websiteStyles.cardGrid}>
           <article className={websiteStyles.card}>
@@ -202,21 +235,21 @@ export default async function MonthlyContentCalendarPage({ searchParams }: PageP
           dot="blue"
         />
         <WebsiteMetric
-          label="Campaigns"
-          value={campaignCount}
-          description="Weekly campaign containers in this month."
-          dot="green"
-        />
-        <WebsiteMetric
           label="Generated Assets"
           value={generatedCount}
-          description="Assets generated under campaigns or plans."
+          description="Generated assets in selected month."
           dot="gold"
         />
         <WebsiteMetric
-          label="Detected Months"
-          value={contentMonths.length}
-          description="Months detected from campaign/content metadata."
+          label="Planned Items"
+          value={plannedCount}
+          description="Calendar/planned items in selected month."
+          dot="green"
+        />
+        <WebsiteMetric
+          label="Unplaced"
+          value={unplacedRecords.length}
+          description="Loaded records missing usable calendar dates."
           dot="purple"
         />
       </section>
@@ -224,7 +257,7 @@ export default async function MonthlyContentCalendarPage({ searchParams }: PageP
       <WebsiteSection
         eyebrow="Calendar"
         title="Monthly view"
-        description="Campaigns appear on week start days. Generated assets appear on planned publish dates, scheduled dates, or campaign fallback dates."
+        description="Campaigns appear on week start days. Generated assets and planned items appear on planned or scheduled publish dates."
       >
         <div
           className="grid gap-3"
@@ -243,6 +276,43 @@ export default async function MonthlyContentCalendarPage({ searchParams }: PageP
           ))}
         </div>
       </WebsiteSection>
+
+      {unplacedRecords.length ? (
+        <WebsiteSection
+          eyebrow="Needs Placement"
+          title="Unplaced records"
+          description="These records loaded from the database but do not have enough calendar metadata to appear in a month. Run the rehome SQL to assign them to June."
+        >
+          <div className={websiteStyles.cardGrid}>
+            {unplacedRecords.slice(0, 36).map(({ source, row }) => (
+              <article key={`${source}-${row.id}`} className={websiteStyles.card}>
+                <div className="flex flex-wrap gap-2">
+                  <span className={websiteStyles.badge}>{source}</span>
+                  <span className={websiteStyles.badge}>{String(rowType(row)).replaceAll("_", " ")}</span>
+                </div>
+
+                <h3 className={websiteStyles.cardTitle} style={{ marginTop: 16 }}>
+                  {rowTitle(row)}
+                </h3>
+
+                <p className={websiteStyles.cardText}>{unplacedReason(row)}</p>
+
+                {source === "Generated Asset" && row.id ? (
+                  <Link href={`/assets/${row.id}`} className={websiteStyles.link}>
+                    Open asset →
+                  </Link>
+                ) : null}
+              </article>
+            ))}
+          </div>
+
+          {unplacedRecords.length > 36 ? (
+            <p className={websiteStyles.cardMeta} style={{ marginTop: 16 }}>
+              Showing 36 of {unplacedRecords.length} unplaced records.
+            </p>
+          ) : null}
+        </WebsiteSection>
+      ) : null}
 
       <WebsiteSection
         eyebrow="Calendar Health"
@@ -265,9 +335,9 @@ export default async function MonthlyContentCalendarPage({ searchParams }: PageP
           </article>
 
           <article className={websiteStyles.card}>
-            <h3 className={websiteStyles.cardTitle}>Best Next Step</h3>
+            <h3 className={websiteStyles.cardTitle}>Unplaced Records</h3>
             <p className={websiteStyles.cardText}>
-              If a month still looks empty, run the backfill SQL so existing assets inherit campaign month and week fields.
+              {unplacedRecords.length} loaded record(s) are missing usable calendar placement fields.
             </p>
           </article>
         </div>
