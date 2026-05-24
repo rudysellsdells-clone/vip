@@ -4,10 +4,21 @@ import {
   assetTypeLabel,
 } from "@/lib/content-calendar/monthly-campaign-blueprint";
 
+export type MonthlyCampaignStrategyInput = {
+  monthlyObjective?: string;
+  targetAudience?: string;
+  primaryOffer?: string;
+  keyTopics?: string;
+  callToAction?: string;
+  differentiator?: string;
+  proofPoints?: string;
+};
+
 export type MonthlyCampaignPlanInput = {
   month: string;
   businessContext?: string;
   campaignTheme?: string;
+  strategy?: MonthlyCampaignStrategyInput;
 };
 
 export type WeeklyCampaignPlan = {
@@ -16,6 +27,7 @@ export type WeeklyCampaignPlan = {
   campaignAngle: string;
   weekStartDate: string;
   weekEndDate: string;
+  strategy: MonthlyCampaignStrategyInput;
   assets: Array<{
     assetType: WeeklyAssetBlueprint["assetType"];
     title: string;
@@ -113,39 +125,104 @@ function campaignWeeksForMonth(month: string) {
   return weeks;
 }
 
+function cleanStrategy(strategy?: MonthlyCampaignStrategyInput): MonthlyCampaignStrategyInput {
+  return {
+    monthlyObjective: strategy?.monthlyObjective?.trim() || "",
+    targetAudience: strategy?.targetAudience?.trim() || "",
+    primaryOffer: strategy?.primaryOffer?.trim() || "",
+    keyTopics: strategy?.keyTopics?.trim() || "",
+    callToAction: strategy?.callToAction?.trim() || "",
+    differentiator: strategy?.differentiator?.trim() || "",
+    proofPoints: strategy?.proofPoints?.trim() || "",
+  };
+}
+
+function topicList(strategy: MonthlyCampaignStrategyInput) {
+  return strategy.keyTopics
+    ? strategy.keyTopics
+        .split(/\n|,/)
+        .map((topic) => topic.trim())
+        .filter(Boolean)
+    : [];
+}
+
+function topicForWeek(strategy: MonthlyCampaignStrategyInput, weekNumber: number) {
+  const topics = topicList(strategy);
+
+  if (topics.length) {
+    return topics[(weekNumber - 1) % topics.length];
+  }
+
+  const defaults = [
+    "AI search visibility",
+    "local authority building",
+    "content consistency",
+    "lead generation trust signals",
+    "monthly recap and promotion",
+  ];
+
+  return defaults[(weekNumber - 1) % defaults.length];
+}
+
 function defaultCampaignName({
   month,
   weekNumber,
   campaignTheme,
+  strategy,
 }: {
   month: string;
   weekNumber: number;
   campaignTheme?: string;
+  strategy: MonthlyCampaignStrategyInput;
 }) {
-  const baseTheme = campaignTheme?.trim() || "Authority Growth";
-  return `${monthLabel(month)} Week ${weekNumber}: ${baseTheme}`;
+  const baseTheme = campaignTheme?.trim() || strategy.monthlyObjective || "Authority Growth";
+  const topic = topicForWeek(strategy, weekNumber);
+
+  return `${monthLabel(month)} Week ${weekNumber}: ${baseTheme} — ${topic}`;
 }
 
 function defaultCampaignAngle({
   weekNumber,
   businessContext,
+  strategy,
 }: {
   weekNumber: number;
   businessContext?: string;
+  strategy: MonthlyCampaignStrategyInput;
 }) {
-  const angles = [
-    "Educate the audience on the core problem and why it matters now.",
-    "Show practical ways to improve visibility, trust, and authority.",
-    "Explain common mistakes and how to avoid wasted marketing effort.",
-    "Turn strategy into a clear action plan for business owners.",
-    "Use a recap, proof, or promotion angle to reinforce the month.",
+  const topic = topicForWeek(strategy, weekNumber);
+  const audience = strategy.targetAudience || "business owners";
+  const offer = strategy.primaryOffer || "a stronger visibility strategy";
+  const objective = strategy.monthlyObjective || "build visibility, trust, and authority";
+  const differentiator = strategy.differentiator || "a practical, campaign-based approach";
+  const proof = strategy.proofPoints ? ` Proof points to weave in: ${strategy.proofPoints}` : "";
+  const context = businessContext?.trim() ? ` Context: ${businessContext.trim()}` : "";
+
+  const weeklyAngles = [
+    `Educate ${audience} on why ${topic} matters and how it supports the monthly objective: ${objective}.`,
+    `Show ${audience} practical steps for improving ${topic} while positioning ${offer}.`,
+    `Explain the common mistakes around ${topic} and how ${differentiator} helps avoid wasted effort.`,
+    `Turn ${topic} into an action plan that moves ${audience} toward ${offer}.`,
+    `Recap the month, reinforce ${topic}, and make the case for taking the next step toward ${offer}.`,
   ];
 
-  const context = businessContext?.trim();
+  return `${weeklyAngles[(weekNumber - 1) % weeklyAngles.length]}${proof}${context}`;
+}
 
-  return context
-    ? `${angles[(weekNumber - 1) % angles.length]} Context: ${context}`
-    : angles[(weekNumber - 1) % angles.length];
+function strategyBullets(strategy: MonthlyCampaignStrategyInput) {
+  const bullets = [
+    strategy.monthlyObjective ? `Monthly objective: ${strategy.monthlyObjective}` : "",
+    strategy.targetAudience ? `Audience: ${strategy.targetAudience}` : "",
+    strategy.primaryOffer ? `Offer: ${strategy.primaryOffer}` : "",
+    strategy.differentiator ? `Differentiator: ${strategy.differentiator}` : "",
+    strategy.proofPoints ? `Proof: ${strategy.proofPoints}` : "",
+  ].filter(Boolean);
+
+  return bullets.length ? bullets : ["Campaign objective: Build visibility, trust, and authority."];
+}
+
+function cta(strategy: MonthlyCampaignStrategyInput) {
+  return strategy.callToAction || "Start with a visibility review and identify your highest-value opportunities.";
 }
 
 function contentForAsset({
@@ -153,12 +230,17 @@ function contentForAsset({
   campaignName,
   campaignAngle,
   label,
+  strategy,
 }: {
   assetType: string;
   campaignName: string;
   campaignAngle: string;
   label: string;
+  strategy: MonthlyCampaignStrategyInput;
 }) {
+  const bullets = strategyBullets(strategy);
+  const callToAction = cta(strategy);
+
   switch (assetType) {
     case "blog_post":
       return [
@@ -167,24 +249,27 @@ function contentForAsset({
         "## Why This Matters",
         campaignAngle,
         "",
+        "## Strategy Focus",
+        ...bullets.map((bullet) => `- ${bullet}`),
+        "",
         "## What Business Owners Should Know",
         "- Visibility now depends on more than a single channel.",
         "- Authority, helpful content, and consistent publishing compound over time.",
         "- Strong campaigns work best when blog, social, email, and video reinforce the same idea.",
         "",
         "## How to Take Action",
-        "Use this campaign as the weekly anchor. The supporting social, email, and video assets should point back to the same core message.",
+        callToAction,
       ].join("\n");
 
     case "linkedin_post":
       return [
         `${campaignName}`,
         "",
-        `${campaignAngle}`,
+        campaignAngle,
         "",
-        "Business owners do not need more random content. They need a clear weekly message that builds authority across the places customers already pay attention.",
+        `Strategy focus: ${bullets[0]}`,
         "",
-        "What would improve if your content, search visibility, and AI presence were all working from the same campaign?",
+        callToAction,
       ].join("\n");
 
     case "facebook_post":
@@ -193,9 +278,9 @@ function contentForAsset({
         "",
         "Quick thought for local businesses:",
         "",
-        `${campaignAngle}`,
+        campaignAngle,
         "",
-        "Consistent weekly campaigns make it easier to stay visible without feeling like you are starting from scratch every day.",
+        callToAction,
       ].join("\n");
 
     case "email":
@@ -204,11 +289,12 @@ function contentForAsset({
         "",
         "Hi there,",
         "",
-        `${campaignAngle}`,
+        campaignAngle,
         "",
-        "This week, the focus is simple: turn one clear business idea into useful content across your website, social channels, and outreach.",
+        "This week, the focus is simple:",
+        ...bullets.map((bullet) => `- ${bullet}`),
         "",
-        "If you want stronger visibility, the first step is making sure your message is consistent where people search, compare, and decide.",
+        callToAction,
         "",
         "Best,",
         "Web Search Pros",
@@ -220,11 +306,11 @@ function contentForAsset({
         "",
         "20-second video script:",
         "",
-        "Hook: Most businesses do not have a content problem. They have a consistency problem.",
+        `Hook: Most businesses do not need more random content. They need a clearer strategy around ${topicForWeek(strategy, 1)}.`,
         "",
         `Main point: ${campaignAngle}`,
         "",
-        "Close: Start with one weekly campaign, then turn it into blog, social, email, and video content that all works together.",
+        `Close: ${callToAction}`,
       ].join("\n");
 
     default:
@@ -234,23 +320,27 @@ function contentForAsset({
 
 export function buildMonthlyCampaignPlan(input: MonthlyCampaignPlanInput): WeeklyCampaignPlan[] {
   const weeks = campaignWeeksForMonth(input.month);
+  const strategy = cleanStrategy(input.strategy);
 
   return weeks.map((week) => {
     const campaignName = defaultCampaignName({
       month: input.month,
       weekNumber: week.weekNumber,
       campaignTheme: input.campaignTheme,
+      strategy,
     });
 
     const campaignAngle = defaultCampaignAngle({
       weekNumber: week.weekNumber,
       businessContext: input.businessContext,
+      strategy,
     });
 
     return {
       weekNumber: week.weekNumber,
       campaignName,
       campaignAngle,
+      strategy,
       weekStartDate: dateKey(week.start),
       weekEndDate: dateKey(week.end),
       assets: WEEKLY_CAMPAIGN_ASSET_BLUEPRINT.map((slot) => {
@@ -266,6 +356,7 @@ export function buildMonthlyCampaignPlan(input: MonthlyCampaignPlanInput): Weekl
             campaignName,
             campaignAngle,
             label,
+            strategy,
           }),
           plannedPublishDate: dateKey(publishDate),
           scheduledPublishAt: scheduledAt.toISOString(),

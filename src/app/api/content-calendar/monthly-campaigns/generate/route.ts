@@ -14,6 +14,10 @@ function normalizeMonth(value: unknown) {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
+function textValue(value: unknown) {
+  return String(value ?? "").trim();
+}
+
 function campaignSummary(week: ReturnType<typeof buildMonthlyCampaignPlan>[number]) {
   return [
     week.campaignAngle,
@@ -44,19 +48,6 @@ async function createCampaign({
 }) {
   const idea = campaignIdea(week);
 
-  /*
-    Keep the campaigns insert intentionally minimal and schema-compatible.
-
-    Your campaigns table requires:
-    - idea
-
-    Earlier testing showed it does not expose optional fields like:
-    - title
-    - description
-    - calendar_notes
-
-    So this route uses only known/safe fields plus the required idea field.
-  */
   const campaignPayload = {
     user_id: userId,
     name: week.campaignName,
@@ -75,6 +66,7 @@ async function createCampaign({
       campaignIdea: idea,
       campaignAngle: week.campaignAngle,
       campaignSummary: campaignSummary(week),
+      strategy: week.strategy,
       weeklyAssetPackage: {
         blog_post: 1,
         linkedin_post: 5,
@@ -168,10 +160,6 @@ async function createGeneratedAsset({
     };
   }
 
-  /*
-    Fallback: if PostgREST schema cache complains about one of the newer calendar columns,
-    still create the real generated asset instead of losing the asset entirely.
-  */
   const minimalResult = await supabase
     .from("generated_assets")
     .insert(minimalAssetPayload({ userId, campaignId, asset }))
@@ -226,9 +214,19 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({}));
   const month = normalizeMonth(body.month);
-  const campaignTheme = String(body.campaignTheme ?? "Authority Growth").trim();
-  const businessContext = String(body.businessContext ?? "").trim();
+  const campaignTheme = textValue(body.campaignTheme) || "Authority Growth";
+  const businessContext = textValue(body.businessContext);
   const overwriteExisting = Boolean(body.overwriteExisting);
+
+  const strategy = {
+    monthlyObjective: textValue(body.monthlyObjective),
+    targetAudience: textValue(body.targetAudience),
+    primaryOffer: textValue(body.primaryOffer),
+    keyTopics: textValue(body.keyTopics),
+    callToAction: textValue(body.callToAction),
+    differentiator: textValue(body.differentiator),
+    proofPoints: textValue(body.proofPoints),
+  };
 
   if (!overwriteExisting) {
     const { count } = await supabase
@@ -254,6 +252,7 @@ export async function POST(request: Request) {
     month,
     campaignTheme,
     businessContext,
+    strategy,
   });
 
   const createdCampaigns: Array<Record<string, any>> = [];
@@ -313,6 +312,7 @@ export async function POST(request: Request) {
       month,
       campaignTheme,
       businessContext,
+      strategy,
       campaignCount: createdCampaigns.length,
       assetCount: createdAssets.length,
       errors,
