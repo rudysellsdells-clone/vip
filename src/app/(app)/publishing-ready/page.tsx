@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ExecuteApprovedAssetButton } from "@/components/publishing/ExecuteApprovedAssetButton";
+import { MarkAssetPublishedButton } from "@/components/publishing/MarkAssetPublishedButton";
 import {
   WebsiteBadge,
   WebsiteHero,
@@ -9,7 +10,13 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
-import { getPublishingRoute, PUBLISHABLE_ASSET_TYPES } from "@/lib/publishing/asset-routing";
+import { getPublishingRoute } from "@/lib/publishing/asset-routing";
+import {
+  isManualPublishingAssetType,
+  manualPublishingLabel,
+  manualPublishingNextStep,
+  PUBLISHING_READY_VISIBLE_ASSET_TYPES,
+} from "@/lib/publishing/publishing-ready-visible-types";
 import {
   formatScheduleTime,
   getScheduleStatus,
@@ -45,7 +52,7 @@ function channelLabel(assetType: string) {
     case "video_script":
       return "GalaxyAI";
     default:
-      return "Execution";
+      return manualPublishingLabel(assetType);
   }
 }
 
@@ -67,7 +74,10 @@ function groupAssets({
   const alreadyExecuted: Array<Record<string, any>> = [];
 
   for (const asset of assets) {
-    if (completedKeys.has(completedRunKey(asset))) {
+    if (
+      asset.scheduling_status === "published" ||
+      (!isManualPublishingAssetType(asset.asset_type) && completedKeys.has(completedRunKey(asset)))
+    ) {
       alreadyExecuted.push(asset);
       continue;
     }
@@ -101,6 +111,7 @@ function AssetCard({
   disabledReason?: string | null;
 }) {
   const scheduleStatus = getScheduleStatus(asset);
+  const manualPublishing = isManualPublishingAssetType(asset.asset_type);
 
   return (
     <article className={websiteStyles.card}>
@@ -109,6 +120,9 @@ function AssetCard({
         <span className={websiteStyles.badge}>{typeLabel(asset.asset_type)}</span>
         <span className={websiteStyles.badge}>{channelLabel(asset.asset_type)}</span>
         <span className={websiteStyles.badge}>{scheduleStatusLabel(scheduleStatus)}</span>
+        {manualPublishing ? (
+          <span className={websiteStyles.badge}>Manual publish</span>
+        ) : null}
       </div>
 
       <h3 className={websiteStyles.cardTitle} style={{ marginTop: 16 }}>
@@ -132,20 +146,52 @@ function AssetCard({
         </p>
       ) : null}
 
+      {manualPublishing ? (
+        <p className={websiteStyles.cardText}>
+          <strong>Next:</strong> {manualPublishingNextStep(asset.asset_type)}
+        </p>
+      ) : null}
+
       <div className={websiteStyles.actionRow}>
-        <ExecuteApprovedAssetButton
-          assetId={asset.id}
-          assetType={asset.asset_type}
-          disabled={!executable}
-          disabledReason={disabledReason}
-        />
+        {manualPublishing ? (
+          <MarkAssetPublishedButton
+            assetId={asset.id}
+            label={asset.asset_type === "prospect_what_if_story" ? "Mark Sent" : "Mark Published"}
+            disabled={!executable}
+          />
+        ) : (
+          <ExecuteApprovedAssetButton
+            assetId={asset.id}
+            assetType={asset.asset_type}
+            disabled={!executable}
+            disabledReason={disabledReason}
+          />
+        )}
+
         <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
           Open asset →
         </Link>
+
         <Link href="/publishing-schedule" className={websiteStyles.link}>
           Adjust schedule →
         </Link>
+
+        {asset.asset_type === "blog_post" ? (
+          <Link href="/authority-content" className={websiteStyles.link}>
+            Authority Content →
+          </Link>
+        ) : null}
+
+        {asset.asset_type === "prospect_what_if_story" ? (
+          <Link href="/what-if-stories" className={websiteStyles.link}>
+            What-If Tools →
+          </Link>
+        ) : null}
       </div>
+
+      {manualPublishing && !executable && disabledReason ? (
+        <p className={websiteStyles.cardMeta}>{disabledReason}</p>
+      ) : null}
     </article>
   );
 }
@@ -200,10 +246,10 @@ export default async function PublishingReadyPage() {
     .eq("user_id", user.id)
     .eq("status", "approved")
     .is("archived_at", null)
-    .in("asset_type", PUBLISHABLE_ASSET_TYPES)
+    .in("asset_type", PUBLISHING_READY_VISIBLE_ASSET_TYPES)
     .order("scheduled_publish_at", { ascending: true, nullsFirst: false })
     .order("updated_at", { ascending: false })
-    .limit(60);
+    .limit(80);
 
   const { data: runsData } = await supabase
     .from("publishing_execution_runs")
@@ -215,8 +261,6 @@ export default async function PublishingReadyPage() {
   const approvedAssets = (approvedData ?? []) as Array<Record<string, any>>;
   const runs = (runsData ?? []) as Array<Record<string, any>>;
   const completedRuns = runs.filter((run) => run.status === "completed");
-  const failed = runs.filter((run) => run.status === "failed").length;
-  const prepared = runs.filter((run) => run.status === "prepared").length;
 
   const completedKeys = new Set(
     completedRuns.map((run) => `${run.asset_id}:${run.channel}`)
@@ -227,12 +271,15 @@ export default async function PublishingReadyPage() {
     completedKeys,
   });
 
+  const manualItems = approvedAssets.filter((asset) => isManualPublishingAssetType(asset.asset_type));
+  const executableItems = approvedAssets.filter((asset) => !isManualPublishingAssetType(asset.asset_type));
+
   return (
     <WebsitePage>
       <WebsiteHero
         eyebrow="Publishing Readiness"
-        title="Execute approved assets only when they are due."
-        description="Publishing Ready is now schedule-aware. Approved assets are grouped by due now, upcoming, unscheduled, and already executed so VIP does not blast everything at once."
+        title="Execute or manually publish approved assets when they are due."
+        description="Publishing Ready is schedule-aware and now includes manual publishing items like blog posts, white papers, authority assets, and What-If outreach."
         primaryAction={{ label: "Publishing Schedule", href: "/publishing-schedule" }}
         secondaryAction={{ label: "Ready Queue", href: "/ready-for-publishing" }}
       />
@@ -241,7 +288,7 @@ export default async function PublishingReadyPage() {
         <WebsiteMetric
           label="Due Now"
           value={dueNow.length}
-          description="Approved assets ready to execute."
+          description="Approved assets ready for their next action."
           dot="green"
         />
         <WebsiteMetric
@@ -251,23 +298,23 @@ export default async function PublishingReadyPage() {
           dot="blue"
         />
         <WebsiteMetric
-          label="Unscheduled"
-          value={unscheduled.length}
-          description="Approved assets missing publish time."
+          label="Manual Items"
+          value={manualItems.length}
+          description="Blog, white paper, authority, and outreach items."
           dot="gold"
         />
         <WebsiteMetric
-          label="Executed"
-          value={alreadyExecuted.length}
-          description="Approved assets with completed runs."
+          label="Executable Items"
+          value={executableItems.length}
+          description="Social, email, and video actions."
           dot="purple"
         />
       </section>
 
       <AssetSection
         eyebrow="Due Now"
-        title="Approved assets ready to execute"
-        description="Only this section allows execution. These assets are approved and their scheduled publish time has arrived."
+        title="Approved assets ready for action"
+        description="Only this section allows execution or manual publish completion. These assets are approved and their scheduled publish time has arrived."
         assets={dueNow}
         executable={true}
       />
@@ -283,15 +330,15 @@ export default async function PublishingReadyPage() {
       <AssetSection
         eyebrow="Unscheduled"
         title="Approved assets missing publish time"
-        description="These assets need a scheduled publish date/time before execution is allowed."
+        description="These assets need a scheduled publish date/time before execution or manual publish completion is allowed."
         assets={unscheduled}
         executable={false}
       />
 
       <AssetSection
         eyebrow="Completed"
-        title="Already executed assets"
-        description="These approved assets already have completed publishing execution runs."
+        title="Already executed or marked published"
+        description="These approved assets already have completed publishing execution runs or have been manually marked published/sent."
         assets={alreadyExecuted}
         executable={false}
       />
@@ -299,7 +346,7 @@ export default async function PublishingReadyPage() {
       <WebsiteSection
         eyebrow="History"
         title="Recent publishing execution runs"
-        description="This is the durable record of publishing/outreach execution attempts from this readiness screen."
+        description="This is the durable record of automated publishing/outreach execution attempts."
       >
         {runs.length ? (
           <div className={websiteStyles.cardGrid}>
