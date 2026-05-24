@@ -225,21 +225,122 @@ function cta(strategy: MonthlyCampaignStrategyInput) {
   return strategy.callToAction || "Start with a visibility review and identify your highest-value opportunities.";
 }
 
+function hashtagFromPhrase(value: string) {
+  const words = value
+    .replace(/&/g, " and ")
+    .replace(/[^a-zA-Z0-9\s]/g, " ")
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter(Boolean)
+    .slice(0, 4);
+
+  if (!words.length) return "";
+
+  return `#${words
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join("")}`;
+}
+
+function uniqueValues(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+function topicEmoji(topic: string) {
+  const lower = topic.toLowerCase();
+
+  if (lower.includes("ai") || lower.includes("search")) return "🔎";
+  if (lower.includes("local") || lower.includes("google")) return "📍";
+  if (lower.includes("content") || lower.includes("blog")) return "✍️";
+  if (lower.includes("lead") || lower.includes("sales")) return "📈";
+  if (lower.includes("authority") || lower.includes("trust")) return "🏆";
+  if (lower.includes("video")) return "🎥";
+  if (lower.includes("email")) return "📬";
+  if (lower.includes("review")) return "⭐";
+  if (lower.includes("strategy")) return "🧭";
+
+  return "💡";
+}
+
+function socialEmojiSet({
+  topic,
+  assetType,
+}: {
+  topic: string;
+  assetType: string;
+}) {
+  const base = [topicEmoji(topic)];
+
+  if (assetType === "linkedin_post") {
+    base.push("📈", "🤝");
+  }
+
+  if (assetType === "facebook_post") {
+    base.push("📣", "✅");
+  }
+
+  return uniqueValues(base).slice(0, 3).join(" ");
+}
+
+function socialHashtags({
+  strategy,
+  topic,
+  assetType,
+}: {
+  strategy: MonthlyCampaignStrategyInput;
+  topic: string;
+  assetType: string;
+}) {
+  const topicTags = topicList(strategy).map(hashtagFromPhrase);
+
+  const defaults = [
+    hashtagFromPhrase(topic),
+    strategy.primaryOffer ? hashtagFromPhrase(strategy.primaryOffer) : "",
+    strategy.differentiator ? hashtagFromPhrase(strategy.differentiator) : "",
+    "#WebSearchPros",
+    "#DigitalMarketing",
+    "#LocalSEO",
+  ];
+
+  const channelTag = assetType === "linkedin_post" ? "#BusinessGrowth" : "#LocalBusiness";
+
+  return uniqueValues([...topicTags, ...defaults, channelTag])
+    .slice(0, assetType === "linkedin_post" ? 6 : 5)
+    .join(" ");
+}
+
+function socialEnding({
+  assetType,
+  strategy,
+  topic,
+}: {
+  assetType: string;
+  strategy: MonthlyCampaignStrategyInput;
+  topic: string;
+}) {
+  const emojis = socialEmojiSet({ topic, assetType });
+  const hashtags = socialHashtags({ strategy, topic, assetType });
+
+  return [emojis, hashtags].filter(Boolean).join("\n");
+}
+
 function contentForAsset({
   assetType,
   campaignName,
   campaignAngle,
   label,
   strategy,
+  weekNumber,
 }: {
   assetType: string;
   campaignName: string;
   campaignAngle: string;
   label: string;
   strategy: MonthlyCampaignStrategyInput;
+  weekNumber: number;
 }) {
   const bullets = strategyBullets(strategy);
   const callToAction = cta(strategy);
+  const topic = topicForWeek(strategy, weekNumber);
 
   switch (assetType) {
     case "blog_post":
@@ -263,24 +364,28 @@ function contentForAsset({
 
     case "linkedin_post":
       return [
-        `${campaignName}`,
+        `${socialEmojiSet({ topic, assetType })} ${campaignName}`,
         "",
         campaignAngle,
         "",
         `Strategy focus: ${bullets[0]}`,
         "",
         callToAction,
+        "",
+        socialHashtags({ strategy, topic, assetType }),
       ].join("\n");
 
     case "facebook_post":
       return [
-        `${campaignName}`,
+        `${socialEmojiSet({ topic, assetType })} ${campaignName}`,
         "",
         "Quick thought for local businesses:",
         "",
         campaignAngle,
         "",
         callToAction,
+        "",
+        socialHashtags({ strategy, topic, assetType }),
       ].join("\n");
 
     case "email":
@@ -306,7 +411,7 @@ function contentForAsset({
         "",
         "20-second video script:",
         "",
-        `Hook: Most businesses do not need more random content. They need a clearer strategy around ${topicForWeek(strategy, 1)}.`,
+        `Hook: Most businesses do not need more random content. They need a clearer strategy around ${topic}.`,
         "",
         `Main point: ${campaignAngle}`,
         "",
@@ -357,6 +462,7 @@ export function buildMonthlyCampaignPlan(input: MonthlyCampaignPlanInput): Weekl
             campaignAngle,
             label,
             strategy,
+            weekNumber: week.weekNumber,
           }),
           plannedPublishDate: dateKey(publishDate),
           scheduledPublishAt: scheduledAt.toISOString(),
