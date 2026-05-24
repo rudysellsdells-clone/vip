@@ -1,3 +1,8 @@
+import {
+  buildWordPressExcerpt,
+  formatBlogPostForWordPressHtml,
+} from "@/lib/wordpress/html-formatter";
+
 export type PublishingRoute = {
   provider: "zapier" | "galaxyai";
   channel: "linkedin" | "facebook" | "gmail" | "galaxyai" | "wordpress";
@@ -136,6 +141,14 @@ function stripInternalTraceLines(content: string) {
     .trim();
 }
 
+function wordpressHtmlForAsset(asset: Record<string, any>) {
+  return formatBlogPostForWordPressHtml({
+    title: titleForAsset(asset),
+    content: cleanContent(asset.content),
+    includeDefaultCta: process.env.WORDPRESS_INCLUDE_DEFAULT_CTA !== "false",
+  });
+}
+
 export function buildPublishingInstructions({
   asset,
   route,
@@ -150,17 +163,20 @@ export function buildPublishingInstructions({
 
   if (route.channel === "wordpress") {
     const postStatus = process.env.WORDPRESS_DEFAULT_POST_STATUS?.trim() || "draft";
+    const html = wordpressHtmlForAsset(asset);
 
     return [
       `Create a WordPress ${postStatus} for this approved VIP blog post.`,
       "",
       `Title: ${title}`,
       "",
-      "Post content:",
-      content,
+      "Post content is already formatted as WordPress-safe HTML. Use it as the WordPress post body/content field.",
+      "",
+      html,
       "",
       "Important:",
-      "- Preserve headings and paragraphs.",
+      "- Preserve the HTML headings, lists, paragraphs, and CTA block.",
+      "- Do not wrap this in a full HTML document.",
       "- Do not publish automatically unless the post_status parameter is explicitly publish.",
       "- Return the WordPress post ID, edit URL, public URL if available, and status.",
     ].join("\n");
@@ -237,17 +253,24 @@ export function buildPublishingParams({
   const postStatus = process.env.WORDPRESS_DEFAULT_POST_STATUS?.trim() || "draft";
 
   if (route.channel === "wordpress") {
+    const html = wordpressHtmlForAsset(asset);
+
     return {
       title,
-      content,
+      content: html,
+      body: html,
+      post_content: html,
+      excerpt: buildWordPressExcerpt(html),
       status: postStatus,
       post_status: postStatus,
+      post_type: "posts",
       type: "post",
       scheduled_publish_at: scheduledPublishAt,
       publish_timezone: asset.publish_timezone ?? "America/Chicago",
       asset_id: asset.id,
       asset_type: asset.asset_type,
       source: "VIP",
+      content_format: "wordpress_safe_html",
     };
   }
 
