@@ -94,11 +94,6 @@ export function dateKeyFromValue(value: string | null | undefined) {
 
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
 
-  if (/^\d{4}-\d{2}/.test(value)) {
-    const date = new Date(value);
-    if (!Number.isNaN(date.getTime())) return dateKey(date);
-  }
-
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) return null;
@@ -117,21 +112,6 @@ export function timeLabelFromValue(value: string | null | undefined) {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
-}
-
-export function monthRange(value: string) {
-  const { year, month } = parseMonthValue(value);
-  const start = new Date(year, month - 1, 1, 0, 0, 0);
-  const end = new Date(year, month, 1, 0, 0, 0);
-
-  return {
-    start,
-    end,
-    startIso: start.toISOString(),
-    endIso: end.toISOString(),
-    monthStartKey: dateKey(start),
-    nextMonthStartKey: dateKey(end),
-  };
 }
 
 function monthFromDateLike(value: unknown) {
@@ -188,13 +168,6 @@ export function buildMonthOptionsFromRows(rows: Array<Record<string, any>>) {
 
     if (direct && /^\d{4}-\d{2}$/.test(direct)) {
       values.add(direct);
-      continue;
-    }
-
-    const fallback = monthFromDateLike(row.created_at);
-
-    if (fallback) {
-      values.add(fallback);
     }
   }
 
@@ -300,12 +273,16 @@ export function calendarEntryFromAsset({
   const campaign = asset.campaign_id ? campaignById.get(String(asset.campaign_id)) : null;
   const campaignName = campaign?.title ?? campaign?.name ?? null;
 
+  /*
+    Important: do NOT fall back to created_at here.
+    Campaign/calendar content should be placed by planned/scheduled/campaign date only.
+    Falling back to created_at causes an entire generated batch to pile onto today's date.
+  */
   const date =
     dateKeyFromValue(asset.planned_publish_date) ??
     dateKeyFromValue(asset.scheduled_publish_at) ??
     inferAssetDateFromCampaign(asset, campaign) ??
-    campaignMonthDateFallback(asset.intended_publish_month ?? campaign?.campaign_month) ??
-    dateKeyFromValue(asset.created_at);
+    campaignMonthDateFallback(asset.intended_publish_month ?? campaign?.campaign_month);
 
   if (!date) return null;
 
@@ -343,8 +320,7 @@ export function calendarEntryFromItem({
     dateKeyFromValue(item.publish_at) ??
     dateKeyFromValue(item.planned_date) ??
     inferAssetDateFromCampaign(item, campaign) ??
-    campaignMonthDateFallback(item.intended_publish_month ?? campaign?.campaign_month) ??
-    dateKeyFromValue(item.created_at);
+    campaignMonthDateFallback(item.intended_publish_month ?? campaign?.campaign_month);
 
   if (!date) return null;
 
