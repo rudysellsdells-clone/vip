@@ -65,8 +65,11 @@ async function createCampaign({
       campaignName: week.campaignName,
       campaignIdea: idea,
       campaignAngle: week.campaignAngle,
+      generationPrompt: week.generationPrompt,
+      privateStrategy: week.strategy,
+      strategyUsage:
+        "Private generation context only. Do not publish raw strategy fields in generated content.",
       campaignSummary: campaignSummary(week),
-      strategy: week.strategy,
       weeklyAssetPackage: {
         blog_post: 1,
         linkedin_post: 5,
@@ -312,7 +315,9 @@ export async function POST(request: Request) {
       month,
       campaignTheme,
       businessContext,
-      strategy,
+      privateStrategy: strategy,
+      strategyUsage:
+        "Private generation context only. Do not publish raw strategy fields in generated content.",
       campaignCount: createdCampaigns.length,
       assetCount: createdAssets.length,
       errors,
