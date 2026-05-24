@@ -24,6 +24,22 @@ export type CalendarDay = {
   entries: MonthlyCalendarEntry[];
 };
 
+const SORT_ORDER_DAY_OFFSET = new Map<number, number>([
+  [10, 0],
+  [20, 0],
+  [30, 1],
+  [40, 1],
+  [50, 1],
+  [60, 2],
+  [70, 2],
+  [80, 3],
+  [90, 3],
+  [100, 3],
+  [110, 4],
+  [120, 4],
+  [130, 4],
+]);
+
 export function monthValueFromDate(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -78,6 +94,11 @@ export function dateKeyFromValue(value: string | null | undefined) {
 
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
 
+  if (/^\d{4}-\d{2}/.test(value)) {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) return dateKey(date);
+  }
+
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) return null;
@@ -113,16 +134,50 @@ export function monthRange(value: string) {
   };
 }
 
+function monthFromDateLike(value: unknown) {
+  if (!value) return null;
+
+  const text = String(value);
+
+  if (/^\d{4}-\d{2}/.test(text)) {
+    return text.slice(0, 7);
+  }
+
+  const date = new Date(text);
+
+  if (Number.isNaN(date.getTime())) return null;
+
+  return monthValueFromDate(date);
+}
+
 function monthCandidate(row: Record<string, any>) {
+  const metadata = row.metadata ?? {};
+
   return (
     row.campaign_month ??
     row.intended_publish_month ??
-    (row.planned_publish_date ? String(row.planned_publish_date).slice(0, 7) : null) ??
-    (row.scheduled_publish_at ? String(row.scheduled_publish_at).slice(0, 7) : null) ??
-    (row.target_publish_at ? String(row.target_publish_at).slice(0, 7) : null) ??
-    (row.publish_at ? String(row.publish_at).slice(0, 7) : null) ??
-    (row.planned_date ? String(row.planned_date).slice(0, 7) : null)
+    monthFromDateLike(row.planned_publish_date) ??
+    monthFromDateLike(row.scheduled_publish_at) ??
+    monthFromDateLike(row.target_publish_at) ??
+    monthFromDateLike(row.publish_at) ??
+    monthFromDateLike(row.planned_date) ??
+    metadata.campaignMonth ??
+    metadata.intendedPublishMonth ??
+    metadata.month ??
+    null
   );
+}
+
+function rollingMonthValues() {
+  const now = new Date();
+  const values: string[] = [];
+
+  for (let offset = -6; offset <= 12; offset += 1) {
+    const date = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+    values.push(monthValueFromDate(date));
+  }
+
+  return values;
 }
 
 export function buildMonthOptionsFromRows(rows: Array<Record<string, any>>) {
@@ -136,28 +191,37 @@ export function buildMonthOptionsFromRows(rows: Array<Record<string, any>>) {
       continue;
     }
 
-    const fallback = row.created_at;
+    const fallback = monthFromDateLike(row.created_at);
 
-    if (!fallback) continue;
-
-    const date = new Date(fallback);
-
-    if (!Number.isNaN(date.getTime())) {
-      values.add(monthValueFromDate(date));
+    if (fallback) {
+      values.add(fallback);
     }
   }
 
-  if (!values.size) {
-    values.add(monthValueFromDate(new Date()));
+  for (const value of rollingMonthValues()) {
+    values.add(value);
   }
 
   return Array.from(values)
     .sort()
-    .reverse()
     .map((value) => ({
       value,
       label: monthLabel(value),
     }));
+}
+
+export function contentMonthOptionsFromRows(rows: Array<Record<string, any>>) {
+  const values = new Set<string>();
+
+  for (const row of rows) {
+    const direct = monthCandidate(row);
+
+    if (direct && /^\d{4}-\d{2}$/.test(direct)) {
+      values.add(direct);
+    }
+  }
+
+  return Array.from(values).sort();
 }
 
 export function entryTypeLabel(value: string | null | undefined) {
@@ -168,8 +232,44 @@ export function statusLabel(value: string | null | undefined) {
   return String(value ?? "planned").replaceAll("_", " ");
 }
 
+function addDays(dateKeyValue: string, days: number) {
+  const date = new Date(`${dateKeyValue}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return dateKey(date);
+}
+
+function campaignStartDate(campaign: Record<string, any> | undefined | null) {
+  return (
+    dateKeyFromValue(campaign?.campaign_week_start_date) ??
+    dateKeyFromValue(campaign?.planned_start_date)
+  );
+}
+
+function inferAssetDateFromCampaign(asset: Record<string, any>, campaign: Record<string, any> | undefined | null) {
+  const start = campaignStartDate(campaign) ?? dateKeyFromValue(asset.campaign_week_start_date);
+
+  if (!start) return null;
+
+  const sortOrder = Number(asset.calendar_sort_order ?? 0);
+  const offset = SORT_ORDER_DAY_OFFSET.get(sortOrder);
+
+  if (offset !== undefined) {
+    return addDays(start, offset);
+  }
+
+  return start;
+}
+
+function campaignMonthDateFallback(month: string | null | undefined) {
+  if (!month || !/^\d{4}-\d{2}$/.test(month)) return null;
+
+  return `${month}-01`;
+}
+
 export function calendarEntryFromCampaign(campaign: Record<string, any>): MonthlyCalendarEntry | null {
-  const date = dateKeyFromValue(campaign.campaign_week_start_date ?? campaign.planned_start_date);
+  const date =
+    dateKeyFromValue(campaign.campaign_week_start_date ?? campaign.planned_start_date) ??
+    campaignMonthDateFallback(campaign.campaign_month);
 
   if (!date) return null;
 
@@ -182,7 +282,7 @@ export function calendarEntryFromCampaign(campaign: Record<string, any>): Monthl
     date,
     timeLabel: "Week",
     href: `/campaigns`,
-    description: campaign.description ?? campaign.calendar_notes ?? null,
+    description: campaign.description ?? campaign.metadata?.calendarNotes ?? null,
     campaignId: campaign.id,
     campaignName: campaign.title ?? campaign.name ?? null,
     weekNumber: campaign.campaign_week_number ?? null,
@@ -197,15 +297,17 @@ export function calendarEntryFromAsset({
   asset: Record<string, any>;
   campaignById: Map<string, Record<string, any>>;
 }): MonthlyCalendarEntry | null {
+  const campaign = asset.campaign_id ? campaignById.get(String(asset.campaign_id)) : null;
+  const campaignName = campaign?.title ?? campaign?.name ?? null;
+
   const date =
     dateKeyFromValue(asset.planned_publish_date) ??
     dateKeyFromValue(asset.scheduled_publish_at) ??
+    inferAssetDateFromCampaign(asset, campaign) ??
+    campaignMonthDateFallback(asset.intended_publish_month ?? campaign?.campaign_month) ??
     dateKeyFromValue(asset.created_at);
 
   if (!date) return null;
-
-  const campaign = asset.campaign_id ? campaignById.get(String(asset.campaign_id)) : null;
-  const campaignName = campaign?.title ?? campaign?.name ?? null;
 
   return {
     id: asset.id,
@@ -231,18 +333,20 @@ export function calendarEntryFromItem({
   item: Record<string, any>;
   campaignById: Map<string, Record<string, any>>;
 }): MonthlyCalendarEntry | null {
+  const campaign = item.campaign_id ? campaignById.get(String(item.campaign_id)) : null;
+  const campaignName = campaign?.title ?? campaign?.name ?? null;
+
   const date =
     dateKeyFromValue(item.planned_publish_date) ??
     dateKeyFromValue(item.scheduled_publish_at) ??
     dateKeyFromValue(item.target_publish_at) ??
     dateKeyFromValue(item.publish_at) ??
     dateKeyFromValue(item.planned_date) ??
+    inferAssetDateFromCampaign(item, campaign) ??
+    campaignMonthDateFallback(item.intended_publish_month ?? campaign?.campaign_month) ??
     dateKeyFromValue(item.created_at);
 
   if (!date) return null;
-
-  const campaign = item.campaign_id ? campaignById.get(String(item.campaign_id)) : null;
-  const campaignName = campaign?.title ?? campaign?.name ?? null;
 
   return {
     id: item.id,
