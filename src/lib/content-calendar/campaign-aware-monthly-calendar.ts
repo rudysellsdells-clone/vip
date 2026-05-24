@@ -274,9 +274,8 @@ export function calendarEntryFromAsset({
   const campaignName = campaign?.title ?? campaign?.name ?? null;
 
   /*
-    Important: do NOT fall back to created_at here.
-    Campaign/calendar content should be placed by planned/scheduled/campaign date only.
-    Falling back to created_at causes an entire generated batch to pile onto today's date.
+    Important: never use created_at as the display date for generated campaign assets.
+    Created date caused entire monthly batches to pile onto today's date.
   */
   const date =
     dateKeyFromValue(asset.planned_publish_date) ??
