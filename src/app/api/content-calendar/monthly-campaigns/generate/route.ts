@@ -38,27 +38,6 @@ async function createCampaign({
   businessContext: string;
   week: ReturnType<typeof buildMonthlyCampaignPlan>[number];
 }) {
-  /*
-    Keep the campaigns insert intentionally minimal.
-
-    Your campaigns table has shown that it may not include columns like:
-    - title
-    - description
-    - calendar_notes
-
-    So this route only inserts fields we explicitly added or already know are needed:
-    - user_id
-    - name
-    - campaign_month
-    - campaign_week_number
-    - campaign_week_start_date
-    - campaign_week_end_date
-    - planned_start_date
-    - planned_end_date
-    - metadata
-
-    All rich text/details are stored in metadata so the generator does not fail on optional columns.
-  */
   const campaignPayload = {
     user_id: userId,
     name: week.campaignName,
@@ -85,15 +64,131 @@ async function createCampaign({
     },
   };
 
-  const { data, error } = await supabase
+  return supabase
     .from("campaigns")
     .insert(campaignPayload)
     .select("*")
     .single();
+}
+
+function minimalAssetPayload({
+  userId,
+  campaignId,
+  asset,
+}: {
+  userId: string;
+  campaignId: string;
+  asset: ReturnType<typeof buildMonthlyCampaignPlan>[number]["assets"][number];
+}) {
+  return {
+    user_id: userId,
+    campaign_id: campaignId,
+    asset_type: asset.assetType,
+    title: asset.title,
+    content: asset.content,
+    status: "needs_review",
+  };
+}
+
+function calendarAssetFields({
+  month,
+  week,
+  asset,
+}: {
+  month: string;
+  week: ReturnType<typeof buildMonthlyCampaignPlan>[number];
+  asset: ReturnType<typeof buildMonthlyCampaignPlan>[number]["assets"][number];
+}) {
+  return {
+    intended_publish_month: month,
+    planned_publish_date: asset.plannedPublishDate,
+    scheduled_publish_at: asset.scheduledPublishAt,
+    publish_timezone: "America/Chicago",
+    scheduling_status: "scheduled",
+    scheduling_notes: asset.calendarNotes,
+    campaign_week_number: week.weekNumber,
+    campaign_week_start_date: week.weekStartDate,
+    calendar_sort_order: asset.sortOrder,
+    calendar_notes: asset.calendarNotes,
+  };
+}
+
+async function createGeneratedAsset({
+  supabase,
+  userId,
+  campaignId,
+  month,
+  week,
+  asset,
+}: {
+  supabase: any;
+  userId: string;
+  campaignId: string;
+  month: string;
+  week: ReturnType<typeof buildMonthlyCampaignPlan>[number];
+  asset: ReturnType<typeof buildMonthlyCampaignPlan>[number]["assets"][number];
+}) {
+  const fullPayload = {
+    ...minimalAssetPayload({ userId, campaignId, asset }),
+    ...calendarAssetFields({ month, week, asset }),
+  };
+
+  const fullResult = await supabase
+    .from("generated_assets")
+    .insert(fullPayload)
+    .select("*")
+    .single();
+
+  if (!fullResult.error && fullResult.data) {
+    return {
+      data: fullResult.data,
+      error: null,
+      warning: null,
+    };
+  }
+
+  /*
+    Fallback: if PostgREST schema cache complains about one of the newer calendar columns,
+    still create the real generated asset instead of losing the asset entirely.
+    The asset may appear under Unplaced Records until the SQL/schema cache refresh is applied.
+  */
+  const minimalResult = await supabase
+    .from("generated_assets")
+    .insert(minimalAssetPayload({ userId, campaignId, asset }))
+    .select("*")
+    .single();
+
+  if (minimalResult.error || !minimalResult.data) {
+    return {
+      data: null,
+      error: minimalResult.error ?? fullResult.error,
+      warning: fullResult.error?.message ?? null,
+    };
+  }
+
+  const updateResult = await supabase
+    .from("generated_assets")
+    .update(calendarAssetFields({ month, week, asset }))
+    .eq("id", minimalResult.data.id)
+    .eq("user_id", userId)
+    .select("*")
+    .single();
+
+  if (!updateResult.error && updateResult.data) {
+    return {
+      data: updateResult.data,
+      error: null,
+      warning: fullResult.error?.message ?? null,
+    };
+  }
 
   return {
-    data,
-    error,
+    data: minimalResult.data,
+    error: null,
+    warning:
+      updateResult.error?.message ??
+      fullResult.error?.message ??
+      "Generated asset was created, but calendar fields were not applied.",
   };
 }
 
@@ -144,6 +239,7 @@ export async function POST(request: Request) {
   const createdCampaigns: Array<Record<string, any>> = [];
   const createdAssets: Array<Record<string, any>> = [];
   const errors: string[] = [];
+  const warnings: string[] = [];
 
   for (const week of plan) {
     const { data: campaign, error: campaignError } = await createCampaign({
@@ -163,37 +259,27 @@ export async function POST(request: Request) {
     createdCampaigns.push(campaign);
 
     for (const asset of week.assets) {
-      const { data: createdAsset, error: assetError } = await supabase
-        .from("generated_assets")
-        .insert({
-          user_id: user.id,
-          campaign_id: campaign.id,
-          asset_type: asset.assetType,
-          title: asset.title,
-          content: asset.content,
-          status: "needs_review",
-          intended_publish_month: month,
-          planned_publish_date: asset.plannedPublishDate,
-          scheduled_publish_at: asset.scheduledPublishAt,
-          publish_timezone: "America/Chicago",
-          scheduling_status: "scheduled",
-          scheduling_notes: asset.calendarNotes,
-          campaign_week_number: week.weekNumber,
-          campaign_week_start_date: week.weekStartDate,
-          calendar_sort_order: asset.sortOrder,
-          calendar_notes: asset.calendarNotes,
-        })
-        .select("*")
-        .single();
+      const result = await createGeneratedAsset({
+        supabase,
+        userId: user.id,
+        campaignId: campaign.id,
+        month,
+        week,
+        asset,
+      });
 
-      if (assetError || !createdAsset) {
+      if (result.error || !result.data) {
         errors.push(
           `Week ${week.weekNumber} ${asset.assetType}: ${
-            assetError?.message ?? "Unable to create asset."
+            result.error?.message ?? "Unable to create generated asset."
           }`
         );
       } else {
-        createdAssets.push(createdAsset);
+        createdAssets.push(result.data);
+
+        if (result.warning) {
+          warnings.push(`Week ${week.weekNumber} ${asset.assetType}: ${result.warning}`);
+        }
       }
     }
   }
@@ -202,7 +288,7 @@ export async function POST(request: Request) {
     user_id: user.id,
     activity_type: "monthly_campaign_package_generated",
     title: "Monthly campaign package generated",
-    description: `${createdCampaigns.length} campaign(s) and ${createdAssets.length} asset(s) generated for ${month}.`,
+    description: `${createdCampaigns.length} campaign(s) and ${createdAssets.length} generated asset(s) created for ${month}.`,
     metadata: {
       month,
       campaignTheme,
@@ -210,6 +296,7 @@ export async function POST(request: Request) {
       campaignCount: createdCampaigns.length,
       assetCount: createdAssets.length,
       errors,
+      warnings,
       campaignIds: createdCampaigns.map((campaign) => campaign.id),
       assetIds: createdAssets.map((asset) => asset.id),
     },
@@ -221,6 +308,7 @@ export async function POST(request: Request) {
     campaignCount: createdCampaigns.length,
     assetCount: createdAssets.length,
     errors,
+    warnings,
     campaigns: createdCampaigns,
     assets: createdAssets,
   });
