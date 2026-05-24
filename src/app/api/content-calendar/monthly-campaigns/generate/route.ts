@@ -23,6 +23,10 @@ function campaignSummary(week: ReturnType<typeof buildMonthlyCampaignPlan>[numbe
   ].join("\n");
 }
 
+function campaignIdea(week: ReturnType<typeof buildMonthlyCampaignPlan>[number]) {
+  return `${week.campaignName}: ${week.campaignAngle}`.trim();
+}
+
 async function createCampaign({
   supabase,
   userId,
@@ -38,9 +42,25 @@ async function createCampaign({
   businessContext: string;
   week: ReturnType<typeof buildMonthlyCampaignPlan>[number];
 }) {
+  const idea = campaignIdea(week);
+
+  /*
+    Keep the campaigns insert intentionally minimal and schema-compatible.
+
+    Your campaigns table requires:
+    - idea
+
+    Earlier testing showed it does not expose optional fields like:
+    - title
+    - description
+    - calendar_notes
+
+    So this route uses only known/safe fields plus the required idea field.
+  */
   const campaignPayload = {
     user_id: userId,
     name: week.campaignName,
+    idea,
     campaign_month: month,
     campaign_week_number: week.weekNumber,
     campaign_week_start_date: week.weekStartDate,
@@ -52,6 +72,7 @@ async function createCampaign({
       campaignTheme,
       businessContext,
       campaignName: week.campaignName,
+      campaignIdea: idea,
       campaignAngle: week.campaignAngle,
       campaignSummary: campaignSummary(week),
       weeklyAssetPackage: {
@@ -150,7 +171,6 @@ async function createGeneratedAsset({
   /*
     Fallback: if PostgREST schema cache complains about one of the newer calendar columns,
     still create the real generated asset instead of losing the asset entirely.
-    The asset may appear under Unplaced Records until the SQL/schema cache refresh is applied.
   */
   const minimalResult = await supabase
     .from("generated_assets")
