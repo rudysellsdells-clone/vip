@@ -44,7 +44,7 @@ const navGroups: NavGroup[] = [
       {
         label: "Monthly Calendar",
         href: "/content-calendar/monthly",
-        description: "Month-by-month calendar view of planned and generated content.",
+        description: "Campaign-aware month view of planned and generated content.",
       },
       {
         label: "Publishing Schedule",

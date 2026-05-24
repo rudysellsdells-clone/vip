@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { GenerateMonthlyCampaignsButton } from "@/components/content-calendar/GenerateMonthlyCampaignsButton";
 import { MonthSelector } from "@/components/content-calendar/MonthSelector";
 import { MonthlyCalendarDayBox } from "@/components/content-calendar/MonthlyCalendarDayBox";
 import {
@@ -10,15 +11,16 @@ import {
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
 import {
+  belongsToSelectedMonth,
   buildCalendarGrid,
   buildMonthOptionsFromRows,
   calendarEntryFromAsset,
+  calendarEntryFromCampaign,
   calendarEntryFromItem,
   monthLabel,
-  monthRange,
   monthValueFromDate,
   parseMonthValue,
-} from "@/lib/content-calendar/monthly-calendar";
+} from "@/lib/content-calendar/campaign-aware-monthly-calendar";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -42,7 +44,6 @@ function safeRows(data: unknown) {
 export default async function MonthlyContentCalendarPage({ searchParams }: PageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const selectedMonth = currentMonthValue(resolvedSearchParams);
-  const selectedRange = monthRange(selectedMonth);
 
   const supabase = untypedSupabase(await createClient());
 
@@ -54,26 +55,39 @@ export default async function MonthlyContentCalendarPage({ searchParams }: PageP
     redirect("/login");
   }
 
-  const [{ data: allAssetsData }, { data: allItemsData }] = await Promise.all([
-    supabase
-      .from("generated_assets")
-      .select("id,title,asset_type,status,content,created_at,scheduled_publish_at,publish_timezone,scheduling_status,campaign_id")
-      .eq("user_id", user.id)
-      .is("archived_at", null)
-      .order("created_at", { ascending: false })
-      .limit(300),
-    supabase
-      .from("content_calendar_items")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(300),
-  ]);
+  const [{ data: campaignsData }, { data: allAssetsData }, { data: allItemsData }] =
+    await Promise.all([
+      supabase
+        .from("campaigns")
+        .select("*")
+        .eq("user_id", user.id)
+        .is("archived_at", null)
+        .order("campaign_week_start_date", { ascending: false, nullsFirst: false })
+        .limit(300),
+      supabase
+        .from("generated_assets")
+        .select("*")
+        .eq("user_id", user.id)
+        .is("archived_at", null)
+        .order("created_at", { ascending: false })
+        .limit(500),
+      supabase
+        .from("content_calendar_items")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(500),
+    ]);
 
+  const campaigns = safeRows(campaignsData);
   const allAssets = safeRows(allAssetsData);
   const allItems = safeRows(allItemsData);
-  const monthOptions = buildMonthOptionsFromRows([...allAssets, ...allItems]);
 
+  const campaignById = new Map<string, Record<string, any>>(
+    campaigns.map((campaign) => [String(campaign.id), campaign])
+  );
+
+  const monthOptions = buildMonthOptionsFromRows([...campaigns, ...allAssets, ...allItems]);
   const selectedInOptions = monthOptions.some((option) => option.value === selectedMonth);
   const options = selectedInOptions
     ? monthOptions
@@ -85,82 +99,90 @@ export default async function MonthlyContentCalendarPage({ searchParams }: PageP
         ...monthOptions,
       ];
 
-  const selectedEntries = [
+  const entries = [
+    ...campaigns
+      .map(calendarEntryFromCampaign)
+      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)),
     ...allItems
-      .map(calendarEntryFromItem)
-      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
-      .filter((entry) => entry.date >= selectedMonth + "-01" && entry.date < monthValueFromDate(selectedRange.end) + "-01"),
+      .map((item) => calendarEntryFromItem({ item, campaignById }))
+      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)),
     ...allAssets
-      .map(calendarEntryFromAsset)
-      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
-      .filter((entry) => entry.date >= selectedMonth + "-01" && entry.date < monthValueFromDate(selectedRange.end) + "-01"),
-  ];
+      .map((asset) => calendarEntryFromAsset({ asset, campaignById }))
+      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)),
+  ].filter((entry) => belongsToSelectedMonth(entry, selectedMonth));
 
   const calendarDays = buildCalendarGrid({
     monthValue: selectedMonth,
-    entries: selectedEntries,
+    entries,
   });
 
-  const generatedCount = selectedEntries.filter((entry) => entry.source === "generated_asset").length;
-  const plannedCount = selectedEntries.filter((entry) => entry.source === "calendar_item").length;
-  const scheduledCount = selectedEntries.filter((entry) => entry.timeLabel !== "Any time").length;
+  const campaignCount = entries.filter((entry) => entry.source === "campaign").length;
+  const generatedCount = entries.filter((entry) => entry.source === "generated_asset").length;
+  const plannedCount = entries.filter((entry) => entry.source === "calendar_item").length;
+  const scheduledCount = entries.filter((entry) => entry.timeLabel !== "Any time" && entry.timeLabel !== "Week").length;
   const emptyDays = calendarDays.filter((day) => day.isCurrentMonth && !day.entries.length).length;
 
   return (
     <WebsitePage>
       <WebsiteHero
         eyebrow="Monthly Content Calendar"
-        title={`${monthLabel(selectedMonth)} content calendar`}
-        description="View proposed and generated content by month. Each day box shows planned calendar items and generated assets scheduled for that day."
+        title={`${monthLabel(selectedMonth)} campaign calendar`}
+        description="View campaigns, planned content, and generated assets by intended publish month instead of creation date."
         primaryAction={{ label: "Content Calendar", href: "/content-calendar" }}
         secondaryAction={{ label: "Publishing Schedule", href: "/publishing-schedule" }}
       />
 
       <WebsiteSection
         eyebrow="Month"
-        title="Select a generated content month"
-        description="The dropdown is built from months where VIP has planned or generated content."
+        title="Select or generate a campaign month"
+        description="The dropdown now pulls from campaigns, planned items, generated assets, intended month, planned date, and scheduled publish dates."
       >
-        <div className={websiteStyles.card}>
-          <MonthSelector value={selectedMonth} options={options} />
+        <div className={websiteStyles.cardGrid}>
+          <article className={websiteStyles.card}>
+            <MonthSelector value={selectedMonth} options={options} />
 
-          <div className={websiteStyles.actionRow} style={{ marginTop: 16 }}>
-            <Link href="/content-calendar" className={websiteStyles.link}>
-              Open planner →
-            </Link>
-            <Link href="/publishing-schedule" className={websiteStyles.link}>
-              Manage publish times →
-            </Link>
-            <Link href="/quality-automation" className={websiteStyles.link}>
-              Quality automation →
-            </Link>
-          </div>
+            <div className={websiteStyles.actionRow} style={{ marginTop: 16 }}>
+              <Link href="/content-calendar" className={websiteStyles.link}>
+                Open planner →
+              </Link>
+              <Link href="/publishing-schedule" className={websiteStyles.link}>
+                Manage publish times →
+              </Link>
+              <Link href="/quality-automation" className={websiteStyles.link}>
+                Quality automation →
+              </Link>
+            </div>
+          </article>
+
+          <article className={websiteStyles.card}>
+            <GenerateMonthlyCampaignsButton defaultMonth={selectedMonth || monthValueFromDate(new Date())} />
+          </article>
         </div>
       </WebsiteSection>
 
       <section className={websiteStyles.metricsGrid}>
         <WebsiteMetric
-          label="Total Items"
-          value={selectedEntries.length}
-          description="Planned and generated content in this month."
+          label="Calendar Items"
+          value={entries.length}
+          description="Campaigns, planned items, and generated assets."
           dot="blue"
         />
         <WebsiteMetric
-          label="Generated"
-          value={generatedCount}
-          description="Generated assets shown on the calendar."
+          label="Campaigns"
+          value={campaignCount}
+          description="Weekly campaign containers in this month."
           dot="green"
         />
         <WebsiteMetric
-          label="Planned"
-          value={plannedCount}
-          description="Content calendar items shown."
+          label="Generated Assets"
+          value={generatedCount}
+          description="Assets generated under campaigns or plans."
           dot="gold"
         />
         <WebsiteMetric
-          label="Scheduled"
+          label="Timed"
           value={scheduledCount}
-          description="Items with specific publish times."
+          description="Items with a specific scheduled time."
           dot="purple"
         />
       </section>
@@ -168,7 +190,7 @@ export default async function MonthlyContentCalendarPage({ searchParams }: PageP
       <WebsiteSection
         eyebrow="Calendar"
         title="Monthly view"
-        description="Use this view to quickly see content density, empty days, and whether the month is spaced out properly."
+        description="Campaigns appear on week start days. Generated assets appear on their planned publish dates and include campaign labels."
       >
         <div
           className="grid gap-3"
@@ -189,29 +211,29 @@ export default async function MonthlyContentCalendarPage({ searchParams }: PageP
       </WebsiteSection>
 
       <WebsiteSection
-        eyebrow="Notes"
-        title="Calendar health"
-        description="Quick read on whether the month is overpacked, underplanned, or missing schedule detail."
+        eyebrow="Calendar Health"
+        title="Month summary"
+        description="Use this to see whether the campaign month is properly filled and spaced."
       >
         <div className={websiteStyles.cardGrid}>
           <article className={websiteStyles.card}>
             <h3 className={websiteStyles.cardTitle}>Open Days</h3>
             <p className={websiteStyles.cardText}>
-              {emptyDays} day(s) in this month have no content assigned.
+              {emptyDays} day(s) in this month have no campaign or content assigned.
             </p>
           </article>
 
           <article className={websiteStyles.card}>
-            <h3 className={websiteStyles.cardTitle}>Scheduling Detail</h3>
+            <h3 className={websiteStyles.cardTitle}>Expected Weekly Package</h3>
             <p className={websiteStyles.cardText}>
-              {scheduledCount} of {selectedEntries.length} item(s) have a specific time. Use Publishing Schedule to fill gaps.
+              Each generated weekly campaign creates 1 blog post, 5 LinkedIn posts, 5 Facebook posts, 1 email, and 1 video script.
             </p>
           </article>
 
           <article className={websiteStyles.card}>
             <h3 className={websiteStyles.cardTitle}>Best Next Step</h3>
             <p className={websiteStyles.cardText}>
-              Use this page to inspect the month visually, then use Publishing Schedule to adjust exact dates and times.
+              Generate the monthly campaigns here, then use Publishing Schedule to fine-tune exact times before approvals and execution.
             </p>
           </article>
         </div>
