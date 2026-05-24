@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { preparePublicAssetContent } from "@/lib/content/public-content-cleaner";
 import { generateQualityResubmission } from "@/lib/content-quality/resubmitter";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
@@ -17,6 +18,21 @@ function revisedTitle(title: string, version: number) {
   }
 
   return `${cleaned} — Quality Resubmission v${version}`;
+}
+
+function inheritedCalendarFields(asset: Record<string, any>) {
+  return {
+    intended_publish_month: asset.intended_publish_month ?? null,
+    planned_publish_date: asset.planned_publish_date ?? null,
+    scheduled_publish_at: asset.scheduled_publish_at ?? null,
+    publish_timezone: asset.publish_timezone ?? "America/Chicago",
+    scheduling_status: asset.scheduling_status ?? "scheduled",
+    scheduling_notes: asset.scheduling_notes ?? null,
+    campaign_week_number: asset.campaign_week_number ?? null,
+    campaign_week_start_date: asset.campaign_week_start_date ?? null,
+    calendar_sort_order: asset.calendar_sort_order ?? null,
+    calendar_notes: asset.calendar_notes ?? null,
+  };
 }
 
 export async function POST(_request: Request, context: RouteContext) {
@@ -67,7 +83,11 @@ export async function POST(_request: Request, context: RouteContext) {
     const result = await generateQualityResubmission({
       assetTitle: asset.title ?? "Untitled asset",
       assetType: asset.asset_type ?? "generated_asset",
-      assetContent: asset.content ?? "",
+      assetContent: preparePublicAssetContent({
+        content: asset.content ?? "",
+        assetType: asset.asset_type,
+        title: asset.title,
+      }),
       reviewSummary: review.summary,
       strengths: review.strengths,
       improvements: review.improvements,
@@ -82,12 +102,16 @@ export async function POST(_request: Request, context: RouteContext) {
       },
     });
 
-    const content = [
-      `Quality resubmission based on review: ${review.id}`,
-      `Original asset ID: ${asset.id}`,
-      "",
-      result.content,
-    ].join("\n");
+    /*
+      Important:
+      Do not prepend review IDs, original asset IDs, or new asset IDs to public content.
+      Those belong in activity_log.metadata, not in the generated asset body.
+    */
+    const content = preparePublicAssetContent({
+      content: result.content,
+      assetType: asset.asset_type,
+      title: asset.title,
+    });
 
     const { data: newAsset, error: insertError } = await supabase
       .from("generated_assets")
@@ -99,6 +123,7 @@ export async function POST(_request: Request, context: RouteContext) {
         content,
         status: "needs_review",
         version: nextVersion,
+        ...inheritedCalendarFields(asset),
       })
       .select("*")
       .single();

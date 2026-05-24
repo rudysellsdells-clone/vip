@@ -1,3 +1,5 @@
+import { isSocialAssetType, preparePublicAssetContent } from "@/lib/content/public-content-cleaner";
+
 export type QualityResubmissionInput = {
   assetTitle: string;
   assetType: string;
@@ -32,7 +34,15 @@ function toList(value: unknown) {
     .slice(0, 12);
 }
 
-function systemPrompt() {
+function systemPrompt(assetType: string) {
+  const socialInstructions = isSocialAssetType(assetType)
+    ? [
+        "For LinkedIn and Facebook assets, include a few relevant emojis naturally in the post.",
+        "For LinkedIn and Facebook assets, include relevant hashtags at the end.",
+        "Use hashtags related to the topic, visibility, local SEO, business growth, Web Search Pros, and the post angle.",
+      ]
+    : [];
+
   return [
     "You are Rudy's VIP content improvement engine for Web Search Pros.",
     "Your job is to create an improved version of a generated marketing asset based on a quality review.",
@@ -40,7 +50,9 @@ function systemPrompt() {
     "Improve weak sections based on the quality review notes.",
     "Keep the writing human, clear, useful, practical, and aligned with Web Search Pros.",
     "Do not fabricate case studies, client results, testimonials, rankings, traffic, revenue, or guaranteed outcomes.",
-    "Return only the improved asset content. Do not include notes, JSON, markdown fences, or explanation.",
+    "Return only the improved public-facing asset content.",
+    "Do not include notes, JSON, markdown fences, explanations, internal IDs, review IDs, source asset IDs, prior asset IDs, or new asset IDs.",
+    ...socialInstructions,
   ].join("\n");
 }
 
@@ -48,13 +60,14 @@ export function buildQualityResubmissionPrompt(input: QualityResubmissionInput) 
   const strengths = toList(input.strengths);
   const improvements = toList(input.improvements);
   const scores = input.scores ?? {};
+  const assetType = read(input.assetType, "generated_asset");
 
   return [
-    systemPrompt(),
+    systemPrompt(assetType),
     "",
-    "Original asset:",
+    "PRIVATE CONTEXT — DO NOT PRINT THESE LABELS OR IDS IN THE OUTPUT.",
     `Title: ${read(input.assetTitle, "Untitled asset")}`,
-    `Type: ${read(input.assetType, "generated_asset")}`,
+    `Type: ${assetType}`,
     "",
     "Original content:",
     read(input.assetContent, ""),
@@ -87,6 +100,7 @@ export function buildQualityResubmissionPrompt(input: QualityResubmissionInput) 
     "- Improve SEO/AIO usefulness where relevant with better headings, topical clarity, FAQs, examples, or entity-rich language.",
     "- Do not mention that this was revised by AI or based on a quality review.",
     "- Do not include a score or review commentary in the output.",
+    "- Do not include asset IDs, review IDs, source IDs, internal tracking text, or private context labels in the output.",
   ].join("\n");
 }
 
@@ -152,10 +166,20 @@ export async function generateQualityResubmission(input: QualityResubmissionInpu
     throw new Error(`Unable to parse OpenAI response: ${text.slice(0, 500)}`);
   }
 
-  const content = extractTextFromResponsesApi(payload);
+  const rawContent = extractTextFromResponsesApi(payload);
+
+  if (!rawContent) {
+    throw new Error("OpenAI returned an empty resubmission response.");
+  }
+
+  const content = preparePublicAssetContent({
+    content: rawContent,
+    assetType: input.assetType,
+    title: input.assetTitle,
+  });
 
   if (!content) {
-    throw new Error("OpenAI returned an empty resubmission response.");
+    throw new Error("OpenAI returned content, but it was empty after public-content cleanup.");
   }
 
   return {
