@@ -24,6 +24,8 @@ export type MonthlyCampaignPlanInput = {
 export type WeeklyCampaignPlan = {
   weekNumber: number;
   campaignName: string;
+  publicTopic: string;
+  publicTitle: string;
   campaignAngle: string;
   generationPrompt: string;
   weekStartDate: string;
@@ -148,6 +150,14 @@ function topicList(strategy: MonthlyCampaignStrategyInput) {
     : [];
 }
 
+function titleCase(value: string) {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 function topicForWeek(strategy: MonthlyCampaignStrategyInput, weekNumber: number) {
   const topics = topicList(strategy);
 
@@ -166,7 +176,25 @@ function topicForWeek(strategy: MonthlyCampaignStrategyInput, weekNumber: number
   return defaults[(weekNumber - 1) % defaults.length];
 }
 
-function defaultCampaignName({
+function publicTitleForTopic(topic: string, strategy: MonthlyCampaignStrategyInput) {
+  const audience = strategy.targetAudience || "local businesses";
+
+  if (/ai|search/i.test(topic)) {
+    return `Why ${titleCase(topic)} Matters for ${audience}`;
+  }
+
+  if (/content/i.test(topic)) {
+    return `How Better ${titleCase(topic)} Builds Trust`;
+  }
+
+  if (/lead|sales|growth/i.test(topic)) {
+    return `Turning ${titleCase(topic)} Into Better Opportunities`;
+  }
+
+  return `A Practical Guide to ${titleCase(topic)}`;
+}
+
+function internalCampaignName({
   month,
   weekNumber,
   campaignTheme,
@@ -210,6 +238,7 @@ function privateGenerationPrompt({
   month,
   weekNumber,
   campaignName,
+  publicTitle,
   campaignAngle,
   businessContext,
   strategy,
@@ -217,6 +246,7 @@ function privateGenerationPrompt({
   month: string;
   weekNumber: number;
   campaignName: string;
+  publicTitle: string;
   campaignAngle: string;
   businessContext?: string;
   strategy: MonthlyCampaignStrategyInput;
@@ -224,12 +254,13 @@ function privateGenerationPrompt({
   return [
     "PRIVATE GENERATION BRIEF — DO NOT PRINT THIS BRIEF IN THE FINAL CONTENT.",
     "",
-    `Month: ${month}`,
-    `Campaign: ${campaignName}`,
-    `Week: ${weekNumber}`,
+    `Internal Month: ${month}`,
+    `Internal Campaign: ${campaignName}`,
+    `Internal Week: ${weekNumber}`,
+    `Public Title Direction: ${publicTitle}`,
     "",
     "Use the following strategy inputs to guide the angle, examples, offer positioning, and CTA.",
-    "Do not publish these labels or raw notes in the content.",
+    "Do not publish these labels, raw notes, internal month, campaign name, week number, or planning identifiers in the content.",
     "",
     strategy.monthlyObjective ? `Monthly Objective: ${strategy.monthlyObjective}` : "",
     strategy.targetAudience ? `Target Audience: ${strategy.targetAudience}` : "",
@@ -262,6 +293,7 @@ function hashtagFromPhrase(value: string) {
     .split(/\s+/)
     .map((word) => word.trim())
     .filter(Boolean)
+    .filter((word) => !["and", "the", "for", "with", "from", "this", "that"].includes(word.toLowerCase()))
     .slice(0, 4);
 
   if (!words.length) return "";
@@ -281,7 +313,7 @@ function topicEmoji(topic: string) {
   if (lower.includes("ai") || lower.includes("search")) return "🔎";
   if (lower.includes("local") || lower.includes("google")) return "📍";
   if (lower.includes("content") || lower.includes("blog")) return "✍️";
-  if (lower.includes("lead") || lower.includes("sales")) return "📈";
+  if (lower.includes("lead") || lower.includes("sales") || lower.includes("growth")) return "📈";
   if (lower.includes("authority") || lower.includes("trust")) return "🏆";
   if (lower.includes("video")) return "🎥";
   if (lower.includes("email")) return "📬";
@@ -340,14 +372,14 @@ function socialHashtags({
 
 function contentForAsset({
   assetType,
-  campaignName,
+  publicTitle,
   campaignAngle,
   label,
   strategy,
   weekNumber,
 }: {
   assetType: string;
-  campaignName: string;
+  publicTitle: string;
   campaignAngle: string;
   label: string;
   strategy: MonthlyCampaignStrategyInput;
@@ -360,7 +392,7 @@ function contentForAsset({
   switch (assetType) {
     case "blog_post":
       return [
-        `# ${campaignName}`,
+        `# ${publicTitle}`,
         "",
         "## Why This Matters",
         campaignAngle,
@@ -371,7 +403,7 @@ function contentForAsset({
         "The strongest content does not try to say everything at once. It focuses on one useful idea, explains it clearly, and connects that idea to the next step.",
         "",
         "## How to Put This Into Action",
-        `Start by turning this week’s topic into a practical message across your website, social posts, email, and video content. Keep the message useful, direct, and tied to ${offer}.`,
+        `Start by turning this topic into a practical message across your website, social posts, email, and video content. Keep the message useful, direct, and tied to ${offer}.`,
         "",
         "## Next Step",
         callToAction,
@@ -379,11 +411,9 @@ function contentForAsset({
 
     case "linkedin_post":
       return [
-        `${socialEmojiSet({ topic, assetType })} ${campaignName}`,
+        `${socialEmojiSet({ topic, assetType })} ${campaignAngle}`,
         "",
-        campaignAngle,
-        "",
-        `A good campaign does more than fill the calendar. It gives your audience a clear reason to trust you, remember you, and take the next step.`,
+        "A good campaign does more than fill the calendar. It gives your audience a clear reason to trust you, remember you, and take the next step.",
         "",
         callToAction,
         "",
@@ -392,13 +422,11 @@ function contentForAsset({
 
     case "facebook_post":
       return [
-        `${socialEmojiSet({ topic, assetType })} ${campaignName}`,
-        "",
-        "Quick thought for local businesses:",
+        `${socialEmojiSet({ topic, assetType })} Quick thought for local businesses:`,
         "",
         campaignAngle,
         "",
-        `When your content is built around one clear weekly idea, it becomes easier for people to understand what you do and why it matters.`,
+        "When your content is built around one clear idea, it becomes easier for people to understand what you do and why it matters.",
         "",
         callToAction,
         "",
@@ -407,13 +435,13 @@ function contentForAsset({
 
     case "email":
       return [
-        `Subject: ${campaignName}`,
+        `Subject: ${publicTitle}`,
         "",
         "Hi there,",
         "",
         campaignAngle,
         "",
-        `This week is a good time to look at how ${topic} supports your visibility and how it connects to the next step you want people to take.`,
+        `This is a good time to look at how ${topic} supports your visibility and how it connects to the next step you want people to take.`,
         "",
         callToAction,
         "",
@@ -423,7 +451,7 @@ function contentForAsset({
 
     case "video_script":
       return [
-        `${campaignName}`,
+        `${publicTitle}`,
         "",
         "20-second video script:",
         "",
@@ -444,7 +472,10 @@ export function buildMonthlyCampaignPlan(input: MonthlyCampaignPlanInput): Weekl
   const strategy = cleanStrategy(input.strategy);
 
   return weeks.map((week) => {
-    const campaignName = defaultCampaignName({
+    const publicTopic = topicForWeek(strategy, week.weekNumber);
+    const publicTitle = publicTitleForTopic(publicTopic, strategy);
+
+    const campaignName = internalCampaignName({
       month: input.month,
       weekNumber: week.weekNumber,
       campaignTheme: input.campaignTheme,
@@ -460,6 +491,7 @@ export function buildMonthlyCampaignPlan(input: MonthlyCampaignPlanInput): Weekl
       month: input.month,
       weekNumber: week.weekNumber,
       campaignName,
+      publicTitle,
       campaignAngle,
       businessContext: input.businessContext,
       strategy,
@@ -468,6 +500,8 @@ export function buildMonthlyCampaignPlan(input: MonthlyCampaignPlanInput): Weekl
     return {
       weekNumber: week.weekNumber,
       campaignName,
+      publicTopic,
+      publicTitle,
       campaignAngle,
       generationPrompt,
       strategy,
@@ -479,7 +513,7 @@ export function buildMonthlyCampaignPlan(input: MonthlyCampaignPlanInput): Weekl
         const label = slot.label;
         const content = contentForAsset({
           assetType: slot.assetType,
-          campaignName,
+          publicTitle,
           campaignAngle,
           label,
           strategy,
@@ -488,14 +522,15 @@ export function buildMonthlyCampaignPlan(input: MonthlyCampaignPlanInput): Weekl
 
         return {
           assetType: slot.assetType,
-          title: `${campaignName} — ${assetTypeLabel(slot.assetType)}`,
+          title: `${publicTitle} — ${assetTypeLabel(slot.assetType)}`,
           content,
           generationPrompt: [
             generationPrompt,
             "",
             `Asset Type: ${slot.assetType}`,
             `Asset Slot: ${label}`,
-            "Generate public-facing content only. Do not include the private brief, raw strategy labels, or internal planning notes.",
+            "Generate public-facing content only.",
+            "Do not include the private brief, raw strategy labels, internal month, campaign name, week number, or planning notes.",
           ].join("\n"),
           plannedPublishDate: dateKey(publishDate),
           scheduledPublishAt: scheduledAt.toISOString(),

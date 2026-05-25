@@ -17,6 +17,12 @@ const INTERNAL_TRACE_PATTERNS = [
   /^Review id:.*$/i,
 ];
 
+const CAMPAIGN_LABEL_PATTERNS = [
+  /^#?\s*[A-Za-z]+\s+\d{4}\s+Week\s+\d+\s*:.*$/i,
+  /^#?\s*Week\s+\d+\s*:.*$/i,
+  /^#?\s*\d{4}-\d{2}\s+Week\s+\d+\s*:.*$/i,
+];
+
 const UUID_LINE_PATTERN =
   /^(?:asset\s*)?(?:id\s*)?:?\s*[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -33,11 +39,35 @@ function hasInternalTraceLine(line: string) {
   return INTERNAL_TRACE_PATTERNS.some((pattern) => pattern.test(trimmed));
 }
 
+function isCampaignLabelLine(line: string) {
+  const trimmed = line.trim();
+
+  if (!trimmed) return false;
+
+  return CAMPAIGN_LABEL_PATTERNS.some((pattern) => pattern.test(trimmed));
+}
+
 export function stripInternalTraceContent(content: string | null | undefined) {
   return String(content ?? "")
     .replace(UUID_INLINE_LABEL_PATTERN, "")
     .split("\n")
     .filter((line) => !hasInternalTraceLine(line))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+export function stripCampaignLabels(content: string | null | undefined) {
+  return String(content ?? "")
+    .split("\n")
+    .filter((line, index) => {
+      if (isCampaignLabelLine(line)) return false;
+
+      // Also catch a campaign label after an emoji prefix in social content.
+      if (index === 0 && /[A-Za-z]+\s+\d{4}\s+Week\s+\d+\s*:/i.test(line)) return false;
+
+      return true;
+    })
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -59,6 +89,7 @@ function titleTopic(title: string) {
   const cleaned = title
     .replace(/—\s*(linkedin|facebook)\s*post/i, "")
     .replace(/quality resubmission\s*v?\d*/i, "")
+    .replace(/[A-Za-z]+\s+\d{4}\s+Week\s+\d+\s*:/i, "")
     .split("—")
     .map((part) => part.trim())
     .filter(Boolean)
@@ -164,7 +195,7 @@ export function ensureSocialFormatting({
   assetType: string | null | undefined;
   title: string | null | undefined;
 }) {
-  let cleaned = stripInternalTraceContent(content);
+  let cleaned = stripCampaignLabels(stripInternalTraceContent(content));
 
   if (!isSocialAssetType(assetType)) {
     return cleaned;
@@ -215,7 +246,7 @@ export function preparePublicAssetContent({
   title: string | null | undefined;
 }) {
   return ensureSocialFormatting({
-    content: stripInternalTraceContent(content),
+    content: stripCampaignLabels(stripInternalTraceContent(content)),
     assetType,
     title,
   });
