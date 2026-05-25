@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ReviewMonthSelector } from "@/components/content-calendar/ReviewMonthSelector";
+import { RunAutoQualityGateButton } from "@/components/content-calendar/RunAutoQualityGateButton";
 import { MonthlyReviewStatusCard } from "@/components/content-calendar/MonthlyReviewStatusCard";
 import {
   WebsiteBadge,
@@ -59,9 +60,14 @@ function campaignLabel(campaign: Record<string, any> | null, fallback: string) {
 }
 
 function assetHealthLabel(asset: Record<string, any>) {
+  const qualityStatus = String(asset.quality_workflow_status ?? "not_checked");
   const status = String(asset.status ?? "needs_review");
   const hasSchedule = Boolean(asset.scheduled_publish_at || asset.planned_publish_date);
 
+  if (qualityStatus === "review_ready") return "Quality passed";
+  if (qualityStatus === "needs_human_review_after_quality") return "Needs human review";
+  if (qualityStatus === "auto_regenerated_from_failed_quality") return "Superseded";
+  if (qualityStatus === "not_checked") return "Not quality checked";
   if (status === "approved" && hasSchedule) return "Ready downstream";
   if (status === "approved" && !hasSchedule) return "Approved, needs schedule";
   if (status === "needs_review") return "Needs review";
@@ -104,7 +110,8 @@ export default async function MonthlyCampaignReviewPage({ searchParams }: PagePr
   ]);
 
   const campaigns = safeRows(campaignsData);
-  const allAssets = safeRows(assetsData);
+  const loadedAssets = safeRows(assetsData);
+  const allAssets = loadedAssets.filter((asset) => asset.is_active_version !== false);
   const monthOptions = buildMonthOptions([...campaigns, ...allAssets]);
   const selectedInOptions = monthOptions.some((option) => option.value === selectedMonth);
   const options = selectedInOptions
@@ -129,6 +136,9 @@ export default async function MonthlyCampaignReviewPage({ searchParams }: PagePr
   });
 
   const counts = calculateCounts(assets);
+  const qualityNotChecked = assets.filter((asset) => String(asset.quality_workflow_status ?? "not_checked") === "not_checked").length;
+  const qualityPassed = assets.filter((asset) => String(asset.quality_workflow_status ?? "") === "review_ready").length;
+  const qualityNeedsHuman = assets.filter((asset) => String(asset.quality_workflow_status ?? "") === "needs_human_review_after_quality").length;
   const groups = groupAssetsByCampaign({
     assets,
     campaigns: monthCampaigns.length ? monthCampaigns : campaigns,
@@ -139,7 +149,7 @@ export default async function MonthlyCampaignReviewPage({ searchParams }: PagePr
       <WebsiteHero
         eyebrow="Monthly Campaign Review"
         title={`${monthLabel(selectedMonth)} review board`}
-        description="Review generated campaign assets by week, campaign, status, asset type, and schedule readiness before moving into approvals and publishing."
+        description="Run auto quality scoring before human review, then inspect the best active asset version by week, campaign, status, and schedule readiness."
         primaryAction={{ label: "Monthly Calendar", href: `/content-calendar/monthly?month=${selectedMonth}` }}
         secondaryAction={{ label: "Quality Automation", href: "/quality-automation" }}
       />
@@ -147,7 +157,7 @@ export default async function MonthlyCampaignReviewPage({ searchParams }: PagePr
       <WebsiteSection
         eyebrow="Control"
         title="Choose review month"
-        description="Use this board after monthly generation to inspect the campaign package before approval and publishing."
+        description="Use this board after monthly generation to score and inspect the campaign package before approval and publishing."
       >
         <div className={websiteStyles.cardGrid}>
           <article className={websiteStyles.card}>
@@ -167,6 +177,10 @@ export default async function MonthlyCampaignReviewPage({ searchParams }: PagePr
           </article>
 
           <MonthlyReviewStatusCard counts={counts} />
+
+          <article className={websiteStyles.card}>
+            <RunAutoQualityGateButton month={selectedMonth} />
+          </article>
         </div>
       </WebsiteSection>
 
@@ -174,25 +188,25 @@ export default async function MonthlyCampaignReviewPage({ searchParams }: PagePr
         <WebsiteMetric
           label="Total Assets"
           value={counts.total}
-          description="Generated assets in this month."
+          description="Active generated assets in this month."
           dot="blue"
         />
         <WebsiteMetric
-          label="Needs Review"
-          value={counts.needsReview}
-          description="Assets still waiting on review."
+          label="Not Scored"
+          value={qualityNotChecked}
+          description="Assets still waiting on auto quality scoring."
           dot="gold"
         />
         <WebsiteMetric
-          label="Approved"
-          value={counts.approved}
-          description="Approved assets ready for downstream scheduling/publishing."
+          label="Quality Passed"
+          value={qualityPassed}
+          description="Assets that passed the pre-review quality gate."
           dot="green"
         />
         <WebsiteMetric
-          label="Unscheduled"
-          value={counts.unscheduled}
-          description="Assets missing a planned or scheduled date."
+          label="Needs Human"
+          value={qualityNeedsHuman}
+          description="Assets that failed after auto-regeneration limit."
           dot="purple"
         />
       </section>
@@ -227,7 +241,7 @@ export default async function MonthlyCampaignReviewPage({ searchParams }: PagePr
       <WebsiteSection
         eyebrow="Campaigns"
         title="Weekly campaign review"
-        description="Open individual assets for review, revisions, approval, or publishing workflow steps."
+        description="The board shows active versions only. Failed originals that were auto-regenerated stay traceable but do not clutter review."
       >
         {groups.length ? (
           <div className="grid gap-5">
