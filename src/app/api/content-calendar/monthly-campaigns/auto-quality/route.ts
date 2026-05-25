@@ -132,6 +132,7 @@ async function runQualityForAsset({
   asset,
   month,
   maxRegenerations,
+  autoApprovePassing,
   stats,
 }: {
   supabase: any;
@@ -139,11 +140,13 @@ async function runQualityForAsset({
   asset: Record<string, any>;
   month: string;
   maxRegenerations: number;
+  autoApprovePassing: boolean;
   stats: {
     scored: number;
     passed: number;
     failed: number;
     regenerated: number;
+    autoApproved: number;
     humanReviewNeeded: number;
     errors: string[];
   };
@@ -182,6 +185,7 @@ async function runQualityForAsset({
       month,
       qualityWorkflowStatus: asset.quality_workflow_status ?? "not_checked",
       autoQualityAttempts: asset.auto_quality_attempts ?? 0,
+      autoApprovePassing,
     },
   });
 
@@ -190,17 +194,39 @@ async function runQualityForAsset({
   if (passed) {
     stats.passed += 1;
 
+    const updates: Record<string, any> = {
+      quality_workflow_status: "review_ready",
+      quality_checked_at: new Date().toISOString(),
+      review_ready_at: new Date().toISOString(),
+      is_active_version: true,
+    };
+
+    if (autoApprovePassing) {
+      updates.status = "approved";
+      stats.autoApproved += 1;
+    }
+
     await markAsset({
       supabase,
       userId,
       assetId: asset.id,
-      updates: {
-        quality_workflow_status: "review_ready",
-        quality_checked_at: new Date().toISOString(),
-        review_ready_at: new Date().toISOString(),
-        is_active_version: true,
-      },
+      updates,
     });
+
+    if (autoApprovePassing) {
+      await supabase.from("activity_log").insert({
+        user_id: userId,
+        activity_type: "asset_auto_approved_after_quality_gate",
+        title: "Asset auto-approved after quality gate",
+        description: asset.title ?? "Untitled asset",
+        metadata: {
+          month,
+          assetId: asset.id,
+          reviewId: reviewRow.id,
+          scores: review.scores,
+        },
+      });
+    }
 
     return;
   }
@@ -304,16 +330,17 @@ async function runQualityForAsset({
       scores: review.scores,
       failures: failingScoreLabels({ review }),
       model: regenerated.model,
+      autoApprovePassing,
     },
   });
 
-  // Score the regenerated version once. It will not regenerate again unless maxRegenerations allows it.
   await runQualityForAsset({
     supabase,
     userId,
     asset: newAsset,
     month,
     maxRegenerations,
+    autoApprovePassing,
     stats,
   });
 }
@@ -333,6 +360,7 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const month = normalizeMonth(body.month);
   const maxRegenerations = Math.max(0, Math.min(2, Number(body.maxRegenerations ?? 1)));
+  const autoApprovePassing = Boolean(body.autoApprovePassing);
 
   if (!month) {
     return NextResponse.json(
@@ -367,6 +395,7 @@ export async function POST(request: Request) {
     passed: 0,
     failed: 0,
     regenerated: 0,
+    autoApproved: 0,
     humanReviewNeeded: 0,
     errors: [] as string[],
   };
@@ -379,6 +408,7 @@ export async function POST(request: Request) {
         asset,
         month,
         maxRegenerations,
+        autoApprovePassing,
         stats,
       });
     } catch (error) {
@@ -395,6 +425,7 @@ export async function POST(request: Request) {
     metadata: {
       month,
       maxRegenerations,
+      autoApprovePassing,
       assetCount: assets.length,
       stats,
     },
@@ -404,6 +435,7 @@ export async function POST(request: Request) {
     ok: true,
     month,
     assetCount: assets.length,
+    autoApprovePassing,
     ...stats,
   });
 }

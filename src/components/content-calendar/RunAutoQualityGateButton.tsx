@@ -13,12 +13,15 @@ export function RunAutoQualityGateButton({
   const router = useRouter();
   const [running, setRunning] = useState(false);
   const [maxRegenerations, setMaxRegenerations] = useState(1);
+  const [autoApprovePassing, setAutoApprovePassing] = useState(false);
   const [summary, setSummary] = useState<Record<string, any> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function runGate() {
     const confirmed = window.confirm(
-      `Run auto quality scoring for ${month}? Failing assets will be regenerated up to ${maxRegenerations} time(s) before human review.`
+      autoApprovePassing
+        ? `Run auto quality scoring for ${month}? Passing assets will be automatically approved. Failing assets will regenerate up to ${maxRegenerations} time(s).`
+        : `Run auto quality scoring for ${month}? Passing assets will become review-ready. Failing assets will regenerate up to ${maxRegenerations} time(s).`
     );
 
     if (!confirmed) return;
@@ -36,6 +39,7 @@ export function RunAutoQualityGateButton({
         body: JSON.stringify({
           month,
           maxRegenerations,
+          autoApprovePassing,
         }),
       });
 
@@ -59,16 +63,16 @@ export function RunAutoQualityGateButton({
       <div className={formStyles.header}>
         <h3 className={formStyles.title}>Auto quality before review</h3>
         <p className={formStyles.description}>
-          Score this month’s active assets before human review. Weak assets regenerate once using the quality feedback.
+          Score this month’s active assets before human review. Weak assets regenerate using the quality feedback.
         </p>
       </div>
 
       <div className={websiteStyles.card}>
         <p className={websiteStyles.cardText}>
-          This keeps rough first drafts out of review and moves the best active version forward.
+          Passing assets can either become review-ready or be automatically approved.
         </p>
         <p className={websiteStyles.cardMeta}>
-          Original failed versions are kept traceable but hidden from the active review flow.
+          Assets that still fail after regeneration are sent to human review.
         </p>
       </div>
 
@@ -83,6 +87,15 @@ export function RunAutoQualityGateButton({
           <option value={1}>1 — recommended</option>
           <option value={2}>2 — aggressive</option>
         </select>
+      </label>
+
+      <label className={formStyles.checkboxLabel}>
+        <input
+          type="checkbox"
+          checked={autoApprovePassing}
+          onChange={(event) => setAutoApprovePassing(event.target.checked)}
+        />
+        <span>Automatically approve assets that pass the quality gate</span>
       </label>
 
       <div className={formStyles.actions}>
@@ -100,7 +113,8 @@ export function RunAutoQualityGateButton({
         <div className={websiteStyles.card}>
           <p className={websiteStyles.cardText}>
             Scored {summary.scored ?? 0} asset(s), passed {summary.passed ?? 0}, regenerated{" "}
-            {summary.regenerated ?? 0}, and flagged {summary.humanReviewNeeded ?? 0} for human review.
+            {summary.regenerated ?? 0}, auto-approved {summary.autoApproved ?? 0}, and flagged{" "}
+            {summary.humanReviewNeeded ?? 0} for human review.
           </p>
 
           {Array.isArray(summary.errors) && summary.errors.length ? (
