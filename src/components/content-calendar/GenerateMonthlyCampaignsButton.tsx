@@ -10,6 +10,17 @@ function currentMonthValue() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
+type QualityFollowupResult =
+  | {
+      ok: true;
+      result: Record<string, any>;
+    }
+  | {
+      ok: false;
+      error: string;
+      result?: Record<string, any>;
+    };
+
 export function GenerateMonthlyCampaignsButton({
   defaultMonth,
 }: {
@@ -33,29 +44,50 @@ export function GenerateMonthlyCampaignsButton({
   const [running, setRunning] = useState(false);
   const [summary, setSummary] = useState<Record<string, any> | null>(null);
   const [qualitySummary, setQualitySummary] = useState<Record<string, any> | null>(null);
+  const [qualityWarning, setQualityWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function runQualityReviewAfterGeneration() {
-    const response = await fetch("/api/content-calendar/monthly-campaigns/bulk-quality-review", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        month,
-        regenerateWeakAssets: autoRegenerateWeakAssets,
-        maxRegenerations: autoRegenerateWeakAssets ? 1 : 0,
-        includeAlreadyChecked: false,
-      }),
-    });
+  async function runQualityReviewAfterGeneration(): Promise<QualityFollowupResult> {
+    try {
+      const response = await fetch("/api/content-calendar/monthly-campaigns/bulk-quality-review", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          month,
+          regenerateWeakAssets: autoRegenerateWeakAssets,
+          maxRegenerations: autoRegenerateWeakAssets ? 1 : 0,
+          includeAlreadyChecked: false,
+        }),
+      });
 
-    const result = await response.json().catch(() => ({}));
+      const result = await response.json().catch(() => ({}));
 
-    if (!response.ok) {
-      throw new Error(result.error ?? "Monthly campaigns generated, but automatic quality review failed.");
+      if (!response.ok) {
+        return {
+          ok: false,
+          error:
+            result.error ??
+            result.message ??
+            "Automatic quality review failed after campaign generation.",
+          result,
+        };
+      }
+
+      return {
+        ok: true,
+        result,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        error:
+          err instanceof Error
+            ? err.message
+            : "Automatic quality review failed after campaign generation.",
+      };
     }
-
-    return result;
   }
 
   async function generate() {
@@ -70,6 +102,7 @@ export function GenerateMonthlyCampaignsButton({
     setRunning(true);
     setSummary(null);
     setQualitySummary(null);
+    setQualityWarning(null);
     setError(null);
 
     try {
@@ -103,7 +136,14 @@ export function GenerateMonthlyCampaignsButton({
 
       if (autoRunQualityReview) {
         const qualityResult = await runQualityReviewAfterGeneration();
-        setQualitySummary(qualityResult);
+
+        if (qualityResult.ok) {
+          setQualitySummary(qualityResult.result);
+        } else {
+          setQualityWarning(
+            `Campaigns were generated, but automatic quality review did not complete: ${qualityResult.error}`
+          );
+        }
       }
 
       router.push(`/content-calendar/monthly-review?month=${encodeURIComponent(month)}`);
@@ -300,6 +340,15 @@ export function GenerateMonthlyCampaignsButton({
           <p className={websiteStyles.cardText}>
             Quality reviewed {qualitySummary.scored ?? 0} asset(s), passed {qualitySummary.passed ?? 0},
             regenerated {qualitySummary.regenerated ?? 0}, and flagged {qualitySummary.humanReviewNeeded ?? 0}.
+          </p>
+        </div>
+      ) : null}
+
+      {qualityWarning ? (
+        <div className={websiteStyles.card}>
+          <p className={formStyles.error}>{qualityWarning}</p>
+          <p className={websiteStyles.cardMeta}>
+            The generated assets are still saved. Open Monthly Review and run Bulk Quality Review after fixing the quality-review issue.
           </p>
         </div>
       ) : null}

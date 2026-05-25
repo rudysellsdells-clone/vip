@@ -51,6 +51,13 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected bulk quality review error.";
 
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json(
+      {
+        error: message,
+        hint:
+          "Campaign generation may have succeeded. Check that the bulk quality review SQL fields exist, then run Bulk Quality Review manually from Monthly Review.",
+      },
+      { status: 400 }
+    );
   }
 }
