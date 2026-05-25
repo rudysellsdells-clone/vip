@@ -28,19 +28,48 @@ export function GenerateMonthlyCampaignsButton({
   const [proofPoints, setProofPoints] = useState("");
   const [businessContext, setBusinessContext] = useState("");
   const [overwriteExisting, setOverwriteExisting] = useState(false);
+  const [autoRunQualityReview, setAutoRunQualityReview] = useState(true);
+  const [autoRegenerateWeakAssets, setAutoRegenerateWeakAssets] = useState(true);
   const [running, setRunning] = useState(false);
   const [summary, setSummary] = useState<Record<string, any> | null>(null);
+  const [qualitySummary, setQualitySummary] = useState<Record<string, any> | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  async function runQualityReviewAfterGeneration() {
+    const response = await fetch("/api/content-calendar/monthly-campaigns/bulk-quality-review", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        month,
+        regenerateWeakAssets: autoRegenerateWeakAssets,
+        maxRegenerations: autoRegenerateWeakAssets ? 1 : 0,
+        includeAlreadyChecked: false,
+      }),
+    });
+
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(result.error ?? "Monthly campaigns generated, but automatic quality review failed.");
+    }
+
+    return result;
+  }
 
   async function generate() {
     const confirmed = window.confirm(
-      "Generate one campaign per week for this month using the strategy inputs, including 1 blog post, 5 LinkedIn posts, 5 Facebook posts, 1 email, and 1 video script for each campaign?"
+      autoRunQualityReview
+        ? "Generate the monthly campaign package and automatically run quality review across all generated assets?"
+        : "Generate one campaign per week for this month, including the full asset package for each campaign?"
     );
 
     if (!confirmed) return;
 
     setRunning(true);
     setSummary(null);
+    setQualitySummary(null);
     setError(null);
 
     try {
@@ -71,7 +100,13 @@ export function GenerateMonthlyCampaignsButton({
       }
 
       setSummary(result);
-      router.push(`/content-calendar/monthly?month=${encodeURIComponent(month)}`);
+
+      if (autoRunQualityReview) {
+        const qualityResult = await runQualityReviewAfterGeneration();
+        setQualitySummary(qualityResult);
+      }
+
+      router.push(`/content-calendar/monthly-review?month=${encodeURIComponent(month)}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected monthly campaign generation error.");
@@ -199,6 +234,29 @@ export function GenerateMonthlyCampaignsButton({
         />
       </label>
 
+      <div className={websiteStyles.card}>
+        <h4 className={websiteStyles.cardTitle}>Quality Review Automation</h4>
+
+        <label className={formStyles.checkboxLabel}>
+          <input
+            type="checkbox"
+            checked={autoRunQualityReview}
+            onChange={(event) => setAutoRunQualityReview(event.target.checked)}
+          />
+          <span>Automatically run quality review after generation</span>
+        </label>
+
+        <label className={formStyles.checkboxLabel}>
+          <input
+            type="checkbox"
+            checked={autoRegenerateWeakAssets}
+            disabled={!autoRunQualityReview}
+            onChange={(event) => setAutoRegenerateWeakAssets(event.target.checked)}
+          />
+          <span>Automatically regenerate weak assets once using quality feedback</span>
+        </label>
+      </div>
+
       <label className={formStyles.checkboxLabel}>
         <input
           type="checkbox"
@@ -234,6 +292,15 @@ export function GenerateMonthlyCampaignsButton({
               {summary.errors.length} issue(s): {summary.errors.slice(0, 3).join(" | ")}
             </p>
           ) : null}
+        </div>
+      ) : null}
+
+      {qualitySummary ? (
+        <div className={websiteStyles.card}>
+          <p className={websiteStyles.cardText}>
+            Quality reviewed {qualitySummary.scored ?? 0} asset(s), passed {qualitySummary.passed ?? 0},
+            regenerated {qualitySummary.regenerated ?? 0}, and flagged {qualitySummary.humanReviewNeeded ?? 0}.
+          </p>
         </div>
       ) : null}
 
