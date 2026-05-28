@@ -11,6 +11,15 @@ function currentMonthValue() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
+type ResponseDebug = {
+  url: string;
+  ok: boolean;
+  status: number;
+  statusText: string;
+  rawText: string;
+  parsed: any;
+};
+
 type QualityFollowupResult =
   | {
       ok: true;
@@ -22,22 +31,41 @@ type QualityFollowupResult =
       result?: Record<string, any>;
     };
 
-async function readJsonResponse(response: Response) {
-  const text = await response.text();
+async function readResponseDebug(response: Response): Promise<ResponseDebug> {
+  const rawText = await response.text();
+  let parsed: any = null;
 
-  if (!text) return {};
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    return {
-      error: text,
-    };
+  if (rawText) {
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      parsed = {
+        error: rawText,
+      };
+    }
   }
+
+  return {
+    url: response.url,
+    ok: response.ok,
+    status: response.status,
+    statusText: response.statusText,
+    rawText,
+    parsed,
+  };
 }
 
-function apiErrorMessage(result: unknown, fallback: string) {
-  return readableError(result, fallback);
+function responseErrorMessage(debug: ResponseDebug, fallback: string) {
+  const parsedMessage = readableError(debug.parsed, "");
+  const rawMessage = debug.rawText?.trim();
+
+  return [
+    fallback,
+    `HTTP ${debug.status} ${debug.statusText}`,
+    parsedMessage || rawMessage || "",
+  ]
+    .filter(Boolean)
+    .join(" — ");
 }
 
 export function GenerateMonthlyCampaignsButton({
@@ -61,11 +89,55 @@ export function GenerateMonthlyCampaignsButton({
   const [autoRunQualityReview, setAutoRunQualityReview] = useState(true);
   const [autoRegenerateWeakAssets, setAutoRegenerateWeakAssets] = useState(true);
   const [running, setRunning] = useState(false);
+  const [diagnosticRunning, setDiagnosticRunning] = useState(false);
   const [summary, setSummary] = useState<Record<string, any> | null>(null);
   const [qualitySummary, setQualitySummary] = useState<Record<string, any> | null>(null);
   const [qualityWarning, setQualityWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [debugDetails, setDebugDetails] = useState<Record<string, any> | null>(null);
+  const [debugDetails, setDebugDetails] = useState<any | null>(null);
+
+  function requestPayload() {
+    return {
+      month,
+      campaignTheme,
+      businessContext,
+      monthlyObjective,
+      targetAudience,
+      primaryOffer,
+      keyTopics,
+      callToAction,
+      differentiator,
+      proofPoints,
+      overwriteExisting,
+    };
+  }
+
+  async function runDiagnostic() {
+    setDiagnosticRunning(true);
+    setError(null);
+    setDebugDetails(null);
+
+    try {
+      const response = await fetch("/api/content-calendar/monthly-campaigns/generate-diagnostic", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestPayload()),
+      });
+
+      const debug = await readResponseDebug(response);
+      setDebugDetails(debug.parsed ?? debug);
+
+      if (!response.ok) {
+        setError(responseErrorMessage(debug, "Monthly generator diagnostic failed."));
+      }
+    } catch (err) {
+      setError(readableError(err, "Monthly generator diagnostic failed."));
+    } finally {
+      setDiagnosticRunning(false);
+    }
+  }
 
   async function runQualityReviewAfterGeneration(): Promise<QualityFollowupResult> {
     try {
@@ -82,22 +154,22 @@ export function GenerateMonthlyCampaignsButton({
         }),
       });
 
-      const result = await readJsonResponse(response);
+      const debug = await readResponseDebug(response);
 
       if (!response.ok) {
         return {
           ok: false,
-          error: apiErrorMessage(
-            result,
+          error: responseErrorMessage(
+            debug,
             "Automatic quality review failed after campaign generation."
           ),
-          result,
+          result: debug.parsed,
         };
       }
 
       return {
         ok: true,
-        result,
+        result: debug.parsed ?? {},
       };
     } catch (err) {
       return {
@@ -132,45 +204,32 @@ export function GenerateMonthlyCampaignsButton({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          month,
-          campaignTheme,
-          businessContext,
-          monthlyObjective,
-          targetAudience,
-          primaryOffer,
-          keyTopics,
-          callToAction,
-          differentiator,
-          proofPoints,
-          overwriteExisting,
-        }),
+        body: JSON.stringify(requestPayload()),
       });
 
-      const result = await readJsonResponse(response);
+      const debug = await readResponseDebug(response);
+      setDebugDetails(debug.parsed ?? debug);
 
       if (!response.ok) {
-        setDebugDetails(result);
-        throw new Error(apiErrorMessage(result, "Unable to generate monthly campaigns."));
+        throw new Error(responseErrorMessage(debug, "Unable to generate monthly campaigns."));
       }
 
+      const result = debug.parsed ?? {};
       setSummary(result);
 
       if (Array.isArray(result.errors) && result.errors.length > 0) {
-        setDebugDetails(result);
         setError(
           `Generation completed with ${result.errors.length} issue(s): ${result.errors
             .map((item: unknown) => readableError(item, "Unknown issue"))
-            .slice(0, 3)
+            .slice(0, 5)
             .join(" | ")}`
         );
         return;
       }
 
       if ((result.assetCount ?? 0) === 0) {
-        setDebugDetails(result);
         setError(
-          "Generation returned zero assets. Check the debug details below for route warnings/errors."
+          "Generation returned zero assets. Review the Debug details below for the failed weekly generation reason."
         );
         return;
       }
@@ -354,10 +413,19 @@ export function GenerateMonthlyCampaignsButton({
         <button
           type="button"
           onClick={generate}
-          disabled={running}
+          disabled={running || diagnosticRunning}
           className={formStyles.submit}
         >
           {running ? "Generating..." : "Generate Monthly Campaigns"}
+        </button>
+
+        <button
+          type="button"
+          onClick={runDiagnostic}
+          disabled={running || diagnosticRunning}
+          className={formStyles.secondaryButton}
+        >
+          {diagnosticRunning ? "Checking..." : "Run Generator Diagnostic"}
         </button>
       </div>
 
@@ -371,15 +439,6 @@ export function GenerateMonthlyCampaignsButton({
               {summary.warnings.length} warning(s):{" "}
               {summary.warnings
                 .map((item: unknown) => readableError(item, "Unknown warning"))
-                .slice(0, 2)
-                .join(" | ")}
-            </p>
-          ) : null}
-          {Array.isArray(summary.errors) && summary.errors.length ? (
-            <p className={formStyles.error}>
-              {summary.errors.length} issue(s):{" "}
-              {summary.errors
-                .map((item: unknown) => readableError(item, "Unknown issue"))
                 .slice(0, 3)
                 .join(" | ")}
             </p>
@@ -399,16 +458,13 @@ export function GenerateMonthlyCampaignsButton({
       {qualityWarning ? (
         <div className={websiteStyles.card}>
           <p className={formStyles.error}>{qualityWarning}</p>
-          <p className={websiteStyles.cardMeta}>
-            The generated assets are still saved. Open Monthly Review and run Bulk Quality Review after fixing the quality-review issue.
-          </p>
         </div>
       ) : null}
 
       {error ? <p className={formStyles.error}>{error}</p> : null}
 
       {debugDetails ? (
-        <details className={websiteStyles.card}>
+        <details className={websiteStyles.card} open>
           <summary className={websiteStyles.cardTitle}>Debug details</summary>
           <pre style={{ whiteSpace: "pre-wrap", marginTop: 12, fontSize: 12 }}>
             {JSON.stringify(debugDetails, null, 2)}
