@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import formStyles from "@/components/forms/VipForm.module.css";
-import { readableError } from "@/lib/errors/readable-error";
 import { websiteStyles } from "@/components/website-ui/WebsitePage";
 
 function currentMonthValue() {
@@ -11,61 +10,40 @@ function currentMonthValue() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
-type ResponseDebug = {
-  url: string;
-  ok: boolean;
-  status: number;
-  statusText: string;
-  rawText: string;
-  parsed: any;
-};
+function readableMessage(value: unknown, fallback = "Unexpected error.") {
+  if (value instanceof Error) return value.message || fallback;
+  if (typeof value === "string") return value || fallback;
 
-type QualityFollowupResult =
-  | {
-      ok: true;
-      result: Record<string, any>;
-    }
-  | {
-      ok: false;
-      error: string;
-      result?: Record<string, any>;
-    };
+  if (value && typeof value === "object") {
+    const objectValue = value as Record<string, any>;
+    const main =
+      objectValue.error ??
+      objectValue.message ??
+      objectValue.details ??
+      objectValue.hint;
 
-async function readResponseDebug(response: Response): Promise<ResponseDebug> {
-  const rawText = await response.text();
-  let parsed: any = null;
+    if (typeof main === "string") return main;
 
-  if (rawText) {
     try {
-      parsed = JSON.parse(rawText);
+      return JSON.stringify(value);
     } catch {
-      parsed = {
-        error: rawText,
-      };
+      return fallback;
     }
   }
 
-  return {
-    url: response.url,
-    ok: response.ok,
-    status: response.status,
-    statusText: response.statusText,
-    rawText,
-    parsed,
-  };
+  return fallback;
 }
 
-function responseErrorMessage(debug: ResponseDebug, fallback: string) {
-  const parsedMessage = readableError(debug.parsed, "");
-  const rawMessage = debug.rawText?.trim();
+async function readJson(response: Response) {
+  const text = await response.text();
 
-  return [
-    fallback,
-    `HTTP ${debug.status} ${debug.statusText}`,
-    parsedMessage || rawMessage || "",
-  ]
-    .filter(Boolean)
-    .join(" — ");
+  if (!text) return {};
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { error: text };
+  }
 }
 
 export function GenerateMonthlyCampaignsButton({
@@ -86,15 +64,9 @@ export function GenerateMonthlyCampaignsButton({
   const [proofPoints, setProofPoints] = useState("");
   const [businessContext, setBusinessContext] = useState("");
   const [overwriteExisting, setOverwriteExisting] = useState(false);
-  const [autoRunQualityReview, setAutoRunQualityReview] = useState(true);
-  const [autoRegenerateWeakAssets, setAutoRegenerateWeakAssets] = useState(true);
   const [running, setRunning] = useState(false);
-  const [diagnosticRunning, setDiagnosticRunning] = useState(false);
   const [summary, setSummary] = useState<Record<string, any> | null>(null);
-  const [qualitySummary, setQualitySummary] = useState<Record<string, any> | null>(null);
-  const [qualityWarning, setQualityWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [debugDetails, setDebugDetails] = useState<any | null>(null);
 
   function requestPayload() {
     return {
@@ -112,91 +84,16 @@ export function GenerateMonthlyCampaignsButton({
     };
   }
 
-  async function runDiagnostic() {
-    setDiagnosticRunning(true);
-    setError(null);
-    setDebugDetails(null);
-
-    try {
-      const response = await fetch("/api/content-calendar/monthly-campaigns/generate-diagnostic", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestPayload()),
-      });
-
-      const debug = await readResponseDebug(response);
-      setDebugDetails(debug.parsed ?? debug);
-
-      if (!response.ok) {
-        setError(responseErrorMessage(debug, "Monthly generator diagnostic failed."));
-      }
-    } catch (err) {
-      setError(readableError(err, "Monthly generator diagnostic failed."));
-    } finally {
-      setDiagnosticRunning(false);
-    }
-  }
-
-  async function runQualityReviewAfterGeneration(): Promise<QualityFollowupResult> {
-    try {
-      const response = await fetch("/api/content-calendar/monthly-campaigns/bulk-quality-review", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          month,
-          regenerateWeakAssets: autoRegenerateWeakAssets,
-          maxRegenerations: autoRegenerateWeakAssets ? 1 : 0,
-          includeAlreadyChecked: false,
-        }),
-      });
-
-      const debug = await readResponseDebug(response);
-
-      if (!response.ok) {
-        return {
-          ok: false,
-          error: responseErrorMessage(
-            debug,
-            "Automatic quality review failed after campaign generation."
-          ),
-          result: debug.parsed,
-        };
-      }
-
-      return {
-        ok: true,
-        result: debug.parsed ?? {},
-      };
-    } catch (err) {
-      return {
-        ok: false,
-        error: readableError(
-          err,
-          "Automatic quality review failed after campaign generation."
-        ),
-      };
-    }
-  }
-
   async function generate() {
     const confirmed = window.confirm(
-      autoRunQualityReview
-        ? "Generate the monthly campaign package and automatically run quality review across all generated assets?"
-        : "Generate one campaign per week for this month, including the full asset package for each campaign?"
+      "Generate one campaign per week for this month, including the full asset package for each campaign?"
     );
 
     if (!confirmed) return;
 
     setRunning(true);
     setSummary(null);
-    setQualitySummary(null);
-    setQualityWarning(null);
     setError(null);
-    setDebugDetails(null);
 
     try {
       const response = await fetch("/api/content-calendar/monthly-campaigns/generate", {
@@ -207,52 +104,37 @@ export function GenerateMonthlyCampaignsButton({
         body: JSON.stringify(requestPayload()),
       });
 
-      const debug = await readResponseDebug(response);
-      setDebugDetails(debug.parsed ?? debug);
+      const result = await readJson(response);
 
       if (!response.ok) {
-        throw new Error(responseErrorMessage(debug, "Unable to generate monthly campaigns."));
+        throw new Error(
+          `${readableMessage(result, "Unable to generate monthly campaigns.")}${
+            response.status ? ` — HTTP ${response.status}` : ""
+          }`
+        );
       }
 
-      const result = debug.parsed ?? {};
       setSummary(result);
 
       if (Array.isArray(result.errors) && result.errors.length > 0) {
         setError(
           `Generation completed with ${result.errors.length} issue(s): ${result.errors
-            .map((item: unknown) => readableError(item, "Unknown issue"))
-            .slice(0, 5)
+            .map((item: unknown) => readableMessage(item, "Unknown issue"))
+            .slice(0, 3)
             .join(" | ")}`
         );
         return;
       }
 
       if ((result.assetCount ?? 0) === 0) {
-        setError(
-          "Generation returned zero assets. Review the Debug details below for the failed weekly generation reason."
-        );
+        setError("Generation returned zero assets.");
         return;
-      }
-
-      if (autoRunQualityReview) {
-        const qualityResult = await runQualityReviewAfterGeneration();
-
-        if (qualityResult.ok) {
-          setQualitySummary(qualityResult.result);
-        } else {
-          setQualityWarning(
-            `Campaigns were generated, but automatic quality review did not complete: ${qualityResult.error}`
-          );
-          if (qualityResult.result) {
-            setDebugDetails(qualityResult.result);
-          }
-        }
       }
 
       router.push(`/content-calendar/monthly-review?month=${encodeURIComponent(month)}`);
       router.refresh();
     } catch (err) {
-      setError(readableError(err, "Unexpected monthly campaign generation error."));
+      setError(readableMessage(err, "Unexpected monthly campaign generation error."));
     } finally {
       setRunning(false);
     }
@@ -378,26 +260,10 @@ export function GenerateMonthlyCampaignsButton({
       </label>
 
       <div className={websiteStyles.card}>
-        <h4 className={websiteStyles.cardTitle}>Quality Review Automation</h4>
-
-        <label className={formStyles.checkboxLabel}>
-          <input
-            type="checkbox"
-            checked={autoRunQualityReview}
-            onChange={(event) => setAutoRunQualityReview(event.target.checked)}
-          />
-          <span>Automatically run quality review after generation</span>
-        </label>
-
-        <label className={formStyles.checkboxLabel}>
-          <input
-            type="checkbox"
-            checked={autoRegenerateWeakAssets}
-            disabled={!autoRunQualityReview}
-            onChange={(event) => setAutoRegenerateWeakAssets(event.target.checked)}
-          />
-          <span>Automatically regenerate weak assets once using quality feedback</span>
-        </label>
+        <h4 className={websiteStyles.cardTitle}>Generation Mode</h4>
+        <p className={websiteStyles.cardMeta}>
+          Fast batch mode is active. This avoids Vercel timeouts by creating the full campaign package without OpenAI calls inside the generation request.
+        </p>
       </div>
 
       <label className={formStyles.checkboxLabel}>
@@ -413,32 +279,24 @@ export function GenerateMonthlyCampaignsButton({
         <button
           type="button"
           onClick={generate}
-          disabled={running || diagnosticRunning}
+          disabled={running}
           className={formStyles.submit}
         >
           {running ? "Generating..." : "Generate Monthly Campaigns"}
-        </button>
-
-        <button
-          type="button"
-          onClick={runDiagnostic}
-          disabled={running || diagnosticRunning}
-          className={formStyles.secondaryButton}
-        >
-          {diagnosticRunning ? "Checking..." : "Run Generator Diagnostic"}
         </button>
       </div>
 
       {summary ? (
         <div className={websiteStyles.card}>
           <p className={websiteStyles.cardText}>
-            Created {summary.campaignCount ?? 0} campaign(s) and {summary.assetCount ?? 0} asset(s).
+            Created {summary.campaignCount ?? 0} campaign(s) and {summary.assetCount ?? 0} asset(s)
+            {summary.durationMs ? ` in ${summary.durationMs}ms` : ""}.
           </p>
           {Array.isArray(summary.warnings) && summary.warnings.length ? (
             <p className={formStyles.description}>
               {summary.warnings.length} warning(s):{" "}
               {summary.warnings
-                .map((item: unknown) => readableError(item, "Unknown warning"))
+                .map((item: unknown) => readableMessage(item, "Unknown warning"))
                 .slice(0, 3)
                 .join(" | ")}
             </p>
@@ -446,31 +304,7 @@ export function GenerateMonthlyCampaignsButton({
         </div>
       ) : null}
 
-      {qualitySummary ? (
-        <div className={websiteStyles.card}>
-          <p className={websiteStyles.cardText}>
-            Quality reviewed {qualitySummary.scored ?? 0} asset(s), passed {qualitySummary.passed ?? 0},
-            regenerated {qualitySummary.regenerated ?? 0}, and flagged {qualitySummary.humanReviewNeeded ?? 0}.
-          </p>
-        </div>
-      ) : null}
-
-      {qualityWarning ? (
-        <div className={websiteStyles.card}>
-          <p className={formStyles.error}>{qualityWarning}</p>
-        </div>
-      ) : null}
-
       {error ? <p className={formStyles.error}>{error}</p> : null}
-
-      {debugDetails ? (
-        <details className={websiteStyles.card} open>
-          <summary className={websiteStyles.cardTitle}>Debug details</summary>
-          <pre style={{ whiteSpace: "pre-wrap", marginTop: 12, fontSize: 12 }}>
-            {JSON.stringify(debugDetails, null, 2)}
-          </pre>
-        </details>
-      ) : null}
     </div>
   );
 }
