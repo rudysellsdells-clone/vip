@@ -43,10 +43,17 @@ function rowToContext(row: MemoryRow) {
     "business_name",
     "brand_name",
     "target_audience",
+    "audience",
     "services",
+    "service",
+    "offer",
+    "offers",
     "differentiator",
+    "positioning",
     "cta",
+    "call_to_action",
     "do_not_say",
+    "metadata",
   ];
 
   const parts = preferredFields
@@ -56,10 +63,10 @@ function rowToContext(row: MemoryRow) {
       if (value === null || value === undefined || value === "") return "";
 
       if (typeof value === "object") {
-        return `${field}: ${compact(JSON.stringify(value), 700)}`;
+        return `${field}: ${compact(JSON.stringify(value), 900)}`;
       }
 
-      return `${field}: ${compact(value, 700)}`;
+      return `${field}: ${compact(value, 900)}`;
     })
     .filter(Boolean);
 
@@ -70,122 +77,122 @@ function rowToContext(row: MemoryRow) {
   return compact(JSON.stringify(row), 900);
 }
 
-async function safeSelect({
+async function tryQuery({
   supabase,
-  source,
-  query,
+  table,
+  userId,
+  limit = 30,
 }: {
   supabase: any;
-  source: string;
-  query: any;
+  table: string;
+  userId: string;
+  limit?: number;
 }): Promise<SafeSelectResult> {
   try {
-    const { data, error } = await query;
+    /*
+      Keep this intentionally simple.
+
+      The earlier version used .order("updated_at"), which can fail if a table exists but does
+      not have that exact column. For memory lookup, finding rows matters more than perfect order.
+    */
+    const { data, error } = await supabase
+      .from(table)
+      .select("*")
+      .eq("user_id", userId)
+      .limit(limit);
 
     if (error) {
       return {
-        source,
+        source: table,
         rows: [],
         error: error.message,
       };
     }
 
     return {
-      source,
+      source: table,
       rows: Array.isArray(data) ? data : [],
     };
   } catch (error) {
     return {
-      source,
+      source: table,
       rows: [],
       error: error instanceof Error ? error.message : "Unknown memory fetch error.",
     };
   }
 }
 
+export function fallbackCampaignMemoryContext({
+  campaignTheme,
+  businessContext,
+  strategy,
+}: {
+  campaignTheme: string;
+  businessContext: string;
+  strategy: Record<string, string>;
+}) {
+  const lines = [
+    campaignTheme ? `Campaign theme: ${campaignTheme}` : "",
+    businessContext ? `Business context: ${businessContext}` : "",
+    strategy.monthlyObjective ? `Monthly objective: ${strategy.monthlyObjective}` : "",
+    strategy.targetAudience ? `Target audience: ${strategy.targetAudience}` : "",
+    strategy.primaryOffer ? `Primary offer: ${strategy.primaryOffer}` : "",
+    strategy.keyTopics ? `Key topics: ${strategy.keyTopics}` : "",
+    strategy.differentiator ? `Differentiator: ${strategy.differentiator}` : "",
+    strategy.callToAction ? `Preferred CTA: ${strategy.callToAction}` : "",
+    strategy.proofPoints ? `Proof points / supporting context: ${strategy.proofPoints}` : "",
+  ].filter(Boolean);
+
+  return lines.join("\n");
+}
+
 export async function buildBusinessMemoryContext({
   supabase,
   userId,
+  campaignTheme = "",
+  businessContext = "",
+  strategy = {},
 }: {
   supabase: any;
   userId: string;
+  campaignTheme?: string;
+  businessContext?: string;
+  strategy?: Record<string, string>;
 }): Promise<BusinessMemoryContext> {
   /*
-    Keep this intentionally defensive.
+    Defensive table discovery.
 
-    Different VIP installs may have slightly different table names as the product matures.
-    Missing tables should not crash generation. They should simply produce warnings.
+    VIP installs may not all use the same memory table names yet. Missing tables should not block
+    generation. They should only create warnings for diagnostics.
   */
-  const results = await Promise.all([
-    safeSelect({
-      supabase,
-      source: "brand_voice",
-      query: supabase
-        .from("brand_voice")
-        .select("*")
-        .eq("user_id", userId)
-        .order("updated_at", { ascending: false })
-        .limit(10),
-    }),
-    safeSelect({
-      supabase,
-      source: "brand_voice_profiles",
-      query: supabase
-        .from("brand_voice_profiles")
-        .select("*")
-        .eq("user_id", userId)
-        .order("updated_at", { ascending: false })
-        .limit(10),
-    }),
-    safeSelect({
-      supabase,
-      source: "knowledge_entries",
-      query: supabase
-        .from("knowledge_entries")
-        .select("*")
-        .eq("user_id", userId)
-        .order("updated_at", { ascending: false })
-        .limit(40),
-    }),
-    safeSelect({
-      supabase,
-      source: "knowledge",
-      query: supabase
-        .from("knowledge")
-        .select("*")
-        .eq("user_id", userId)
-        .order("updated_at", { ascending: false })
-        .limit(40),
-    }),
-    safeSelect({
-      supabase,
-      source: "business_knowledge",
-      query: supabase
-        .from("business_knowledge")
-        .select("*")
-        .eq("user_id", userId)
-        .order("updated_at", { ascending: false })
-        .limit(40),
-    }),
-    safeSelect({
-      supabase,
-      source: "settings",
-      query: supabase
-        .from("settings")
-        .select("*")
-        .eq("user_id", userId)
-        .limit(10),
-    }),
-    safeSelect({
-      supabase,
-      source: "app_settings",
-      query: supabase
-        .from("app_settings")
-        .select("*")
-        .eq("user_id", userId)
-        .limit(10),
-    }),
-  ]);
+  const candidateTables = [
+    "brand_voice",
+    "brand_voices",
+    "brand_voice_profiles",
+    "brand_voice_settings",
+    "knowledge_entries",
+    "knowledge",
+    "knowledge_items",
+    "business_knowledge",
+    "business_facts",
+    "company_facts",
+    "memory_entries",
+    "saved_knowledge",
+    "settings",
+    "app_settings",
+    "user_settings",
+  ];
+
+  const results = await Promise.all(
+    candidateTables.map((table) =>
+      tryQuery({
+        supabase,
+        table,
+        userId,
+        limit: table.includes("knowledge") || table.includes("memory") || table.includes("facts") ? 50 : 20,
+      })
+    )
+  );
 
   const raw: Record<string, MemoryRow[]> = {};
   const warnings: string[] = [];
@@ -194,7 +201,7 @@ export async function buildBusinessMemoryContext({
   for (const result of results) {
     raw[result.source] = result.rows;
 
-    if (result.error) {
+    if (result.error && !/does not exist|schema cache|Could not find/i.test(result.error)) {
       warnings.push(`${result.source}: ${result.error}`);
     }
 
@@ -208,14 +215,34 @@ export async function buildBusinessMemoryContext({
     sections.push(section);
   }
 
+  const campaignFallback = fallbackCampaignMemoryContext({
+    campaignTheme,
+    businessContext,
+    strategy,
+  });
+
+  if (campaignFallback) {
+    sections.push(
+      [
+        "## current_campaign_context",
+        "Use this as campaign-specific guidance only. It may add angle/context, but saved business memory remains the source of truth when available.",
+        campaignFallback,
+      ].join("\n")
+    );
+  }
+
   const contextText = sections.join("\n\n").trim();
   const sourceCount = results.filter((result) => result.rows.length > 0).length;
-  const hasUsefulMemory = contextText.length >= 250 || sourceCount >= 2;
+  const hasSavedMemory = sourceCount >= 1;
+  const hasFallbackContext = campaignFallback.length >= 80;
 
   return {
-    hasUsefulMemory,
+    hasUsefulMemory: hasSavedMemory || hasFallbackContext,
     sourceCount,
-    sources: results.filter((result) => result.rows.length > 0).map((result) => result.source),
+    sources: [
+      ...results.filter((result) => result.rows.length > 0).map((result) => result.source),
+      ...(campaignFallback ? ["current_campaign_context"] : []),
+    ],
     contextText,
     warnings,
     raw,
@@ -232,8 +259,10 @@ export function summarizeMemoryForPrompt(memory: BusinessMemoryContext) {
   }
 
   return [
-    "Use the following saved business memory as the source of truth.",
-    "This context is private. Do not quote database labels or raw memory notes directly unless they are natural in the final content.",
+    "Use the following context as private generation guidance.",
+    "Saved Brand Voice / Knowledge / Business Facts are the source of truth when present.",
+    "Current campaign context may guide the angle, but it must not be copied verbatim into the final content.",
+    "Do not quote database labels or raw strategy notes directly unless they sound natural in the final content.",
     "If monthly campaign strategy conflicts with saved business facts, follow saved business facts.",
     "",
     memory.contextText,

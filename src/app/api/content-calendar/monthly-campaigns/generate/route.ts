@@ -133,7 +133,13 @@ export async function POST(request: Request) {
   const campaignTheme = textValue(body.campaignTheme) || "Authority Growth";
   const businessContext = textValue(body.businessContext);
   const overwriteExisting = Boolean(body.overwriteExisting);
-  const requireMemoryContext = body.requireMemoryContext !== false;
+
+  /*
+    Important:
+    Memory context should guide generation, but missing/undetected memory should not completely block
+    a test run. If a user explicitly wants strict memory, they can send requireMemoryContext: true.
+  */
+  const requireMemoryContext = Boolean(body.requireMemoryContext);
 
   const strategy = {
     monthlyObjective: textValue(body.monthlyObjective),
@@ -168,6 +174,9 @@ export async function POST(request: Request) {
   const memory = await buildBusinessMemoryContext({
     supabase,
     userId: user.id,
+    campaignTheme,
+    businessContext,
+    strategy,
   });
 
   if (requireMemoryContext && !memory.hasUsefulMemory) {
@@ -176,7 +185,7 @@ export async function POST(request: Request) {
         error:
           "Not enough saved Brand Voice / Knowledge / Business Facts were found to safely generate publish-ready campaign content.",
         hint:
-          "Add or confirm Brand Voice and Knowledge records, or rerun with requireMemoryContext disabled for a generic draft.",
+          "Add or confirm Brand Voice and Knowledge records, or rerun without strict memory mode.",
         memorySources: memory.sources,
         memoryWarnings: memory.warnings.slice(0, 8),
       },
@@ -194,7 +203,14 @@ export async function POST(request: Request) {
   const createdCampaigns: Array<Record<string, any>> = [];
   const createdAssets: Array<Record<string, any>> = [];
   const errors: string[] = [];
-  const warnings: string[] = [...memory.warnings.slice(0, 8)];
+  const warnings: string[] = [
+    ...memory.warnings.slice(0, 8),
+    ...(!memory.sources.some((source) => source !== "current_campaign_context")
+      ? [
+          "No saved Brand Voice / Knowledge / Business Facts were detected. Generation used current campaign context only.",
+        ]
+      : []),
+  ];
 
   for (const week of plan) {
     let publishReadyAssets: Awaited<ReturnType<typeof generatePublishReadyWeeklyPackage>>;
@@ -289,8 +305,9 @@ export async function POST(request: Request) {
       memorySources: memory.sources,
       memorySourceCount: memory.sourceCount,
       memoryWarnings: memory.warnings.slice(0, 8),
+      strictMemoryRequired: requireMemoryContext,
       strategyUsage:
-        "Private generation context only. Saved memory is source of truth; monthly strategy guides the campaign angle.",
+        "Private generation context only. Saved memory is source of truth when available; monthly strategy guides the campaign angle.",
       campaignCount: createdCampaigns.length,
       assetCount: createdAssets.length,
       errors,
