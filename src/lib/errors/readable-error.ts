@@ -1,4 +1,4 @@
-export function readableError(value: unknown, fallback = "Unexpected error.") {
+export function readableError(value: unknown, fallback = "Unexpected error."): string {
   if (value instanceof Error) {
     return value.message || fallback;
   }
@@ -24,7 +24,7 @@ export function readableError(value: unknown, fallback = "Unexpected error.") {
     ];
 
     const readableCandidates = candidates
-      .map((candidate) => {
+      .map((candidate): string => {
         if (!candidate) return "";
 
         if (typeof candidate === "string") return candidate;
@@ -33,7 +33,7 @@ export function readableError(value: unknown, fallback = "Unexpected error.") {
 
         if (Array.isArray(candidate)) {
           return candidate
-            .map((item) => readableError(item, ""))
+            .map((item): string => readableError(item, ""))
             .filter(Boolean)
             .join(" | ");
         }
@@ -64,7 +64,7 @@ export function readableError(value: unknown, fallback = "Unexpected error.") {
   return String(value) || fallback;
 }
 
-export function compactReadableError(value: unknown, fallback = "Unexpected error.") {
+export function compactReadableError(value: unknown, fallback = "Unexpected error."): string {
   return readableError(value, fallback)
     .replace(/\s+/g, " ")
     .trim();
