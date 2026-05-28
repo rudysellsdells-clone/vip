@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { buildMonthlyCampaignPlan } from "@/lib/content-calendar/monthly-campaign-planner";
 import { generatePublishReadyWeeklyPackage } from "@/lib/content-generation/publish-ready-weekly-generator";
 import { buildBusinessMemoryContext } from "@/lib/content-generation/memory-context";
+import { readableError } from "@/lib/errors/readable-error";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -116,7 +117,7 @@ function calendarAssetFields({
   };
 }
 
-export async function POST(request: Request) {
+async function handlePost(request: Request) {
   const supabase = untypedSupabase(await createClient());
 
   const {
@@ -133,12 +134,6 @@ export async function POST(request: Request) {
   const campaignTheme = textValue(body.campaignTheme) || "Authority Growth";
   const businessContext = textValue(body.businessContext);
   const overwriteExisting = Boolean(body.overwriteExisting);
-
-  /*
-    Important:
-    Memory context should guide generation, but missing/undetected memory should not completely block
-    a test run. If a user explicitly wants strict memory, they can send requireMemoryContext: true.
-  */
   const requireMemoryContext = Boolean(body.requireMemoryContext);
 
   const strategy = {
@@ -317,17 +312,49 @@ export async function POST(request: Request) {
     },
   });
 
-  return NextResponse.json({
-    ok: true,
-    month,
-    generationMode: "memory_backed_publish_ready",
-    memorySources: memory.sources,
-    memorySourceCount: memory.sourceCount,
-    campaignCount: createdCampaigns.length,
-    assetCount: createdAssets.length,
-    errors,
-    warnings,
-    campaigns: createdCampaigns,
-    assets: createdAssets,
-  });
+  const status = createdAssets.length > 0 ? 200 : 400;
+
+  return NextResponse.json(
+    {
+      ok: createdAssets.length > 0,
+      month,
+      generationMode: "memory_backed_publish_ready",
+      memorySources: memory.sources,
+      memorySourceCount: memory.sourceCount,
+      campaignCount: createdCampaigns.length,
+      assetCount: createdAssets.length,
+      errors,
+      warnings,
+      campaigns: createdCampaigns,
+      assets: createdAssets,
+      hint:
+        createdAssets.length > 0
+          ? undefined
+          : "No assets were created. Review the errors array for the failed weekly generation reason.",
+    },
+    { status }
+  );
+}
+
+export async function POST(request: Request) {
+  try {
+    return await handlePost(request);
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: readableError(error, "Unable to generate monthly campaigns."),
+        details:
+          error instanceof Error
+            ? {
+                name: error.name,
+                message: error.message,
+                stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+              }
+            : error,
+        hint:
+          "The generation route crashed before it could finish. Check this response details, Vercel function logs, and environment variables such as OPENAI_API_KEY.",
+      },
+      { status: 500 }
+    );
+  }
 }

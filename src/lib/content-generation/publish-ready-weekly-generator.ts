@@ -50,10 +50,20 @@ function parseJsonObject(text: string) {
   } catch {
     const match = trimmed.match(/\{[\s\S]*\}/);
 
-    if (!match) throw new Error("No JSON object found in generation response.");
+    if (!match) throw new Error(`No JSON object found in model response. Response started with: ${trimmed.slice(0, 300)}`);
 
     return JSON.parse(match[0]);
   }
+}
+
+function normalizeAssetsPayload(raw: any): Array<Record<string, any>> {
+  if (Array.isArray(raw)) return raw;
+
+  if (Array.isArray(raw.assets)) return raw.assets;
+
+  if (raw.title || raw.content) return [raw];
+
+  return [];
 }
 
 function packagePrompt({
@@ -94,12 +104,12 @@ function packagePrompt({
     "",
     "FACTUALITY:",
     "- Be 100% factual.",
-    "- Use saved business memory as the source of truth.",
+    "- Use saved business memory as the source of truth when available.",
     "- Do not invent clients, case studies, locations, metrics, guarantees, rankings, revenue, traffic, or proof.",
     "- If a fact is not in memory, write generally and safely.",
     "",
     "CONTEXT RULE:",
-    "- Saved business memory is the source of truth.",
+    "- Saved business memory is the source of truth when present.",
     "- Monthly strategy can add context and angle, but cannot contradict saved business memory.",
     "- Campaign strategy should guide the output; it should not appear verbatim as raw labels.",
     "",
@@ -138,11 +148,11 @@ function packagePrompt({
     .join("\n");
 }
 
-async function callOpenAI(prompt: string) {
+async function callOpenAIForObject(prompt: string) {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
 
   if (!apiKey) {
-    throw new Error("Missing OPENAI_API_KEY. Publish-ready generation requires model-backed generation, not template fallback.");
+    throw new Error("Missing OPENAI_API_KEY. Publish-ready generation requires model-backed generation.");
   }
 
   const model = process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini";
@@ -170,11 +180,18 @@ async function callOpenAI(prompt: string) {
   const outputText = extractOutputText(envelope);
   const raw = outputText ? parseJsonObject(outputText) : envelope;
 
-  if (!Array.isArray(raw.assets)) {
-    throw new Error("Package generation response did not include an assets array.");
+  return raw;
+}
+
+async function callOpenAIForAssets(prompt: string) {
+  const raw = await callOpenAIForObject(prompt);
+  const assets = normalizeAssetsPayload(raw);
+
+  if (!assets.length) {
+    throw new Error("Package generation response did not include usable assets.");
   }
 
-  return raw.assets as Array<Record<string, any>>;
+  return assets;
 }
 
 async function repairAsset({
@@ -190,7 +207,7 @@ async function repairAsset({
 }) {
   const prompt = [
     "Repair this asset so it is publish-ready.",
-    "Return strict JSON only with: title and content.",
+    "Return strict JSON only with two fields: title and content.",
     "",
     "Private memory context:",
     summarizeMemoryForPrompt(memory),
@@ -218,13 +235,12 @@ async function repairAsset({
     "- Social posts must include emoji and hashtags.",
   ].join("\n");
 
-  const result = await callOpenAI(prompt);
-  const first = result[0] ?? result;
+  const raw = await callOpenAIForObject(prompt);
 
   return {
     ...asset,
-    title: readText((first as any).title) || asset.title,
-    content: readText((first as any).content) || asset.content,
+    title: readText(raw.title) || asset.title,
+    content: readText(raw.content) || asset.content,
   };
 }
 
@@ -247,7 +263,7 @@ export async function generatePublishReadyWeeklyPackage({
     slotNumber: index + 1,
   }));
 
-  const responseAssets = await callOpenAI(
+  const responseAssets = await callOpenAIForAssets(
     packagePrompt({
       month,
       campaignTheme,
