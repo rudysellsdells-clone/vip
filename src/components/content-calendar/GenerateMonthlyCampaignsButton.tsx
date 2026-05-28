@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import formStyles from "@/components/forms/VipForm.module.css";
+import { readableError } from "@/lib/errors/readable-error";
 import { websiteStyles } from "@/components/website-ui/WebsitePage";
 
 function currentMonthValue() {
@@ -20,6 +21,24 @@ type QualityFollowupResult =
       error: string;
       result?: Record<string, any>;
     };
+
+async function readJsonResponse(response: Response) {
+  const text = await response.text();
+
+  if (!text) return {};
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {
+      error: text,
+    };
+  }
+}
+
+function apiErrorMessage(result: unknown, fallback: string) {
+  return readableError(result, fallback);
+}
 
 export function GenerateMonthlyCampaignsButton({
   defaultMonth,
@@ -46,6 +65,7 @@ export function GenerateMonthlyCampaignsButton({
   const [qualitySummary, setQualitySummary] = useState<Record<string, any> | null>(null);
   const [qualityWarning, setQualityWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [debugDetails, setDebugDetails] = useState<Record<string, any> | null>(null);
 
   async function runQualityReviewAfterGeneration(): Promise<QualityFollowupResult> {
     try {
@@ -62,15 +82,15 @@ export function GenerateMonthlyCampaignsButton({
         }),
       });
 
-      const result = await response.json().catch(() => ({}));
+      const result = await readJsonResponse(response);
 
       if (!response.ok) {
         return {
           ok: false,
-          error:
-            result.error ??
-            result.message ??
-            "Automatic quality review failed after campaign generation.",
+          error: apiErrorMessage(
+            result,
+            "Automatic quality review failed after campaign generation."
+          ),
           result,
         };
       }
@@ -82,10 +102,10 @@ export function GenerateMonthlyCampaignsButton({
     } catch (err) {
       return {
         ok: false,
-        error:
-          err instanceof Error
-            ? err.message
-            : "Automatic quality review failed after campaign generation.",
+        error: readableError(
+          err,
+          "Automatic quality review failed after campaign generation."
+        ),
       };
     }
   }
@@ -104,6 +124,7 @@ export function GenerateMonthlyCampaignsButton({
     setQualitySummary(null);
     setQualityWarning(null);
     setError(null);
+    setDebugDetails(null);
 
     try {
       const response = await fetch("/api/content-calendar/monthly-campaigns/generate", {
@@ -126,13 +147,33 @@ export function GenerateMonthlyCampaignsButton({
         }),
       });
 
-      const result = await response.json().catch(() => ({}));
+      const result = await readJsonResponse(response);
 
       if (!response.ok) {
-        throw new Error(result.error ?? "Unable to generate monthly campaigns.");
+        setDebugDetails(result);
+        throw new Error(apiErrorMessage(result, "Unable to generate monthly campaigns."));
       }
 
       setSummary(result);
+
+      if (Array.isArray(result.errors) && result.errors.length > 0) {
+        setDebugDetails(result);
+        setError(
+          `Generation completed with ${result.errors.length} issue(s): ${result.errors
+            .map((item: unknown) => readableError(item, "Unknown issue"))
+            .slice(0, 3)
+            .join(" | ")}`
+        );
+        return;
+      }
+
+      if ((result.assetCount ?? 0) === 0) {
+        setDebugDetails(result);
+        setError(
+          "Generation returned zero assets. Check the debug details below for route warnings/errors."
+        );
+        return;
+      }
 
       if (autoRunQualityReview) {
         const qualityResult = await runQualityReviewAfterGeneration();
@@ -143,13 +184,16 @@ export function GenerateMonthlyCampaignsButton({
           setQualityWarning(
             `Campaigns were generated, but automatic quality review did not complete: ${qualityResult.error}`
           );
+          if (qualityResult.result) {
+            setDebugDetails(qualityResult.result);
+          }
         }
       }
 
       router.push(`/content-calendar/monthly-review?month=${encodeURIComponent(month)}`);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unexpected monthly campaign generation error.");
+      setError(readableError(err, "Unexpected monthly campaign generation error."));
     } finally {
       setRunning(false);
     }
@@ -324,12 +368,20 @@ export function GenerateMonthlyCampaignsButton({
           </p>
           {Array.isArray(summary.warnings) && summary.warnings.length ? (
             <p className={formStyles.description}>
-              {summary.warnings.length} warning(s): {summary.warnings.slice(0, 2).join(" | ")}
+              {summary.warnings.length} warning(s):{" "}
+              {summary.warnings
+                .map((item: unknown) => readableError(item, "Unknown warning"))
+                .slice(0, 2)
+                .join(" | ")}
             </p>
           ) : null}
           {Array.isArray(summary.errors) && summary.errors.length ? (
             <p className={formStyles.error}>
-              {summary.errors.length} issue(s): {summary.errors.slice(0, 3).join(" | ")}
+              {summary.errors.length} issue(s):{" "}
+              {summary.errors
+                .map((item: unknown) => readableError(item, "Unknown issue"))
+                .slice(0, 3)
+                .join(" | ")}
             </p>
           ) : null}
         </div>
@@ -354,6 +406,15 @@ export function GenerateMonthlyCampaignsButton({
       ) : null}
 
       {error ? <p className={formStyles.error}>{error}</p> : null}
+
+      {debugDetails ? (
+        <details className={websiteStyles.card}>
+          <summary className={websiteStyles.cardTitle}>Debug details</summary>
+          <pre style={{ whiteSpace: "pre-wrap", marginTop: 12, fontSize: 12 }}>
+            {JSON.stringify(debugDetails, null, 2)}
+          </pre>
+        </details>
+      ) : null}
     </div>
   );
 }
