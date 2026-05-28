@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { buildMonthlyCampaignPlan } from "@/lib/content-calendar/monthly-campaign-planner";
+import { generatePublishReadyWeeklyPackage } from "@/lib/content-generation/publish-ready-weekly-generator";
+import { buildBusinessMemoryContext } from "@/lib/content-generation/memory-context";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -37,6 +39,7 @@ async function createCampaign({
   month,
   campaignTheme,
   businessContext,
+  memorySources,
   week,
 }: {
   supabase: any;
@@ -44,6 +47,7 @@ async function createCampaign({
   month: string;
   campaignTheme: string;
   businessContext: string;
+  memorySources: string[];
   week: ReturnType<typeof buildMonthlyCampaignPlan>[number];
 }) {
   const idea = campaignIdea(week);
@@ -60,6 +64,8 @@ async function createCampaign({
     planned_end_date: week.weekEndDate,
     metadata: {
       generatedFrom: "monthly_campaign_calendar",
+      generationMode: "memory_backed_publish_ready",
+      memorySources,
       campaignTheme,
       businessContext,
       campaignName: week.campaignName,
@@ -87,25 +93,6 @@ async function createCampaign({
     .single();
 }
 
-function minimalAssetPayload({
-  userId,
-  campaignId,
-  asset,
-}: {
-  userId: string;
-  campaignId: string;
-  asset: ReturnType<typeof buildMonthlyCampaignPlan>[number]["assets"][number];
-}) {
-  return {
-    user_id: userId,
-    campaign_id: campaignId,
-    asset_type: asset.assetType,
-    title: asset.title,
-    content: asset.content,
-    status: "needs_review",
-  };
-}
-
 function calendarAssetFields({
   month,
   week,
@@ -129,80 +116,6 @@ function calendarAssetFields({
   };
 }
 
-async function createGeneratedAsset({
-  supabase,
-  userId,
-  campaignId,
-  month,
-  week,
-  asset,
-}: {
-  supabase: any;
-  userId: string;
-  campaignId: string;
-  month: string;
-  week: ReturnType<typeof buildMonthlyCampaignPlan>[number];
-  asset: ReturnType<typeof buildMonthlyCampaignPlan>[number]["assets"][number];
-}) {
-  const fullPayload = {
-    ...minimalAssetPayload({ userId, campaignId, asset }),
-    ...calendarAssetFields({ month, week, asset }),
-  };
-
-  const fullResult = await supabase
-    .from("generated_assets")
-    .insert(fullPayload)
-    .select("*")
-    .single();
-
-  if (!fullResult.error && fullResult.data) {
-    return {
-      data: fullResult.data,
-      error: null,
-      warning: null,
-    };
-  }
-
-  const minimalResult = await supabase
-    .from("generated_assets")
-    .insert(minimalAssetPayload({ userId, campaignId, asset }))
-    .select("*")
-    .single();
-
-  if (minimalResult.error || !minimalResult.data) {
-    return {
-      data: null,
-      error: minimalResult.error ?? fullResult.error,
-      warning: fullResult.error?.message ?? null,
-    };
-  }
-
-  const updateResult = await supabase
-    .from("generated_assets")
-    .update(calendarAssetFields({ month, week, asset }))
-    .eq("id", minimalResult.data.id)
-    .eq("user_id", userId)
-    .select("*")
-    .single();
-
-  if (!updateResult.error && updateResult.data) {
-    return {
-      data: updateResult.data,
-      error: null,
-      warning: fullResult.error?.message ?? null,
-    };
-  }
-
-  return {
-    data: minimalResult.data,
-    error: null,
-    warning:
-      updateResult.error?.message ??
-      fullResult.error?.message ??
-      "Generated asset was created, but calendar fields were not applied.",
-  };
-}
-
 export async function POST(request: Request) {
   const supabase = untypedSupabase(await createClient());
 
@@ -220,6 +133,7 @@ export async function POST(request: Request) {
   const campaignTheme = textValue(body.campaignTheme) || "Authority Growth";
   const businessContext = textValue(body.businessContext);
   const overwriteExisting = Boolean(body.overwriteExisting);
+  const requireMemoryContext = body.requireMemoryContext !== false;
 
   const strategy = {
     monthlyObjective: textValue(body.monthlyObjective),
@@ -251,6 +165,25 @@ export async function POST(request: Request) {
     }
   }
 
+  const memory = await buildBusinessMemoryContext({
+    supabase,
+    userId: user.id,
+  });
+
+  if (requireMemoryContext && !memory.hasUsefulMemory) {
+    return NextResponse.json(
+      {
+        error:
+          "Not enough saved Brand Voice / Knowledge / Business Facts were found to safely generate publish-ready campaign content.",
+        hint:
+          "Add or confirm Brand Voice and Knowledge records, or rerun with requireMemoryContext disabled for a generic draft.",
+        memorySources: memory.sources,
+        memoryWarnings: memory.warnings.slice(0, 8),
+      },
+      { status: 409 }
+    );
+  }
+
   const plan = buildMonthlyCampaignPlan({
     month,
     campaignTheme,
@@ -261,15 +194,35 @@ export async function POST(request: Request) {
   const createdCampaigns: Array<Record<string, any>> = [];
   const createdAssets: Array<Record<string, any>> = [];
   const errors: string[] = [];
-  const warnings: string[] = [];
+  const warnings: string[] = [...memory.warnings.slice(0, 8)];
 
   for (const week of plan) {
+    let publishReadyAssets: Awaited<ReturnType<typeof generatePublishReadyWeeklyPackage>>;
+
+    try {
+      publishReadyAssets = await generatePublishReadyWeeklyPackage({
+        month,
+        campaignTheme,
+        businessContext,
+        week,
+        memory,
+      });
+    } catch (error) {
+      errors.push(
+        `Week ${week.weekNumber}: ${
+          error instanceof Error ? error.message : "Unable to generate publish-ready weekly asset package."
+        }`
+      );
+      continue;
+    }
+
     const { data: campaign, error: campaignError } = await createCampaign({
       supabase,
       userId: user.id,
       month,
       campaignTheme,
       businessContext,
+      memorySources: memory.sources,
       week,
     });
 
@@ -280,28 +233,44 @@ export async function POST(request: Request) {
 
     createdCampaigns.push(campaign);
 
-    for (const asset of week.assets) {
-      const result = await createGeneratedAsset({
-        supabase,
-        userId: user.id,
-        campaignId: campaign.id,
-        month,
-        week,
-        asset,
-      });
+    for (let index = 0; index < week.assets.length; index += 1) {
+      const plannedAsset = week.assets[index];
+      const generatedAsset = publishReadyAssets[index];
 
-      if (result.error || !result.data) {
+      if (!generatedAsset) {
+        errors.push(`Week ${week.weekNumber} ${plannedAsset.assetType}: Missing generated asset content.`);
+        continue;
+      }
+
+      const { data: createdAsset, error: assetError } = await supabase
+        .from("generated_assets")
+        .insert({
+          user_id: user.id,
+          campaign_id: campaign.id,
+          asset_type: plannedAsset.assetType,
+          title: generatedAsset.title || plannedAsset.title,
+          content: generatedAsset.content,
+          status: "needs_review",
+          quality_workflow_status: "not_checked",
+          is_active_version: true,
+          auto_quality_attempts: 0,
+          ...calendarAssetFields({
+            month,
+            week,
+            asset: plannedAsset,
+          }),
+        })
+        .select("*")
+        .single();
+
+      if (assetError || !createdAsset) {
         errors.push(
-          `Week ${week.weekNumber} ${asset.assetType}: ${
-            result.error?.message ?? "Unable to create generated asset."
+          `Week ${week.weekNumber} ${plannedAsset.assetType}: ${
+            assetError?.message ?? "Unable to create generated asset."
           }`
         );
       } else {
-        createdAssets.push(result.data);
-
-        if (result.warning) {
-          warnings.push(`Week ${week.weekNumber} ${asset.assetType}: ${result.warning}`);
-        }
+        createdAssets.push(createdAsset);
       }
     }
   }
@@ -313,11 +282,15 @@ export async function POST(request: Request) {
     description: `${createdCampaigns.length} campaign(s) and ${createdAssets.length} generated asset(s) created for ${month}.`,
     metadata: {
       month,
+      generationMode: "memory_backed_publish_ready",
       campaignTheme,
       businessContext,
       privateStrategy: strategy,
+      memorySources: memory.sources,
+      memorySourceCount: memory.sourceCount,
+      memoryWarnings: memory.warnings.slice(0, 8),
       strategyUsage:
-        "Private generation context only. Do not publish raw strategy fields in generated content.",
+        "Private generation context only. Saved memory is source of truth; monthly strategy guides the campaign angle.",
       campaignCount: createdCampaigns.length,
       assetCount: createdAssets.length,
       errors,
@@ -330,6 +303,9 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: true,
     month,
+    generationMode: "memory_backed_publish_ready",
+    memorySources: memory.sources,
+    memorySourceCount: memory.sourceCount,
     campaignCount: createdCampaigns.length,
     assetCount: createdAssets.length,
     errors,
