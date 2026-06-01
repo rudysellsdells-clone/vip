@@ -1,13 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarItemStatusForm } from "@/components/content-calendar/CalendarItemStatusForm";
-import { GenerateCalendarItemAssetButton } from "@/components/content-calendar/GenerateCalendarItemAssetButton";
-import { GenerateCalendarWeekButton } from "@/components/content-calendar/GenerateCalendarWeekButton";
-import { GenerateMonthlyPlanForm } from "@/components/content-calendar/GenerateMonthlyPlanForm";
+import { ContentCommandCenterMonthSelector } from "@/components/content-calendar/ContentCommandCenterMonthSelector";
 import {
-  WebsiteBadge,
   WebsiteHero,
-  WebsiteMetric,
   WebsitePage,
   WebsiteSection,
   websiteStyles,
@@ -15,28 +10,149 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
-function formatDate(value: string | null) {
-  if (!value) return "No date";
+type PageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+function firstValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function currentMonthValue() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function normalizeMonth(value: unknown) {
+  const text = String(value ?? "").trim();
+
+  if (/^\d{4}-\d{2}$/.test(text)) return text;
+
+  return currentMonthValue();
+}
+
+function monthStart(month: string) {
+  return `${month}-01`;
+}
+
+function safeRows(data: unknown) {
+  return (Array.isArray(data) ? data : []) as Array<Record<string, any>>;
+}
+
+function monthLabel(month: string) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const date = new Date(year, monthNumber - 1, 1, 12, 0, 0, 0);
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric",
+  }).format(date);
+}
+
+function dateLabel(value: unknown) {
+  if (!value) return "Unknown date";
+
+  const date = new Date(String(value));
+
+  if (Number.isNaN(date.getTime())) return "Unknown date";
 
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
-  }).format(new Date(`${value}T00:00:00`));
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
-function itemTypeLabel(value: string | null | undefined) {
-  return String(value ?? "other").replaceAll("_", " ");
+function assetMonth(asset: Record<string, any>) {
+  const values = [
+    asset.intended_publish_month,
+    asset.scheduled_publish_at,
+    asset.planned_publish_date,
+    asset.campaign_week_start_date,
+    asset.created_at,
+  ];
+
+  for (const value of values) {
+    if (!value) continue;
+
+    const text = String(value);
+
+    if (/^\d{4}-\d{2}/.test(text)) {
+      return text.slice(0, 7);
+    }
+
+    const date = new Date(text);
+
+    if (!Number.isNaN(date.getTime())) {
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    }
+  }
+
+  return null;
 }
 
-function generatedAssetId(item: Record<string, any>) {
-  return item?.metadata?.generatedAssetId ? String(item.metadata.generatedAssetId) : null;
+function isLatestVisibleAsset(asset: Record<string, any>) {
+  if (asset.archived_at) return false;
+  if (asset.is_active_version === false) return false;
+  if (asset.superseded_by_asset_id) return false;
+  return true;
 }
 
-function generatedItemCount(items: Array<Record<string, any>>) {
-  return items.filter((item) => item.status === "generated").length;
+function isPublishedAsset(asset: Record<string, any>) {
+  return (
+    String(asset.status ?? "") === "published" ||
+    String(asset.scheduling_status ?? "") === "published" ||
+    Boolean(asset.published_at)
+  );
 }
 
-export default async function ContentCalendarPage() {
+function isWorkingAsset(asset: Record<string, any>) {
+  if (!isLatestVisibleAsset(asset)) return false;
+  if (isPublishedAsset(asset)) return false;
+  return true;
+}
+
+function metricCard({
+  label,
+  value,
+  description,
+  href,
+}: {
+  label: string;
+  value: number | string;
+  description: string;
+  href?: string;
+}) {
+  const content = (
+    <article className={websiteStyles.card}>
+      <p className={websiteStyles.cardMeta}>{label}</p>
+      <h3 className={websiteStyles.cardTitle} style={{ fontSize: 34, marginTop: 6 }}>
+        {value}
+      </h3>
+      <p className={websiteStyles.cardText}>{description}</p>
+    </article>
+  );
+
+  if (!href) return content;
+
+  return (
+    <Link href={href} className={websiteStyles.link} style={{ textDecoration: "none" }}>
+      {content}
+    </Link>
+  );
+}
+
+function statusBadge(text: string) {
+  return <span className={websiteStyles.badge}>{text}</span>;
+}
+
+export default async function ContentCalendarCommandCenterPage({ searchParams }: PageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const month = normalizeMonth(firstValue(resolvedSearchParams.month));
+  const monthDate = monthStart(month);
+  const prettyMonth = monthLabel(month);
+
   const supabase = untypedSupabase(await createClient());
 
   const {
@@ -47,244 +163,335 @@ export default async function ContentCalendarPage() {
     redirect("/login");
   }
 
-  const { data: plansData } = await supabase
-    .from("content_calendar_plans")
+  const { data: campaignData } = await supabase
+    .from("campaigns")
     .select("*")
     .eq("user_id", user.id)
-    .order("plan_month", { ascending: false })
-    .limit(6);
+    .eq("campaign_month", month)
+    .order("campaign_week_number", { ascending: true });
 
-  const plans = (plansData ?? []) as Array<Record<string, any>>;
-  const activePlan = plans[0] ?? null;
+  const { data: assetData } = await supabase
+    .from("generated_assets")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("scheduled_publish_at", { ascending: true, nullsFirst: false })
+    .limit(2000);
 
-  const { data: itemsData } = activePlan
-    ? await supabase
-        .from("content_calendar_items")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("plan_id", activePlan.id)
-        .order("scheduled_date", { ascending: true })
-    : { data: [] };
+  const { data: activityData } = await supabase
+    .from("activity_log")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(8);
 
-  const items = (itemsData ?? []) as Array<Record<string, any>>;
-  const campaigns = items.filter((item) => item.item_type === "weekly_campaign").length;
-  const generated = items.filter((item) => item.status === "generated").length;
-  const published = items.filter((item) => item.status === "published").length;
+  const campaigns = safeRows(campaignData).filter((campaign) => !campaign.archived_at);
+  const allAssets = safeRows(assetData);
+  const monthAssets = allAssets.filter((asset) => assetMonth(asset) === month);
+  const workingAssets = monthAssets.filter(isWorkingAsset);
+  const latestAssets = monthAssets.filter(isLatestVisibleAsset);
+  const publishedAssets = monthAssets.filter(isPublishedAsset);
 
-  const itemsByWeek = new Map<number, Array<Record<string, any>>>();
+  const needsQuality = workingAssets.filter((asset) => {
+    const quality = String(asset.quality_workflow_status ?? "not_checked");
+    const status = String(asset.status ?? "needs_review");
 
-  for (const item of items) {
-    const week = Number(item.week_number ?? 1);
-    const existing = itemsByWeek.get(week) ?? [];
-    existing.push(item);
-    itemsByWeek.set(week, existing);
-  }
+    return status !== "approved" && ["not_checked", "needs_human_review_after_quality"].includes(quality);
+  });
+
+  const reviewReady = workingAssets.filter((asset) => {
+    const quality = String(asset.quality_workflow_status ?? "");
+    const status = String(asset.status ?? "needs_review");
+
+    return status !== "approved" && quality === "review_ready";
+  });
+
+  const approvedAssets = workingAssets.filter((asset) => String(asset.status ?? "") === "approved");
+
+  const readyToPublish = approvedAssets.filter((asset) => {
+    return !isPublishedAsset(asset);
+  });
+
+  const unplacedAssets = workingAssets.filter((asset) => {
+    return !asset.scheduled_publish_at && !asset.planned_publish_date && !asset.campaign_week_start_date;
+  });
+
+  const supersededStillActive = monthAssets.filter((asset) => {
+    return asset.superseded_by_asset_id && asset.is_active_version !== false && !asset.archived_at;
+  });
+
+  const approvedMissingDate = approvedAssets.filter((asset) => {
+    return !asset.scheduled_publish_at && !asset.planned_publish_date;
+  });
+
+  const healthWarnings = [
+    unplacedAssets.length
+      ? `${unplacedAssets.length} active asset(s) do not have enough calendar metadata.`
+      : "",
+    supersededStillActive.length
+      ? `${supersededStillActive.length} superseded asset(s) still appear active.`
+      : "",
+    approvedMissingDate.length
+      ? `${approvedMissingDate.length} approved asset(s) are missing publish dates.`
+      : "",
+    campaigns.length === 0
+      ? `No campaigns have been generated for ${prettyMonth}.`
+      : "",
+    campaigns.length > 0 && workingAssets.length === 0
+      ? `Campaigns exist for ${prettyMonth}, but no active working assets are visible.`
+      : "",
+  ].filter(Boolean);
+
+  const nextActions = [
+    campaigns.length === 0
+      ? {
+          title: "Generate this month’s campaign package",
+          description: `No campaigns exist for ${prettyMonth}. Start by generating the monthly package.`,
+          href: `/content-calendar/monthly?view=month&date=${monthDate}`,
+          cta: "Open Generator",
+        }
+      : null,
+    needsQuality.length
+      ? {
+          title: "Run or review quality scoring",
+          description: `${needsQuality.length} active asset(s) need quality review or human follow-up.`,
+          href: `/content-quality?view=month&date=${monthDate}`,
+          cta: "Open Quality",
+        }
+      : null,
+    reviewReady.length
+      ? {
+          title: "Approve review-ready content",
+          description: `${reviewReady.length} asset(s) are review-ready and waiting for approval.`,
+          href: `/approvals?view=month&date=${monthDate}`,
+          cta: "Open Approvals",
+        }
+      : null,
+    readyToPublish.length
+      ? {
+          title: "Publish approved content",
+          description: `${readyToPublish.length} approved asset(s) are waiting in the publishing queue.`,
+          href: `/publishing-schedule?view=week&date=${monthDate}`,
+          cta: "Open Schedule",
+        }
+      : null,
+    healthWarnings.length
+      ? {
+          title: "Review content health warnings",
+          description: `${healthWarnings.length} issue(s) may need cleanup.`,
+          href: `#health`,
+          cta: "Review Warnings",
+        }
+      : null,
+  ].filter(Boolean) as Array<{
+    title: string;
+    description: string;
+    href: string;
+    cta: string;
+  }>;
+
+  const activity = safeRows(activityData);
 
   return (
     <WebsitePage>
       <WebsiteHero
-        eyebrow="Strategic Content Calendar"
-        title="Plan the month, then generate the assets."
-        description="Generate one distinct campaign per week, then turn planned calendar items into campaigns and review-ready assets."
-        primaryAction={{ label: "Generate Plan", href: "#generate-plan" }}
-        secondaryAction={{ label: "Review Assets", href: "/approvals" }}
+        eyebrow="Content Command Center"
+        title="Content calendar overview"
+        description="See where the month stands, what needs attention, and where to go next."
+        primaryAction={{ label: "Monthly Calendar", href: `/content-calendar/monthly?view=month&date=${monthDate}` }}
+        secondaryAction={{ label: "Publishing Schedule", href: `/publishing-schedule?view=week&date=${monthDate}` }}
       />
 
-      <section className={websiteStyles.metricsGrid}>
-        <WebsiteMetric
-          label="Active Plan"
-          value={activePlan?.month_label ?? "None"}
-          description={activePlan?.monthly_theme ?? "Generate a monthly plan to begin."}
-          dot="blue"
-        />
-        <WebsiteMetric
-          label="Weekly Campaigns"
-          value={campaigns}
-          description="One distinct campaign per week."
-          dot="gold"
-        />
-        <WebsiteMetric
-          label="Generated"
-          value={generated}
-          description="Calendar items already turned into campaigns or assets."
-          dot="purple"
-        />
-        <WebsiteMetric
-          label="Published"
-          value={published}
-          description="Content marked as published."
-          dot="green"
-        />
-      </section>
-
-      <div id="generate-plan">
-        <GenerateMonthlyPlanForm />
-      </div>
-
-      {activePlan ? (
-        <WebsiteSection
-          eyebrow={activePlan.month_label}
-          title={activePlan.monthly_theme}
-          description="This is the current monthly strategic plan. Each week has a campaign theme and supporting content items."
-        >
-          <div className={websiteStyles.cardGrid}>
-            <article className={websiteStyles.card}>
-              <h3 className={websiteStyles.cardTitle}>Business goal</h3>
-              <p className={websiteStyles.cardText}>
-                {activePlan.business_goal ?? "No business goal provided."}
-              </p>
-            </article>
-
-            <article className={websiteStyles.card}>
-              <h3 className={websiteStyles.cardTitle}>Audience</h3>
-              <p className={websiteStyles.cardText}>
-                {activePlan.target_audience ?? "No audience provided."}
-              </p>
-            </article>
-
-            <article className={websiteStyles.card}>
-              <h3 className={websiteStyles.cardTitle}>Offer focus</h3>
-              <p className={websiteStyles.cardText}>
-                {activePlan.offer_focus ?? "No offer focus provided."}
-              </p>
-            </article>
-          </div>
-        </WebsiteSection>
-      ) : null}
-
       <WebsiteSection
-        eyebrow="Calendar"
-        title="Monthly content plan"
-        description="Create weekly campaign records, generate full week packages, or generate individual review-ready assets."
+        eyebrow="Month"
+        title={prettyMonth}
+        description="This page is the dashboard for the content operation. Detailed work happens on the calendar, quality, approval, and publishing pages."
       >
-        {items.length ? (
-          <div className={websiteStyles.cardGrid}>
-            {[1, 2, 3, 4].map((weekNumber) => {
-              const weekItems = itemsByWeek.get(weekNumber) ?? [];
-              const weekGeneratedCount = generatedItemCount(weekItems);
+        <div className={websiteStyles.cardGrid}>
+          <article className={websiteStyles.card}>
+            <ContentCommandCenterMonthSelector month={month} />
+          </article>
 
-              return (
-                <article key={weekNumber} className={websiteStyles.card}>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <h3 className={websiteStyles.cardTitle}>Week {weekNumber}</h3>
-                      <p className={websiteStyles.cardMeta}>
-                        {weekItems.length} planned item{weekItems.length === 1 ? "" : "s"} • {weekGeneratedCount} generated
-                      </p>
-                    </div>
+          {metricCard({
+            label: "Campaigns",
+            value: campaigns.length,
+            description: "Campaigns generated for this month.",
+            href: `/content-calendar/monthly?view=month&date=${monthDate}`,
+          })}
 
-                    {activePlan ? (
-                      <GenerateCalendarWeekButton
-                        planId={activePlan.id}
-                        weekNumber={weekNumber}
-                        disabled={weekItems.length === 0}
-                      />
-                    ) : null}
-                  </div>
-
-                  <div className="grid gap-3">
-                    {weekItems.map((item) => {
-                      const assetId = generatedAssetId(item);
-
-                      return (
-                        <div
-                          key={item.id}
-                          className="rounded-2xl border border-slate-200 bg-white/80 p-4"
-                        >
-                          <div className="mb-2 flex flex-wrap gap-2">
-                            <WebsiteBadge status={item.status ?? "planned"} />
-                            <span className={websiteStyles.badge}>
-                              {itemTypeLabel(item.item_type)}
-                            </span>
-                            {item.platform ? (
-                              <span className={websiteStyles.badge}>{item.platform}</span>
-                            ) : null}
-                            <span className={websiteStyles.badge}>
-                              {formatDate(item.scheduled_date)}
-                            </span>
-                          </div>
-
-                          <h4 className="font-['Lato'] text-base font-black text-slate-950">
-                            {item.title}
-                          </h4>
-
-                          {item.description ? (
-                            <p className={websiteStyles.cardText}>{item.description}</p>
-                          ) : null}
-
-                          {item.cta ? (
-                            <p className={websiteStyles.cardText}>
-                              <strong>CTA:</strong> {item.cta}
-                            </p>
-                          ) : null}
-
-                          <div className={websiteStyles.actionRow}>
-                            <GenerateCalendarItemAssetButton
-                              itemId={item.id}
-                              itemType={item.item_type}
-                              disabled={item.status === "generated"}
-                            />
-
-                            <CalendarItemStatusForm
-                              itemId={item.id}
-                              currentStatus={item.status ?? "planned"}
-                            />
-                          </div>
-
-                          <div className={websiteStyles.actionRow}>
-                            {item.campaign_id ? (
-                              <Link
-                                href={`/campaigns/${item.campaign_id}`}
-                                className={websiteStyles.link}
-                              >
-                                Open campaign →
-                              </Link>
-                            ) : null}
-
-                            {assetId ? (
-                              <Link href={`/assets/${assetId}`} className={websiteStyles.link}>
-                                Open generated asset →
-                              </Link>
-                            ) : null}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        ) : (
-          <div className={websiteStyles.empty}>
-            No content calendar items yet. Generate a monthly plan to create one distinct campaign per week.
-          </div>
-        )}
+          {metricCard({
+            label: "Active Assets",
+            value: workingAssets.length,
+            description: "Latest active, not published, not archived assets.",
+            href: `/content-calendar/monthly?view=month&date=${monthDate}`,
+          })}
+        </div>
       </WebsiteSection>
 
       <WebsiteSection
-        eyebrow="Recent Plans"
-        title="Monthly planning history"
-        description="Previous content plans are kept so you can reuse themes, compare months, and build a repeatable content operating rhythm."
+        eyebrow="Status"
+        title="Current workflow status"
+        description="A high-level snapshot of where the content sits in the production process."
       >
-        {plans.length ? (
+        <div className={websiteStyles.cardGrid}>
+          {metricCard({
+            label: "Need Quality",
+            value: needsQuality.length,
+            description: "Assets not yet scored or needing human quality follow-up.",
+            href: `/content-quality?view=month&date=${monthDate}`,
+          })}
+
+          {metricCard({
+            label: "Review Ready",
+            value: reviewReady.length,
+            description: "Assets that passed quality and are ready for approval.",
+            href: `/approvals?view=month&date=${monthDate}`,
+          })}
+
+          {metricCard({
+            label: "Approved",
+            value: approvedAssets.length,
+            description: "Approved assets that have not yet been published.",
+            href: `/publishing-schedule?view=month&date=${monthDate}`,
+          })}
+
+          {metricCard({
+            label: "Published",
+            value: publishedAssets.length,
+            description: "Assets already marked published or sent downstream.",
+            href: `/published?view=month&date=${monthDate}`,
+          })}
+        </div>
+      </WebsiteSection>
+
+      <WebsiteSection
+        eyebrow="Next"
+        title="Recommended next actions"
+        description="Use this section to move the month forward without hunting through every page."
+      >
+        {nextActions.length ? (
           <div className={websiteStyles.cardGrid}>
-            {plans.map((plan) => (
-              <article key={plan.id} className={websiteStyles.card}>
-                <WebsiteBadge status={plan.status ?? "planned"} />
-                <h3 className={websiteStyles.cardTitle} style={{ marginTop: 16 }}>
-                  {plan.month_label}
-                </h3>
-                <p className={websiteStyles.cardText}>{plan.monthly_theme}</p>
-                <p className={websiteStyles.cardMeta}>
-                  Goal: {plan.business_goal ?? "No goal provided"}
-                </p>
+            {nextActions.map((action) => (
+              <article key={action.title} className={websiteStyles.card}>
+                <h3 className={websiteStyles.cardTitle}>{action.title}</h3>
+                <p className={websiteStyles.cardText}>{action.description}</p>
+                <div className={websiteStyles.actionRow}>
+                  <Link href={action.href} className={websiteStyles.link}>
+                    {action.cta} →
+                  </Link>
+                </div>
               </article>
             ))}
           </div>
         ) : (
           <div className={websiteStyles.empty}>
-            No monthly plans yet.
+            No urgent next actions for this month. The workflow looks clean.
+          </div>
+        )}
+      </WebsiteSection>
+
+      <WebsiteSection
+        eyebrow="Workflow"
+        title="Content workflow map"
+        description="These are the main working pages in the VIP content system."
+      >
+        <div className={websiteStyles.cardGrid}>
+          <article className={websiteStyles.card}>
+            <div className="flex flex-wrap gap-2">{statusBadge("Plan")}</div>
+            <h3 className={websiteStyles.cardTitle}>Monthly Calendar</h3>
+            <p className={websiteStyles.cardText}>Generate and view active content by day, week, or month.</p>
+            <Link href={`/content-calendar/monthly?view=month&date=${monthDate}`} className={websiteStyles.link}>
+              Open Calendar →
+            </Link>
+          </article>
+
+          <article className={websiteStyles.card}>
+            <div className="flex flex-wrap gap-2">{statusBadge("Review")}</div>
+            <h3 className={websiteStyles.cardTitle}>Monthly Review</h3>
+            <p className={websiteStyles.cardText}>Review the month’s active generated assets.</p>
+            <Link href={`/content-calendar/monthly-review?view=month&date=${monthDate}`} className={websiteStyles.link}>
+              Open Review →
+            </Link>
+          </article>
+
+          <article className={websiteStyles.card}>
+            <div className="flex flex-wrap gap-2">{statusBadge("Quality")}</div>
+            <h3 className={websiteStyles.cardTitle}>Content Quality</h3>
+            <p className={websiteStyles.cardText}>Score, inspect, and improve generated assets.</p>
+            <Link href={`/content-quality?view=week&date=${monthDate}`} className={websiteStyles.link}>
+              Open Quality →
+            </Link>
+          </article>
+
+          <article className={websiteStyles.card}>
+            <div className="flex flex-wrap gap-2">{statusBadge("Approval")}</div>
+            <h3 className={websiteStyles.cardTitle}>Approvals</h3>
+            <p className={websiteStyles.cardText}>Approve assets that are ready for publishing.</p>
+            <Link href={`/approvals?view=week&date=${monthDate}`} className={websiteStyles.link}>
+              Open Approvals →
+            </Link>
+          </article>
+
+          <article className={websiteStyles.card}>
+            <div className="flex flex-wrap gap-2">{statusBadge("Publish")}</div>
+            <h3 className={websiteStyles.cardTitle}>Publishing Schedule</h3>
+            <p className={websiteStyles.cardText}>See approved active assets waiting to publish.</p>
+            <Link href={`/publishing-schedule?view=week&date=${monthDate}`} className={websiteStyles.link}>
+              Open Schedule →
+            </Link>
+          </article>
+
+          <article className={websiteStyles.card}>
+            <div className="flex flex-wrap gap-2">{statusBadge("History")}</div>
+            <h3 className={websiteStyles.cardTitle}>Published</h3>
+            <p className={websiteStyles.cardText}>Review completed content that has been sent downstream.</p>
+            <Link href={`/published?view=month&date=${monthDate}`} className={websiteStyles.link}>
+              Open Published →
+            </Link>
+          </article>
+        </div>
+      </WebsiteSection>
+
+      <WebsiteSection
+        eyebrow="Health"
+        title="Content health"
+        description="This catches clutter and workflow issues that make the interface confusing."
+      >
+        <div id="health">
+          {healthWarnings.length ? (
+            <div className={websiteStyles.cardGrid}>
+              {healthWarnings.map((warning) => (
+                <article key={warning} className={websiteStyles.card}>
+                  <h3 className={websiteStyles.cardTitle}>Needs attention</h3>
+                  <p className={websiteStyles.cardText}>{warning}</p>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className={websiteStyles.empty}>
+              No content health warnings for {prettyMonth}.
+            </div>
+          )}
+        </div>
+      </WebsiteSection>
+
+      <WebsiteSection
+        eyebrow="Activity"
+        title="Recent content activity"
+        description="A quick log of recent content system activity."
+      >
+        {activity.length ? (
+          <div className={websiteStyles.cardGrid}>
+            {activity.map((item) => (
+              <article key={item.id} className={websiteStyles.card}>
+                <p className={websiteStyles.cardMeta}>{dateLabel(item.created_at)}</p>
+                <h3 className={websiteStyles.cardTitle}>{item.title ?? item.activity_type ?? "Activity"}</h3>
+                <p className={websiteStyles.cardText}>{item.description ?? "No description provided."}</p>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className={websiteStyles.empty}>
+            No recent activity yet.
           </div>
         )}
       </WebsiteSection>
