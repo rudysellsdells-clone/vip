@@ -1,9 +1,13 @@
+import type { ReactNode } from "react";
 import { WorkingAssetCard } from "@/components/calendar/WorkingAssetCard";
 import { websiteStyles } from "@/components/website-ui/WebsitePage";
 
 export function WorkingAssetGroups({
   groups,
   emptyMessage,
+  reviewsByAssetId,
+  showQuality = true,
+  compactQuality = true,
   extraLinks,
 }: {
   groups: Array<{
@@ -12,7 +16,10 @@ export function WorkingAssetGroups({
     assets: Array<Record<string, any>>;
   }>;
   emptyMessage: string;
-  extraLinks?: (asset: Record<string, any>) => React.ReactNode;
+  reviewsByAssetId?: Map<string, Record<string, any>>;
+  showQuality?: boolean;
+  compactQuality?: boolean;
+  extraLinks?: (asset: Record<string, any>) => ReactNode;
 }) {
   if (!groups.length) {
     return <div className={websiteStyles.empty}>{emptyMessage}</div>;
@@ -32,6 +39,9 @@ export function WorkingAssetGroups({
               <WorkingAssetCard
                 key={asset.id}
                 asset={asset}
+                review={reviewsByAssetId?.get(String(asset.id)) ?? null}
+                showQuality={showQuality}
+                compactQuality={compactQuality}
                 extraLinks={extraLinks ? extraLinks(asset) : null}
               />
             ))}

@@ -13,6 +13,7 @@ import { applyWorkingAssetQuery, filterWorkingAssets } from "@/lib/assets/asset-
 import { buildCalendarViewRangeFromSearchParams } from "@/lib/calendar/view-range";
 import { defaultViewForPage } from "@/lib/calendar/working-view-config";
 import { pageVisibleAssets, safeRows } from "@/lib/calendar/page-assets";
+import { loadLatestQualityReviewsByAssetId } from "@/lib/content-quality/load-quality-reviews";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -52,12 +53,18 @@ export default async function MonthlyReviewPage({ searchParams }: PageProps) {
     range,
   });
 
+  const reviewsByAssetId = await loadLatestQualityReviewsByAssetId({
+    supabase,
+    userId: user.id,
+    assetIds: visibleAssets.map((asset) => String(asset.id)),
+  });
+
   return (
     <WebsitePage>
       <WebsiteHero
         eyebrow="Monthly Review"
         title="Campaign review board"
-        description="Review active, latest-version campaign assets by day, week, or month."
+        description="Review active generated assets with visible quality status and score evidence."
         primaryAction={{ label: "Calendar", href: "/content-calendar/monthly" }}
         secondaryAction={{ label: "Approvals", href: "/approvals" }}
       />
@@ -81,7 +88,7 @@ export default async function MonthlyReviewPage({ searchParams }: PageProps) {
       <WebsiteSection
         eyebrow="Quality"
         title="Bulk quality review"
-        description="Run quality review for the selected month after generation."
+        description="Run quality review for active latest-version assets in this month."
       >
         <div className={websiteStyles.cardGrid}>
           <article className={websiteStyles.card}>
@@ -93,13 +100,15 @@ export default async function MonthlyReviewPage({ searchParams }: PageProps) {
       <WebsiteSection
         eyebrow="Assets"
         title={`${range.view === "day" ? "Daily" : range.view === "month" ? "Monthly" : "Weekly"} review items`}
-        description="Superseded and published assets stay out of this working view."
+        description="Each card shows the latest quality result when available."
       >
         {error ? (
           <div className={websiteStyles.empty}>{error.message}</div>
         ) : (
           <WorkingAssetGroups
             groups={groups}
+            reviewsByAssetId={reviewsByAssetId}
+            compactQuality={true}
             emptyMessage={`No review items found in this ${range.view} view.`}
             extraLinks={(asset) => (
               <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>

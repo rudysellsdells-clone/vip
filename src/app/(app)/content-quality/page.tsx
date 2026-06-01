@@ -12,6 +12,7 @@ import { applyWorkingAssetQuery, filterWorkingAssets } from "@/lib/assets/asset-
 import { buildCalendarViewRangeFromSearchParams } from "@/lib/calendar/view-range";
 import { defaultViewForPage } from "@/lib/calendar/working-view-config";
 import { isQualityCandidate, pageVisibleAssets, safeRows } from "@/lib/calendar/page-assets";
+import { loadLatestQualityReviewsByAssetId } from "@/lib/content-quality/load-quality-reviews";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -51,12 +52,18 @@ export default async function ContentQualityPage({ searchParams }: PageProps) {
     range,
   });
 
+  const reviewsByAssetId = await loadLatestQualityReviewsByAssetId({
+    supabase,
+    userId: user.id,
+    assetIds: visibleAssets.map((asset) => String(asset.id)),
+  });
+
   return (
     <WebsitePage>
       <WebsiteHero
         eyebrow="Content Quality"
         title="Quality review queue"
-        description="Review quality across active, latest-version content only."
+        description="Review quality scores, pass/fail status, and improvement notes across active content."
         primaryAction={{ label: "Quality Automation", href: "/quality-automation" }}
         secondaryAction={{ label: "Approvals", href: "/approvals" }}
       />
@@ -80,13 +87,15 @@ export default async function ContentQualityPage({ searchParams }: PageProps) {
       <WebsiteSection
         eyebrow="Queue"
         title={`${range.view === "day" ? "Daily" : range.view === "month" ? "Monthly" : "Weekly"} quality items`}
-        description="Superseded and published versions are hidden."
+        description="Each card shows whether the asset was quality tested and the latest saved score."
       >
         {error ? (
           <div className={websiteStyles.empty}>{error.message}</div>
         ) : (
           <WorkingAssetGroups
             groups={groups}
+            reviewsByAssetId={reviewsByAssetId}
+            compactQuality={false}
             emptyMessage={`No quality items found in this ${range.view} view.`}
             extraLinks={(asset) => (
               <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>

@@ -1,4 +1,6 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
+import { QualityScorePanel } from "@/components/content-quality/QualityScorePanel";
 import { WebsiteBadge, websiteStyles } from "@/components/website-ui/WebsitePage";
 import { dateTimeLabel } from "@/lib/calendar/view-range";
 
@@ -16,10 +18,16 @@ function preview(content: unknown, length = 180) {
 
 export function WorkingAssetCard({
   asset,
+  review = null,
+  showQuality = true,
+  compactQuality = true,
   extraLinks = null,
 }: {
   asset: Record<string, any>;
-  extraLinks?: React.ReactNode;
+  review?: Record<string, any> | null;
+  showQuality?: boolean;
+  compactQuality?: boolean;
+  extraLinks?: ReactNode;
 }) {
   const date =
     asset.scheduled_publish_at ??
@@ -48,7 +56,11 @@ export function WorkingAssetCard({
 
       <p className={websiteStyles.cardText}>{preview(asset.content)}</p>
 
-      <div className={websiteStyles.actionRow}>
+      {showQuality ? (
+        <QualityScorePanel asset={asset} review={review} compact={compactQuality} />
+      ) : null}
+
+      <div className={websiteStyles.actionRow} style={{ marginTop: 14 }}>
         <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
           Open →
         </Link>

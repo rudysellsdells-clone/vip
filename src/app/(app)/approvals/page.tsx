@@ -12,6 +12,7 @@ import { applyWorkingAssetQuery, filterWorkingAssets } from "@/lib/assets/asset-
 import { buildCalendarViewRangeFromSearchParams } from "@/lib/calendar/view-range";
 import { defaultViewForPage } from "@/lib/calendar/working-view-config";
 import { isApprovalCandidate, pageVisibleAssets, safeRows } from "@/lib/calendar/page-assets";
+import { loadLatestQualityReviewsByAssetId } from "@/lib/content-quality/load-quality-reviews";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -51,12 +52,18 @@ export default async function ApprovalsPage({ searchParams }: PageProps) {
     range,
   });
 
+  const reviewsByAssetId = await loadLatestQualityReviewsByAssetId({
+    supabase,
+    userId: user.id,
+    assetIds: visibleAssets.map((asset) => String(asset.id)),
+  });
+
   return (
     <WebsitePage>
       <WebsiteHero
         eyebrow="Approvals"
         title="Approval queue"
-        description="Approve only the active latest version of each asset."
+        description="Approve only active latest-version assets. Quality score evidence is shown on each card."
         primaryAction={{ label: "Monthly Review", href: "/content-calendar/monthly-review" }}
         secondaryAction={{ label: "Publishing Schedule", href: "/publishing-schedule" }}
       />
@@ -80,13 +87,15 @@ export default async function ApprovalsPage({ searchParams }: PageProps) {
       <WebsiteSection
         eyebrow="Queue"
         title={`${range.view === "day" ? "Daily" : range.view === "month" ? "Monthly" : "Weekly"} approval queue`}
-        description="Old versions and already-published assets are hidden."
+        description="Cards show the latest quality score so you can verify the asset was tested before approval."
       >
         {error ? (
           <div className={websiteStyles.empty}>{error.message}</div>
         ) : (
           <WorkingAssetGroups
             groups={groups}
+            reviewsByAssetId={reviewsByAssetId}
+            compactQuality={true}
             emptyMessage={`No approval items found in this ${range.view} view.`}
             extraLinks={(asset) => (
               <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
