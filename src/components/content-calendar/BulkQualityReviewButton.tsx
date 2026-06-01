@@ -68,6 +68,11 @@ export function BulkQualityReviewButton({ month }: { month: string }) {
     setTotals({ reviewed: 0, passed: 0, failed: 0, errors: [], batches: 0 });
 
     try {
+      /*
+        Recheck mode intentionally runs one batch only.
+        Otherwise the same already-checked records remain eligible forever.
+      */
+      const maxBatches = includeAlreadyChecked ? 1 : 40;
       let hasMore = true;
       let safety = 0;
 
@@ -79,7 +84,7 @@ export function BulkQualityReviewButton({ month }: { month: string }) {
         batches: 0,
       };
 
-      while (hasMore && safety < 40) {
+      while (hasMore && safety < maxBatches) {
         safety += 1;
 
         const payload = await runBatch();
@@ -99,17 +104,15 @@ export function BulkQualityReviewButton({ month }: { month: string }) {
 
         hasMore = Boolean(payload.hasMore);
 
-        if ((payload.reviewed ?? 0) === 0 && !payload.hasMore) {
+        if ((payload.reviewed ?? 0) === 0) {
           break;
-        }
-
-        if ((payload.reviewed ?? 0) === 0 && payload.hasMore) {
-          throw new Error(readableError(payload, "Quality review made no progress."));
         }
       }
 
-      if (safety >= 40) {
-        throw new Error("Quality review stopped after 40 batches to prevent an endless loop.");
+      if (hasMore && !includeAlreadyChecked) {
+        throw new Error(
+          "Quality review stopped before completion. Run it again to continue reviewing remaining never-reviewed assets."
+        );
       }
 
       router.refresh();
@@ -151,7 +154,7 @@ export function BulkQualityReviewButton({ month }: { month: string }) {
           checked={includeAlreadyChecked}
           onChange={(event) => setIncludeAlreadyChecked(event.target.checked)}
         />
-        <span>Include assets that were already quality checked</span>
+        <span>Recheck already-reviewed assets once</span>
       </label>
 
       <div className={formStyles.actions}>

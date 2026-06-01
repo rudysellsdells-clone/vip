@@ -64,6 +64,18 @@ function batchLimit(value: unknown) {
   return Math.max(1, Math.min(25, Math.floor(number)));
 }
 
+function needsFirstQualityReview(asset: Record<string, any>) {
+  const workflowStatus = String(asset.quality_workflow_status ?? "not_checked");
+
+  /*
+    Critical:
+    Failed assets are marked needs_human_review_after_quality.
+    They should NOT be reviewed again by the default bulk loop, or the client keeps
+    reviewing the same failed records forever.
+  */
+  return workflowStatus === "not_checked" && !asset.quality_checked_at;
+}
+
 async function saveQualityReview({
   supabase,
   userId,
@@ -156,13 +168,6 @@ export async function POST(request: Request) {
     const includeAlreadyChecked = Boolean(body.includeAlreadyChecked);
     const limit = batchLimit(body.batchSize);
 
-    /*
-      Important:
-      This route intentionally does NOT call OpenAI.
-      It is the fast workflow-gating quality pass used during monthly workflow execution.
-      Deeper model-based review can be added as a single-asset action later.
-    */
-
     const { data, error } = await supabase
       .from("generated_assets")
       .select("*")
@@ -179,25 +184,34 @@ export async function POST(request: Request) {
       .filter(isWorkingAsset)
       .filter((asset) => assetMonth(asset) === month);
 
+    /*
+      Default mode:
+      Review only never-reviewed assets.
+
+      Recheck mode:
+      Review a single batch only. The client must not loop rechecks, because rechecked
+      assets remain eligible by design.
+    */
     const allReviewableAssets = monthAssets.filter((asset) => {
       if (includeAlreadyChecked) return true;
-
-      const workflowStatus = String(asset.quality_workflow_status ?? "not_checked");
-
-      return workflowStatus === "not_checked" || workflowStatus === "needs_human_review_after_quality";
+      return needsFirstQualityReview(asset);
     });
 
     const reviewableAssets = allReviewableAssets.slice(0, limit);
+    const remainingAfterBatch = includeAlreadyChecked
+      ? 0
+      : Math.max(0, allReviewableAssets.length - reviewableAssets.length);
 
     const stats = {
       ok: true,
       month,
       mode: "fast_deterministic",
+      includeAlreadyChecked,
       batchSize: limit,
       assetCount: monthAssets.length,
       reviewableCount: allReviewableAssets.length,
-      remainingAfterBatch: Math.max(0, allReviewableAssets.length - reviewableAssets.length),
-      hasMore: allReviewableAssets.length > reviewableAssets.length,
+      remainingAfterBatch,
+      hasMore: !includeAlreadyChecked && allReviewableAssets.length > reviewableAssets.length,
       reviewed: 0,
       scored: 0,
       passed: 0,
@@ -260,7 +274,7 @@ export async function POST(request: Request) {
       ...stats,
       hint:
         stats.reviewed === 0
-          ? "No reviews were saved in this batch. Check reviewableCount, skipped count, and errors."
+          ? "No reviews were saved in this batch. If reviewableCount is 0, this month has no never-reviewed active assets left."
           : undefined,
     });
   } catch (error) {
