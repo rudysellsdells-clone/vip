@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AssignMonthlyScheduleButton } from "@/components/publishing-schedule/AssignMonthlyScheduleButton";
-import { ScheduleAssetButton } from "@/components/publishing-schedule/ScheduleAssetButton";
+import { CalendarViewSelector } from "@/components/calendar/CalendarViewSelector";
 import {
   WebsiteBadge,
   WebsiteHero,
@@ -10,27 +9,42 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
-import { channelLabel, SCHEDULABLE_ASSET_TYPES } from "@/lib/publishing-schedule/defaults";
+import {
+  applyPublishingScheduleQuery,
+  filterPublishingScheduleAssets,
+} from "@/lib/assets/asset-visibility";
+import {
+  buildCalendarViewRange,
+  dateTimeLabel,
+  filterAssetsByViewRange,
+  groupAssetsByDay,
+} from "@/lib/calendar/view-range";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
-function formatDateTime(value: string | null) {
-  if (!value) return "Not scheduled";
+type PageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
 
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
+function firstValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
 }
 
-function typeLabel(value: string | null | undefined) {
+function safeRows(data: unknown) {
+  return (Array.isArray(data) ? data : []) as Array<Record<string, any>>;
+}
+
+function assetTypeLabel(value: unknown) {
   return String(value ?? "asset").replaceAll("_", " ");
 }
 
-export default async function PublishingSchedulePage() {
+export default async function PublishingSchedulePage({ searchParams }: PageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const range = buildCalendarViewRange({
+    view: firstValue(resolvedSearchParams.view),
+    date: firstValue(resolvedSearchParams.date) ?? firstValue(resolvedSearchParams.month),
+  });
+
   const supabase = untypedSupabase(await createClient());
 
   const {
@@ -41,134 +55,111 @@ export default async function PublishingSchedulePage() {
     redirect("/login");
   }
 
-  const { data: assetsData } = await supabase
+  const baseQuery = supabase
     .from("generated_assets")
     .select("*")
     .eq("user_id", user.id)
-    .is("archived_at", null)
-    .in("asset_type", SCHEDULABLE_ASSET_TYPES)
     .order("scheduled_publish_at", { ascending: true, nullsFirst: false })
-    .order("created_at", { ascending: false })
-    .limit(100);
+    .limit(1000);
 
-  const assets = (assetsData ?? []) as Array<Record<string, any>>;
-  const scheduled = assets.filter((asset) => asset.scheduling_status === "scheduled" && asset.scheduled_publish_at);
-  const unscheduled = assets.filter((asset) => !asset.scheduled_publish_at || asset.scheduling_status === "unscheduled");
-  const approved = assets.filter((asset) => asset.status === "approved");
-  const readyForPublishing = assets.filter((asset) =>
-    ["linkedin_post", "facebook_post", "email", "video_script"].includes(asset.asset_type)
-  );
+  const { data, error } = await applyPublishingScheduleQuery(baseQuery);
+
+  const allApprovedActiveAssets = filterPublishingScheduleAssets(safeRows(data));
+  const visibleAssets = filterAssetsByViewRange(allApprovedActiveAssets, range);
+  const groups = groupAssetsByDay(visibleAssets);
 
   return (
     <WebsitePage>
       <WebsiteHero
         eyebrow="Publishing Schedule"
-        title="Space content out across the month."
-        description="Give every monthly content asset a publish date and time so VIP does not blast everything at once."
-        primaryAction={{ label: "Content Calendar", href: "/content-calendar" }}
-        secondaryAction={{ label: "Ready Queue", href: "/ready-for-publishing" }}
+        title="Approved content ready to publish"
+        description="Use daily, weekly, or monthly views to keep the publishing queue focused. Only approved, active, latest-version content appears here."
+        primaryAction={{ label: "Published", href: "/published" }}
+        secondaryAction={{ label: "Monthly Calendar", href: "/content-calendar/monthly" }}
       />
 
-      <section className={websiteStyles.metricsGrid}>
-        <WebsiteMetric
-          label="Schedulable Assets"
-          value={assets.length}
-          description="Active assets that can receive publish times."
-          dot="blue"
-        />
-        <WebsiteMetric
-          label="Scheduled"
-          value={scheduled.length}
-          description="Assets with publish date/time."
-          dot="green"
-        />
-        <WebsiteMetric
-          label="Unscheduled"
-          value={unscheduled.length}
-          description="Assets still needing a time slot."
-          dot="gold"
-        />
-        <WebsiteMetric
-          label="Execution Candidates"
-          value={readyForPublishing.length}
-          description="Social, email, and video assets."
-          dot="purple"
-        />
-      </section>
-
       <WebsiteSection
-        eyebrow="Monthly Scheduling"
-        title="Assign a monthly schedule"
-        description="This staggers unscheduled assets using a default weekly cadence. You can still adjust individual times below."
+        eyebrow="View"
+        title={range.label}
+        description="Change the time window without changing the underlying queue rules."
       >
-        <div className={websiteStyles.card}>
-          <AssignMonthlyScheduleButton />
+        <div className={websiteStyles.cardGrid}>
+          <article className={websiteStyles.card}>
+            <CalendarViewSelector
+              basePath="/publishing-schedule"
+              view={range.view}
+              dateValue={range.dateValue}
+            />
+          </article>
+
+          <WebsiteMetric
+            label="Visible"
+            value={visibleAssets.length}
+            description="Approved assets in the selected view."
+            dot="blue"
+          />
+
+          <WebsiteMetric
+            label="Total Queue"
+            value={allApprovedActiveAssets.length}
+            description="All approved active assets waiting to publish."
+            dot="green"
+          />
         </div>
       </WebsiteSection>
 
       <WebsiteSection
-        eyebrow="Calendar"
-        title="Scheduled content"
-        description="Review the publish order and adjust individual dates or times when needed."
+        eyebrow="Queue"
+        title={`${range.view === "day" ? "Daily" : range.view === "month" ? "Monthly" : "Weekly"} publishing queue`}
+        description="Once an item is sent to Zapier and marked published, it leaves this page."
       >
-        {assets.length ? (
-          <div className={websiteStyles.cardGrid}>
-            {assets.map((asset) => (
-              <article key={asset.id} className={websiteStyles.card}>
-                <div className="flex flex-wrap gap-2">
-                  <WebsiteBadge status={asset.status ?? "needs_review"} />
-                  <span className={websiteStyles.badge}>{typeLabel(asset.asset_type)}</span>
-                  <span className={websiteStyles.badge}>{channelLabel(asset.asset_type)}</span>
-                  <span className={websiteStyles.badge}>
-                    {asset.scheduling_status ?? "unscheduled"}
-                  </span>
+        {error ? (
+          <div className={websiteStyles.empty}>{error.message}</div>
+        ) : groups.length ? (
+          <div className="grid gap-5">
+            {groups.map((group) => (
+              <section key={group.key} className={websiteStyles.card}>
+                <h3 className={websiteStyles.cardTitle}>{group.label}</h3>
+
+                <div className={websiteStyles.cardGrid} style={{ marginTop: 16 }}>
+                  {group.assets.map((asset) => (
+                    <article key={asset.id} className={websiteStyles.card}>
+                      <div className="flex flex-wrap gap-2">
+                        <WebsiteBadge status={asset.status ?? "approved"} />
+                        <span className={websiteStyles.badge}>{assetTypeLabel(asset.asset_type)}</span>
+                        <span className={websiteStyles.badge}>
+                          {dateTimeLabel(asset.scheduled_publish_at ?? asset.planned_publish_date)}
+                        </span>
+                      </div>
+
+                      <h4 className={websiteStyles.cardTitle} style={{ marginTop: 14, fontSize: 16 }}>
+                        <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
+                          {asset.title}
+                        </Link>
+                      </h4>
+
+                      <p className={websiteStyles.cardText}>
+                        {String(asset.content ?? "").replace(/\s+/g, " ").slice(0, 180)}
+                        {String(asset.content ?? "").length > 180 ? "..." : ""}
+                      </p>
+
+                      <div className={websiteStyles.actionRow}>
+                        <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
+                          Open →
+                        </Link>
+                        <Link href={`/publishing-ready?asset=${asset.id}`} className={websiteStyles.link}>
+                          Send / execute →
+                        </Link>
+                      </div>
+                    </article>
+                  ))}
                 </div>
-
-                <h3 className={websiteStyles.cardTitle} style={{ marginTop: 16 }}>
-                  <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
-                    {asset.title}
-                  </Link>
-                </h3>
-
-                <p className={websiteStyles.cardMeta}>
-                  Publish: {formatDateTime(asset.scheduled_publish_at)} •{" "}
-                  {asset.publish_timezone ?? "America/Chicago"}
-                </p>
-
-                {asset.scheduling_notes ? (
-                  <p className={websiteStyles.cardText}>{asset.scheduling_notes}</p>
-                ) : (
-                  <p className={websiteStyles.cardText}>
-                    No scheduling notes yet. Assign a monthly schedule or set a custom publish time.
-                  </p>
-                )}
-
-                <ScheduleAssetButton
-                  assetId={asset.id}
-                  defaultValue={asset.scheduled_publish_at ?? ""}
-                />
-
-                <div className={websiteStyles.actionRow}>
-                  <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
-                    Open asset →
-                  </Link>
-
-                  {asset.status === "approved" ? (
-                    <Link href="/publishing-ready" className={websiteStyles.link}>
-                      Publishing Ready →
-                    </Link>
-                  ) : (
-                    <Link href="/approvals" className={websiteStyles.link}>
-                      Approvals →
-                    </Link>
-                  )}
-                </div>
-              </article>
+              </section>
             ))}
           </div>
         ) : (
           <div className={websiteStyles.empty}>
-            No schedulable active assets found yet.
+            No approved active assets are scheduled in this {range.view} view.
           </div>
         )}
       </WebsiteSection>
