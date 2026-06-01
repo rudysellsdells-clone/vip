@@ -1,23 +1,21 @@
 import { NextResponse } from "next/server";
+import { activateAssetVersion, archiveSiblingAssetVersions, rootAssetId } from "@/lib/assets/asset-lifecycle";
 import { preparePublicAssetContent } from "@/lib/content/public-content-cleaner";
 import { generateQualityResubmission } from "@/lib/content-quality/resubmitter";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
 type RouteContext = {
-  params: Promise<{
-    reviewId: string;
-  }>;
+  params: Promise<{ reviewId: string }>;
 };
 
 function revisedTitle(title: string, version: number) {
-  const cleaned = String(title || "Untitled Asset").trim();
+  const cleaned = String(title || "Untitled Asset")
+    .replace(/\s+Version\s+\d+$/i, "")
+    .replace(/\s+—\s+Quality Resubmission v\d+$/i, "")
+    .trim();
 
-  if (/quality resubmission/i.test(cleaned)) {
-    return cleaned;
-  }
-
-  return `${cleaned} — Quality Resubmission v${version}`;
+  return `${cleaned} Version ${version}`;
 }
 
 function inheritedCalendarFields(asset: Record<string, any>) {
@@ -56,10 +54,7 @@ export async function POST(_request: Request, context: RouteContext) {
     .single();
 
   if (reviewError || !review) {
-    return NextResponse.json(
-      { error: "Quality review not found." },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: "Quality review not found." }, { status: 404 });
   }
 
   const { data: asset, error: assetError } = await supabase
@@ -67,18 +62,64 @@ export async function POST(_request: Request, context: RouteContext) {
     .select("*")
     .eq("id", review.asset_id)
     .eq("user_id", user.id)
-    .is("archived_at", null)
     .single();
 
   if (assetError || !asset) {
-    return NextResponse.json(
-      { error: "Original asset not found or has been archived." },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: "Original asset not found." }, { status: 404 });
+  }
+
+  const rootId = rootAssetId(asset);
+
+  /*
+    Idempotency:
+    If this review already produced a replacement, return it instead of creating another V2.
+    This prevents double-clicks and duplicate requests from creating duplicate replacement assets.
+  */
+  const { data: existingReplacement } = await supabase
+    .from("generated_assets")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("parent_asset_id", rootId)
+    .eq("metadata->>sourceReviewId", review.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existingReplacement?.id) {
+    await activateAssetVersion({
+      supabase,
+      userId: user.id,
+      assetId: existingReplacement.id,
+      rootId,
+    });
+
+    await archiveSiblingAssetVersions({
+      supabase,
+      userId: user.id,
+      rootId,
+      activeAssetId: existingReplacement.id,
+      reason: "existing_quality_resubmission_reactivated",
+    });
+
+    return NextResponse.json({
+      ok: true,
+      idempotent: true,
+      asset: existingReplacement,
+    });
   }
 
   try {
-    const nextVersion = Number(asset.version ?? 1) + 1;
+    const { data: currentFamilyVersions } = await supabase
+      .from("generated_assets")
+      .select("version")
+      .eq("user_id", user.id)
+      .or(`id.eq.${rootId},parent_asset_id.eq.${rootId}`);
+
+    const highestVersion = Array.isArray(currentFamilyVersions)
+      ? currentFamilyVersions.reduce((max, row) => Math.max(max, Number(row.version ?? 1)), 1)
+      : Number(asset.version ?? 1);
+
+    const nextVersion = highestVersion + 1;
 
     const result = await generateQualityResubmission({
       assetTitle: asset.title ?? "Untitled asset",
@@ -102,17 +143,6 @@ export async function POST(_request: Request, context: RouteContext) {
       },
     });
 
-    /*
-      Important:
-      Do not prepend review IDs, original asset IDs, or new asset IDs to public content.
-      Those belong in activity_log.metadata, not in the generated asset body.
-    */
-    const content = preparePublicAssetContent({
-      content: result.content,
-      assetType: asset.asset_type,
-      title: asset.title,
-    });
-
     const { data: newAsset, error: insertError } = await supabase
       .from("generated_assets")
       .insert({
@@ -120,9 +150,25 @@ export async function POST(_request: Request, context: RouteContext) {
         campaign_id: asset.campaign_id ?? null,
         asset_type: asset.asset_type,
         title: revisedTitle(asset.title, nextVersion),
-        content,
+        content: preparePublicAssetContent({
+          content: result.content,
+          assetType: asset.asset_type,
+          title: asset.title,
+        }),
         status: "needs_review",
         version: nextVersion,
+        parent_asset_id: rootId,
+        is_active_version: true,
+        quality_workflow_status: "not_checked",
+        auto_quality_attempts: Number(asset.auto_quality_attempts ?? 0) + 1,
+        metadata: {
+          ...(asset.metadata ?? {}),
+          source: "quality_resubmission",
+          sourceReviewId: review.id,
+          originalAssetId: asset.id,
+          rootAssetId: rootId,
+          model: result.model,
+        },
         ...inheritedCalendarFields(asset),
       })
       .select("*")
@@ -135,6 +181,21 @@ export async function POST(_request: Request, context: RouteContext) {
       );
     }
 
+    await activateAssetVersion({
+      supabase,
+      userId: user.id,
+      assetId: newAsset.id,
+      rootId,
+    });
+
+    await archiveSiblingAssetVersions({
+      supabase,
+      userId: user.id,
+      rootId,
+      activeAssetId: newAsset.id,
+      reason: "quality_resubmission_created",
+    });
+
     await supabase.from("activity_log").insert({
       user_id: user.id,
       activity_type: "asset_quality_resubmission_created",
@@ -143,30 +204,31 @@ export async function POST(_request: Request, context: RouteContext) {
       metadata: {
         originalAssetId: asset.id,
         newAssetId: newAsset.id,
+        rootAssetId: rootId,
         reviewId: review.id,
-        originalVersion: asset.version,
         newVersion: nextVersion,
+        originalArchived: true,
         model: result.model,
-        scores: {
-          overall: review.overall_score,
-          brandVoice: review.brand_voice_score,
-          clarity: review.clarity_score,
-          cta: review.cta_score,
-          seoAio: review.seo_aio_score,
-          conversion: review.conversion_score,
-        },
       },
     });
 
     return NextResponse.json({
       ok: true,
-      originalAsset: asset,
+      idempotent: false,
+      originalAsset: {
+        id: asset.id,
+        archived: true,
+        supersededByAssetId: newAsset.id,
+      },
       review,
       asset: newAsset,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unexpected resubmission error.";
-
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Unexpected resubmission error.",
+      },
+      { status: 400 }
+    );
   }
 }

@@ -1,57 +1,99 @@
-export async function supersedeAssetVersion({
+export function rootAssetId(asset: Record<string, any>) {
+  return String(asset.parent_asset_id ?? asset.id);
+}
+
+export async function archiveSiblingAssetVersions({
   supabase,
   userId,
-  originalAssetId,
-  newAssetId,
+  rootId,
+  activeAssetId,
   reason = "superseded_by_newer_version",
 }: {
   supabase: any;
   userId: string;
-  originalAssetId: string;
-  newAssetId: string;
+  rootId: string;
+  activeAssetId: string;
   reason?: string;
 }) {
   const now = new Date().toISOString();
 
-  const { error } = await supabase
+  const { error: childError } = await supabase
     .from("generated_assets")
     .update({
       is_active_version: false,
-      superseded_by_asset_id: newAssetId,
+      superseded_by_asset_id: activeAssetId,
       replaced_at: now,
       archived_at: now,
       archive_reason: reason,
     })
-    .eq("id", originalAssetId)
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .eq("parent_asset_id", rootId)
+    .neq("id", activeAssetId);
 
-  if (error) {
-    throw new Error(error.message);
-  }
+  if (childError) throw new Error(childError.message);
+
+  const { error: rootError } = await supabase
+    .from("generated_assets")
+    .update({
+      is_active_version: false,
+      superseded_by_asset_id: activeAssetId,
+      replaced_at: now,
+      archived_at: now,
+      archive_reason: reason,
+    })
+    .eq("user_id", userId)
+    .eq("id", rootId)
+    .neq("id", activeAssetId);
+
+  if (rootError) throw new Error(rootError.message);
 }
 
-export async function markAssetPublished({
+export async function activateAssetVersion({
   supabase,
   userId,
   assetId,
-  provider = "zapier",
+  rootId,
+}: {
+  supabase: any;
+  userId: string;
+  assetId: string;
+  rootId: string;
+}) {
+  const { error } = await supabase
+    .from("generated_assets")
+    .update({
+      parent_asset_id: rootId === assetId ? null : rootId,
+      is_active_version: true,
+      superseded_by_asset_id: null,
+      archived_at: null,
+      archive_reason: null,
+    })
+    .eq("id", assetId)
+    .eq("user_id", userId);
+
+  if (error) throw new Error(error.message);
+}
+
+export async function markAssetSentToZapier({
+  supabase,
+  userId,
+  assetId,
   reference = null,
 }: {
   supabase: any;
   userId: string;
   assetId: string;
-  provider?: string;
   reference?: string | null;
 }) {
   const now = new Date().toISOString();
 
-  const { data, error } = await supabase
+  const preferredUpdate = await supabase
     .from("generated_assets")
     .update({
-      status: "published",
-      scheduling_status: "published",
+      status: "sent_to_zapier",
+      scheduling_status: "sent_to_zapier",
       published_at: now,
-      published_via: provider,
+      published_via: "zapier",
       published_reference: reference,
     })
     .eq("id", assetId)
@@ -59,37 +101,29 @@ export async function markAssetPublished({
     .select("*")
     .single();
 
-  if (error) {
-    throw new Error(error.message);
+  if (!preferredUpdate.error && preferredUpdate.data) {
+    return preferredUpdate.data;
   }
 
-  return data;
-}
-
-export async function prepareNewAssetVersion({
-  supabase,
-  userId,
-  newAssetId,
-  parentAssetId,
-}: {
-  supabase: any;
-  userId: string;
-  newAssetId: string;
-  parentAssetId: string;
-}) {
-  const { error } = await supabase
+  /*
+    Fallback for projects that have strict check constraints and do not allow sent_to_zapier.
+    The practical UI goal is the same: remove the asset from active publishing queues.
+  */
+  const fallbackUpdate = await supabase
     .from("generated_assets")
     .update({
-      parent_asset_id: parentAssetId,
-      is_active_version: true,
-      superseded_by_asset_id: null,
-      archived_at: null,
-      archive_reason: null,
+      status: "published",
+      scheduling_status: "published",
+      published_at: now,
+      published_via: "zapier",
+      published_reference: reference,
     })
-    .eq("id", newAssetId)
-    .eq("user_id", userId);
+    .eq("id", assetId)
+    .eq("user_id", userId)
+    .select("*")
+    .single();
 
-  if (error) {
-    throw new Error(error.message);
-  }
+  if (fallbackUpdate.error) throw new Error(fallbackUpdate.error.message);
+
+  return fallbackUpdate.data;
 }
