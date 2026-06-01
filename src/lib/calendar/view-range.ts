@@ -3,6 +3,7 @@ export type CalendarViewMode = "day" | "week" | "month";
 export type CalendarViewRange = {
   view: CalendarViewMode;
   dateValue: string;
+  monthValue: string;
   start: Date;
   end: Date;
   startKey: string;
@@ -12,6 +13,10 @@ export type CalendarViewRange = {
 
 export function isCalendarViewMode(value: unknown): value is CalendarViewMode {
   return value === "day" || value === "week" || value === "month";
+}
+
+export function firstSearchValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
 }
 
 export function dateKey(date: Date) {
@@ -85,11 +90,13 @@ function endOfMonth(date: Date) {
 export function buildCalendarViewRange({
   view,
   date,
+  defaultView = "week",
 }: {
   view?: unknown;
   date?: unknown;
+  defaultView?: CalendarViewMode;
 }): CalendarViewRange {
-  const activeView: CalendarViewMode = isCalendarViewMode(view) ? view : "week";
+  const activeView: CalendarViewMode = isCalendarViewMode(view) ? view : defaultView;
   const selectedDate = parseDate(date);
 
   let start: Date;
@@ -109,12 +116,33 @@ export function buildCalendarViewRange({
   return {
     view: activeView,
     dateValue: dateKey(selectedDate),
+    monthValue: monthKey(selectedDate),
     start,
     end,
     startKey: dateKey(start),
     endKey: dateKey(end),
     label: rangeLabel({ view: activeView, start, end }),
   };
+}
+
+export function buildCalendarViewRangeFromSearchParams({
+  searchParams,
+  defaultView = "week",
+}: {
+  searchParams: Record<string, string | string[] | undefined>;
+  defaultView?: CalendarViewMode;
+}) {
+  const view = firstSearchValue(searchParams.view);
+  const date =
+    firstSearchValue(searchParams.date) ??
+    firstSearchValue(searchParams.month) ??
+    firstSearchValue(searchParams.day);
+
+  return buildCalendarViewRange({
+    view,
+    date,
+    defaultView,
+  });
 }
 
 export function assetDateValue(asset: Record<string, any>) {
