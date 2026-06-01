@@ -12,13 +12,13 @@ import {
   applyPublishingScheduleQuery,
   filterPublishingScheduleAssets,
 } from "@/lib/assets/asset-visibility";
-import {
-  buildCalendarViewRangeFromSearchParams,
-  dateTimeLabel,
-  filterAssetsByViewRange,
-  groupAssetsByDay,
-} from "@/lib/calendar/view-range";
+import { buildCalendarViewRangeFromSearchParams } from "@/lib/calendar/view-range";
 import { defaultViewForPage } from "@/lib/calendar/working-view-config";
+import {
+  filterPublishingAssetsByViewRange,
+  groupPublishingAssetsByDay,
+  publishingDateLabel,
+} from "@/lib/calendar/publishing-schedule-view";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -32,6 +32,18 @@ function safeRows(data: unknown) {
 
 function assetTypeLabel(value: unknown) {
   return String(value ?? "asset").replaceAll("_", " ");
+}
+
+function hasPublishDate(asset: Record<string, any>) {
+  return Boolean(asset.scheduled_publish_at ?? asset.planned_publish_date);
+}
+
+function preview(content: unknown, length = 180) {
+  const text = String(content ?? "").replace(/\s+/g, " ").trim();
+
+  if (!text) return "No content preview available.";
+
+  return `${text.slice(0, length)}${text.length > length ? "..." : ""}`;
 }
 
 export default async function PublishingSchedulePage({ searchParams }: PageProps) {
@@ -60,16 +72,19 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
 
   const { data, error } = await applyPublishingScheduleQuery(baseQuery);
 
-  const allWorkingAssets = filterPublishingScheduleAssets(safeRows(data));
-  const visibleAssets = filterAssetsByViewRange(allWorkingAssets, range);
-  const groups = groupAssetsByDay(visibleAssets);
+  const allApprovedActiveAssets = filterPublishingScheduleAssets(safeRows(data));
+  const visibleAssets = filterPublishingAssetsByViewRange(allApprovedActiveAssets, range, {
+    includeUnscheduled: true,
+  });
+  const groups = groupPublishingAssetsByDay(visibleAssets);
+  const unscheduledCount = allApprovedActiveAssets.filter((asset) => !hasPublishDate(asset)).length;
 
   return (
     <WebsitePage>
       <WebsiteHero
         eyebrow="Publishing Schedule"
         title="Approved content ready to publish"
-        description="Only approved, active, latest-version content appears here. Use the view selector to focus by day, week, or month."
+        description="Approved content appears here whether it is scheduled for a date or ready to publish now. No-date assets are grouped separately so they do not look like they are scheduled for today."
         primaryAction={{ label: "Published", href: "/published" }}
         secondaryAction={{ label: "Monthly Calendar", href: "/content-calendar/monthly" }}
       />
@@ -77,18 +92,32 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
       <WebsiteSection
         eyebrow="View"
         title={range.label}
-        description="Daily, weekly, and monthly views keep the publishing queue from getting too busy."
+        description="Daily, weekly, and monthly views apply to dated assets. Unscheduled approved assets stay visible in the Publish Now group."
       >
         <WorkingViewControls
           basePath="/publishing-schedule"
           range={range}
           visibleCount={visibleAssets.length}
-          totalCount={allWorkingAssets.length}
+          totalCount={allApprovedActiveAssets.length}
           title="Publishing view"
           visibleLabel="In View"
           totalLabel="Approved Queue"
         />
       </WebsiteSection>
+
+      {unscheduledCount ? (
+        <WebsiteSection
+          eyebrow="Publish Now"
+          title={`${unscheduledCount} approved item(s) have no publish date`}
+          description="These are not broken. They are approved assets without a scheduled date, so they can be sent manually or assigned a schedule."
+        >
+          <div className={websiteStyles.card}>
+            <p className={websiteStyles.cardText}>
+              If an item is approved and appears here, it should be publishable. Use the “Send to Zapier” action to open the execution flow.
+            </p>
+          </div>
+        </WebsiteSection>
+      ) : null}
 
       <WebsiteSection
         eyebrow="Queue"
@@ -101,7 +130,16 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
           <div className="grid gap-5">
             {groups.map((group) => (
               <section key={group.key} className={websiteStyles.card}>
-                <h3 className={websiteStyles.cardTitle}>{group.label}</h3>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h3 className={websiteStyles.cardTitle}>{group.label}</h3>
+                  <span className={websiteStyles.badge}>{group.assets.length} item(s)</span>
+                </div>
+
+                {group.isUnscheduled ? (
+                  <p className={websiteStyles.cardMeta} style={{ marginTop: 8 }}>
+                    These approved assets have no publish date. They are still eligible for manual publishing/Zapier execution.
+                  </p>
+                ) : null}
 
                 <div className={websiteStyles.cardGrid} style={{ marginTop: 16 }}>
                   {group.assets.map((asset) => (
@@ -109,9 +147,10 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
                       <div className="flex flex-wrap gap-2">
                         <WebsiteBadge status={asset.status ?? "approved"} />
                         <span className={websiteStyles.badge}>{assetTypeLabel(asset.asset_type)}</span>
-                        <span className={websiteStyles.badge}>
-                          {dateTimeLabel(asset.scheduled_publish_at ?? asset.planned_publish_date)}
-                        </span>
+                        <span className={websiteStyles.badge}>{publishingDateLabel(asset)}</span>
+                        {!hasPublishDate(asset) ? (
+                          <span className={websiteStyles.badge}>Manual publish</span>
+                        ) : null}
                       </div>
 
                       <h4 className={websiteStyles.cardTitle} style={{ marginTop: 14, fontSize: 16 }}>
@@ -120,18 +159,20 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
                         </Link>
                       </h4>
 
-                      <p className={websiteStyles.cardText}>
-                        {String(asset.content ?? "").replace(/\s+/g, " ").slice(0, 180)}
-                        {String(asset.content ?? "").length > 180 ? "..." : ""}
-                      </p>
+                      <p className={websiteStyles.cardText}>{preview(asset.content)}</p>
 
                       <div className={websiteStyles.actionRow}>
                         <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
                           Open →
                         </Link>
                         <Link href={`/publishing-ready?asset=${asset.id}`} className={websiteStyles.link}>
-                          Send / execute →
+                          Send to Zapier →
                         </Link>
+                        {!hasPublishDate(asset) ? (
+                          <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
+                            Add date →
+                          </Link>
+                        ) : null}
                       </div>
                     </article>
                   ))}
