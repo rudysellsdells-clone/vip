@@ -1,10 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarViewSelector } from "@/components/calendar/CalendarViewSelector";
+import { WorkingViewControls } from "@/components/calendar/WorkingViewControls";
 import {
   WebsiteBadge,
   WebsiteHero,
-  WebsiteMetric,
   WebsitePage,
   WebsiteSection,
   websiteStyles,
@@ -14,21 +13,18 @@ import {
   filterPublishingScheduleAssets,
 } from "@/lib/assets/asset-visibility";
 import {
-  buildCalendarViewRange,
+  buildCalendarViewRangeFromSearchParams,
   dateTimeLabel,
   filterAssetsByViewRange,
   groupAssetsByDay,
 } from "@/lib/calendar/view-range";
+import { defaultViewForPage } from "@/lib/calendar/working-view-config";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
 type PageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
-
-function firstValue(value: string | string[] | undefined) {
-  return Array.isArray(value) ? value[0] : value;
-}
 
 function safeRows(data: unknown) {
   return (Array.isArray(data) ? data : []) as Array<Record<string, any>>;
@@ -40,9 +36,9 @@ function assetTypeLabel(value: unknown) {
 
 export default async function PublishingSchedulePage({ searchParams }: PageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
-  const range = buildCalendarViewRange({
-    view: firstValue(resolvedSearchParams.view),
-    date: firstValue(resolvedSearchParams.date) ?? firstValue(resolvedSearchParams.month),
+  const range = buildCalendarViewRangeFromSearchParams({
+    searchParams: resolvedSearchParams,
+    defaultView: defaultViewForPage("publishing-schedule"),
   });
 
   const supabase = untypedSupabase(await createClient());
@@ -64,8 +60,8 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
 
   const { data, error } = await applyPublishingScheduleQuery(baseQuery);
 
-  const allApprovedActiveAssets = filterPublishingScheduleAssets(safeRows(data));
-  const visibleAssets = filterAssetsByViewRange(allApprovedActiveAssets, range);
+  const allWorkingAssets = filterPublishingScheduleAssets(safeRows(data));
+  const visibleAssets = filterAssetsByViewRange(allWorkingAssets, range);
   const groups = groupAssetsByDay(visibleAssets);
 
   return (
@@ -73,7 +69,7 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
       <WebsiteHero
         eyebrow="Publishing Schedule"
         title="Approved content ready to publish"
-        description="Use daily, weekly, or monthly views to keep the publishing queue focused. Only approved, active, latest-version content appears here."
+        description="Only approved, active, latest-version content appears here. Use the view selector to focus by day, week, or month."
         primaryAction={{ label: "Published", href: "/published" }}
         secondaryAction={{ label: "Monthly Calendar", href: "/content-calendar/monthly" }}
       />
@@ -81,37 +77,23 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
       <WebsiteSection
         eyebrow="View"
         title={range.label}
-        description="Change the time window without changing the underlying queue rules."
+        description="Daily, weekly, and monthly views keep the publishing queue from getting too busy."
       >
-        <div className={websiteStyles.cardGrid}>
-          <article className={websiteStyles.card}>
-            <CalendarViewSelector
-              basePath="/publishing-schedule"
-              view={range.view}
-              dateValue={range.dateValue}
-            />
-          </article>
-
-          <WebsiteMetric
-            label="Visible"
-            value={visibleAssets.length}
-            description="Approved assets in the selected view."
-            dot="blue"
-          />
-
-          <WebsiteMetric
-            label="Total Queue"
-            value={allApprovedActiveAssets.length}
-            description="All approved active assets waiting to publish."
-            dot="green"
-          />
-        </div>
+        <WorkingViewControls
+          basePath="/publishing-schedule"
+          range={range}
+          visibleCount={visibleAssets.length}
+          totalCount={allWorkingAssets.length}
+          title="Publishing view"
+          visibleLabel="In View"
+          totalLabel="Approved Queue"
+        />
       </WebsiteSection>
 
       <WebsiteSection
         eyebrow="Queue"
         title={`${range.view === "day" ? "Daily" : range.view === "month" ? "Monthly" : "Weekly"} publishing queue`}
-        description="Once an item is sent to Zapier and marked published, it leaves this page."
+        description="Once an asset is sent to Zapier and marked published, it leaves this queue."
       >
         {error ? (
           <div className={websiteStyles.empty}>{error.message}</div>
