@@ -1,139 +1,125 @@
-# VIP Zapier MCP LinkedIn Action Router Fix
+# VIP Zapier MCP LinkedIn Company Update Fix
 
-## Error being fixed
+## Correct LinkedIn action keys
+
+For LinkedIn Page publishing, use:
+
+```text
+create_company_update
+```
+
+For general/personal share publishing, the fallback/general action is:
+
+```text
+share
+```
+
+## What caused the error
+
+This error:
 
 ```text
 Action 'execute_zapier_write_action' not found
 ```
 
-## What it means
+means VIP tried to use the executor/tool name as the LinkedIn action key.
 
-This is not the same as the Facebook issue.
-
-For Facebook, the post published and VIP misread the success response.
-
-For LinkedIn, VIP is trying to use:
-
-```text
-execute_zapier_write_action
-```
-
-as though it were the LinkedIn action name.
-
-That is the wrong layer.
+That is incorrect.
 
 ## Correct structure
 
-Think of it like this:
-
 ```text
-Executor/tool: execute_zapier_write_action
+Executor: write
 App: LinkedIn
-Action: the real LinkedIn create-post action key
+Action: create_company_update
 ```
 
-VIP should not send `execute_zapier_write_action` as the app action.
-
-It needs to send the actual LinkedIn action key, for example something like:
+Do not use:
 
 ```text
-linkedin_create_share_update
-linkedin_create_company_update
-linkedin_create_post
+Action: execute_zapier_write_action
 ```
 
-The exact action key depends on what Zapier exposes in your MCP server.
-
-## Files
+## Files in this patch
 
 ```text
-includes/zapier-mcp-action-router-fix.php
-examples/example-linkedin-integration.php
+includes/zapier-mcp-linkedin-company-update-fix.php
+examples/example-vip-linkedin-company-update-integration.php
 README.md
 ```
 
 ## Install
 
-1. Copy this file into your VIP plugin:
+1. Copy the helper file to your VIP plugin:
 
 ```text
-includes/zapier-mcp-action-router-fix.php
+includes/zapier-mcp-linkedin-company-update-fix.php
 ```
 
-2. Load it from your main plugin file or publishing class:
+2. Load it:
 
 ```php
-require_once plugin_dir_path(__FILE__) . 'includes/zapier-mcp-action-router-fix.php';
+require_once plugin_dir_path(__FILE__) . 'includes/zapier-mcp-linkedin-company-update-fix.php';
 ```
 
-3. Find where VIP currently builds the LinkedIn Zapier action call.
+3. Set the WordPress option, or hardcode the action key in your channel config:
 
-Look for something like this:
+```php
+update_option('vip_zapier_linkedin_action_key', 'create_company_update');
+```
+
+4. Replace any LinkedIn publishing config like this:
 
 ```php
 'action' => 'execute_zapier_write_action'
 ```
 
-or:
+With this:
 
 ```php
-$action = 'execute_zapier_write_action';
+'action' => 'create_company_update'
 ```
 
-That is the bug.
-
-4. Replace that value with the actual LinkedIn app action key.
-
-Until you know the exact key, the router intentionally returns a clear config error instead of sending the wrong action.
-
-## Example corrected structure
+## Example payload
 
 ```php
-$payload = VIP_Zapier_MCP_Action_Router_Fix::build_publish_payload(
-    'linkedin',
+$payload = VIP_Zapier_MCP_LinkedIn_Company_Update_Fix::build_linkedin_page_publish_payload(
     $message,
     array(
-        'visibility' => 'PUBLIC',
-    ),
-    array(
-        'action' => get_option('vip_zapier_linkedin_action_key')
+        // Add required LinkedIn company/page params here if your Zapier MCP action requires them.
     )
 );
-
-if (empty($payload['success'])) {
-    return array(
-        'success' => false,
-        'message' => $payload['error'],
-    );
-}
 ```
 
-Then your existing Zapier MCP execution layer should call the write executor using:
+Then your MCP call should execute the write action using:
 
 ```text
 app: LinkedIn
-action: ACTUAL_LINKEDIN_ACTION_KEY
-params.message: your post copy
+action: create_company_update
+params.message: your LinkedIn post body
 ```
 
-## Recommended WordPress setting
+## Recommended behavior
 
-Add/store an option like this:
+If LinkedIn returns:
+
+```json
+{
+  "results": {
+    "id": "some_linkedin_update_id",
+    "url": null,
+    "status": null,
+    "message": null
+  }
+}
+```
+
+VIP should treat that as success.
+
+The helper includes:
 
 ```php
-vip_zapier_linkedin_action_key
+VIP_Zapier_MCP_LinkedIn_Company_Update_Fix::normalize_publish_response($response);
 ```
 
-Set its value to the exact LinkedIn action key returned by your Zapier MCP enabled actions list.
-
-## Practical next step
-
-In your logging/admin diagnostic screen, list the enabled Zapier actions for LinkedIn and copy the exact create-post action key into the VIP LinkedIn channel config.
-
-Do not use:
-
-```text
-execute_zapier_write_action
-```
-
-as the LinkedIn action value.
+That mirrors the Facebook response-parser fix.
