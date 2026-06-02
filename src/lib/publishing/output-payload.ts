@@ -154,8 +154,8 @@ function buildWordPressParams(asset: PublishingAsset) {
 
 function buildFacebookParams(asset: PublishingAsset, config: ZapierMcpAssetConfig) {
   const content = String(asset.content ?? "");
-  const pageId = config.pageId ?? env("ZAPIER_FACEBOOK_PAGE_ID") || null;
-  const pageName = config.pageName ?? env("ZAPIER_FACEBOOK_PAGE_NAME") || null;
+  const pageId = (config.pageId ?? env("ZAPIER_FACEBOOK_PAGE_ID")) || null;
+  const pageName = (config.pageName ?? env("ZAPIER_FACEBOOK_PAGE_NAME")) || null;
 
   return {
     asset_id: String(asset.id ?? ""),
@@ -229,8 +229,8 @@ export function buildPublishingOutputParams(asset: PublishingAsset) {
 }
 
 function buildFacebookInstructions(config: ZapierMcpAssetConfig) {
-  const pageId = config.pageId ?? env("ZAPIER_FACEBOOK_PAGE_ID");
-  const pageName = config.pageName ?? env("ZAPIER_FACEBOOK_PAGE_NAME");
+  const pageId = (config.pageId ?? env("ZAPIER_FACEBOOK_PAGE_ID")) || "";
+  const pageName = (config.pageName ?? env("ZAPIER_FACEBOOK_PAGE_NAME")) || "";
 
   return [
     "Create a Facebook Page post using the structured params provided with this tool call.",
