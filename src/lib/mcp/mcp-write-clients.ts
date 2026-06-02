@@ -2,11 +2,6 @@ type ZapierWriteActionArgs = {
   app: string;
   action: string;
   instructions: string;
-  /*
-    Zapier MCP validates params as a record/object.
-    Keep this optional for backward compatibility with existing callers,
-    but force it to become {} at runtime before sending to MCP.
-  */
   params?: Record<string, unknown> | null;
   output?: string;
 };
@@ -33,7 +28,7 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function cleanRecord(value: Record<string, unknown>): Record<string, unknown> {
+function cleanRecord(value: Record<string, unknown>) {
   return Object.fromEntries(
     Object.entries(value).filter(([, item]) => item !== undefined)
   );
@@ -174,11 +169,6 @@ function buildZapierWriteArguments({
     app: requiredString(app, "app"),
     action: requiredString(action, "action"),
     instructions: requiredString(instructions, "instructions"),
-    /*
-      Critical:
-      execute_zapier_write_action rejects undefined params.
-      This must always be a record/object, even when the caller supplies nothing.
-    */
     params: safeParams,
     output:
       String(output ?? "").trim() ||

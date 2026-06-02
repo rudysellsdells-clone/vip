@@ -11,7 +11,6 @@ function readableError(value: unknown, fallback = "Unexpected error.") {
 
   if (value && typeof value === "object") {
     const objectValue = value as Record<string, unknown>;
-
     const message =
       objectValue.error ??
       objectValue.message ??

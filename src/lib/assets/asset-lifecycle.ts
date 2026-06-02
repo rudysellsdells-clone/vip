@@ -74,79 +74,11 @@ export async function activateAssetVersion({
   if (error) throw new Error(error.message);
 }
 
-export async function supersedeAssetVersion({
-  supabase,
-  userId,
-  originalAssetId,
-  newAssetId,
-  reason = "superseded_by_newer_version",
-}: {
-  supabase: any;
-  userId: string;
-  originalAssetId: string;
-  newAssetId: string;
-  reason?: string;
-}) {
-  const now = new Date().toISOString();
-
-  const { error } = await supabase
-    .from("generated_assets")
-    .update({
-      is_active_version: false,
-      superseded_by_asset_id: newAssetId,
-      replaced_at: now,
-      archived_at: now,
-      archive_reason: reason,
-    })
-    .eq("id", originalAssetId)
-    .eq("user_id", userId);
-
-  if (error) throw new Error(error.message);
-}
-
-export async function prepareNewAssetVersion({
-  supabase,
-  userId,
-  newAssetId,
-  parentAssetId,
-}: {
-  supabase: any;
-  userId: string;
-  newAssetId: string;
-  parentAssetId: string;
-}) {
-  await activateAssetVersion({
-    supabase,
-    userId,
-    assetId: newAssetId,
-    rootId: parentAssetId,
-  });
-}
-
-export async function activateNewAssetVersion({
-  supabase,
-  userId,
-  newAssetId,
-  parentAssetId,
-}: {
-  supabase: any;
-  userId: string;
-  newAssetId: string;
-  parentAssetId: string;
-}) {
-  await activateAssetVersion({
-    supabase,
-    userId,
-    assetId: newAssetId,
-    rootId: parentAssetId,
-  });
-}
-
 export async function markAssetPublished({
   supabase,
   userId,
   assetId,
-  provider = "zapier",
+  provider = "zapier_mcp",
   reference = null,
 }: {
   supabase: any;
@@ -195,7 +127,7 @@ export async function markAssetSentToZapier({
       status: "sent_to_zapier",
       scheduling_status: "sent_to_zapier",
       published_at: now,
-      published_via: "zapier",
+      published_via: "zapier_mcp",
       published_reference: reference,
     })
     .eq("id", assetId)
@@ -207,39 +139,11 @@ export async function markAssetSentToZapier({
     return preferredUpdate.data;
   }
 
-  /*
-    Fallback for schemas/check constraints that do not allow sent_to_zapier.
-    This keeps the workflow moving by removing the asset from working/publishing queues.
-  */
   return markAssetPublished({
     supabase,
     userId,
     assetId,
-    provider: "zapier",
+    provider: "zapier_mcp",
     reference,
   });
-}
-
-export async function archiveWorkingAsset({
-  supabase,
-  userId,
-  assetId,
-  reason = "manual_archive",
-}: {
-  supabase: any;
-  userId: string;
-  assetId: string;
-  reason?: string;
-}) {
-  const { error } = await supabase
-    .from("generated_assets")
-    .update({
-      archived_at: new Date().toISOString(),
-      archive_reason: reason,
-      is_active_version: false,
-    })
-    .eq("id", assetId)
-    .eq("user_id", userId);
-
-  if (error) throw new Error(error.message);
 }
