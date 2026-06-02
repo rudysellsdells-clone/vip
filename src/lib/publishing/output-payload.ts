@@ -136,20 +136,26 @@ function buildWordPressParams(asset: PublishingAsset) {
   const content = String(asset.content ?? "");
 
   /*
-    Keep WordPress payload lean.
-    The prior payload repeated the full article across content/body/text/post_content/postContent.
-    Long blog posts can cause ZapierMCP to terminate when the request is unnecessarily large.
+    WordPress/Zapier field binding can vary by action.
+    Keep the payload controlled, but provide both common generic names and
+    WordPress-specific names so the MCP action can bind the required fields.
+
+    This intentionally does NOT include body/text/postContent duplicates.
   */
   return {
     asset_id: String(asset.id ?? ""),
     asset_type: "blog_post",
     campaign_id: asset.campaign_id ?? null,
-    title,
+    source: "vip",
+
     post_type: wordpressPostType(),
     post_status: wordpressPostStatus(),
+
+    title,
+    content,
+
     post_title: title,
     post_content: content,
-    source: "vip",
   };
 }
 
@@ -224,7 +230,7 @@ export function buildPublishingInstructions(asset: PublishingAsset) {
     `Send this approved VIP ${assetType} to the configured Zapier destination.`,
     "Use the params object as the source of truth.",
     normalizedAssetType === "blog_post"
-      ? `For WordPress, use post_type=${wordpressPostType()}, post_status=${wordpressPostStatus()}, post_title, and post_content.`
+      ? `For WordPress, use params.post_type=${wordpressPostType()}, params.post_status=${wordpressPostStatus()}, params.post_title or params.title for the title, and params.post_content or params.content for the body.`
       : "",
     config.pageName ? `Use destination page/account: ${config.pageName}.` : "",
     config.pageId ? `Use destination page id: ${config.pageId}.` : "",
