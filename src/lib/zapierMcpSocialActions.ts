@@ -1,15 +1,16 @@
 /**
  * VIP Zapier MCP Social Publish Action Map
  *
- * This file fixes the LinkedIn action routing issue:
+ * Purpose:
+ * Keep the Zapier MCP executor/tool name separate from the actual app action key.
  *
- * Bad:
- * action: "execute_zapier_write_action"
+ * Correct LinkedIn Page publishing:
+ * executor/tool: execute_zapier_write_action
+ * app: LinkedIn
+ * action: create_company_update
  *
- * Good:
- * executor/tool: "execute_zapier_write_action"
- * app: "LinkedIn"
- * action: "create_company_update"
+ * Wrong:
+ * action: execute_zapier_write_action
  */
 
 export type SocialPublishChannel =
@@ -17,7 +18,9 @@ export type SocialPublishChannel =
   | "linkedin_page"
   | "linkedin_share";
 
-export type ZapierMcpExecutor = "execute_zapier_write_action" | "execute_zapier_read_action";
+export type ZapierMcpExecutor =
+  | "execute_zapier_write_action"
+  | "execute_zapier_read_action";
 
 export interface ZapierMcpActionConfig {
   executor: ZapierMcpExecutor;
@@ -33,33 +36,33 @@ export interface BuildSocialPublishPayloadInput {
   params?: Record<string, unknown>;
 }
 
-export interface BuildSocialPublishPayloadResult {
-  success: boolean;
-  error?: string;
-  executor?: ZapierMcpExecutor;
-  app?: string;
-  action?: string;
-  instructions?: string;
-  output?: string;
-  params?: Record<string, unknown>;
-}
+export type BuildSocialPublishPayloadResult =
+  | {
+      success: true;
+      executor: ZapierMcpExecutor;
+      app: string;
+      action: string;
+      instructions: string;
+      output: string;
+      params: Record<string, unknown>;
+    }
+  | {
+      success: false;
+      error: string;
+    };
 
 const RESERVED_EXECUTOR_NAMES = new Set<string>([
   "execute_zapier_write_action",
   "execute_zapier_read_action",
 ]);
 
-export const SOCIAL_PUBLISH_ACTIONS: Record<SocialPublishChannel, ZapierMcpActionConfig> = {
+export const SOCIAL_PUBLISH_ACTIONS: Record<
+  SocialPublishChannel,
+  ZapierMcpActionConfig
+> = {
   facebook_page: {
     executor: "execute_zapier_write_action",
     app: "Facebook Pages",
-    /**
-     * Your previous Facebook publishing action was identified as page_stream,
-     * while the actual MCP tool/action display showed facebook_pages_create_page_post.
-     *
-     * If your VIP config currently works with page_stream, keep page_stream.
-     * If your enabled Zapier MCP action key is facebook_pages_create_page_post, use that.
-     */
     action: "facebook_pages_create_page_post",
     instructions:
       "Create a Facebook Page post using the structured params provided with this tool call. Use params.message as the Facebook post body.",
@@ -70,9 +73,6 @@ export const SOCIAL_PUBLISH_ACTIONS: Record<SocialPublishChannel, ZapierMcpActio
   linkedin_page: {
     executor: "execute_zapier_write_action",
     app: "LinkedIn",
-    /**
-     * Correct LinkedIn Company/Page publishing action key.
-     */
     action: "create_company_update",
     instructions:
       "Create a LinkedIn Company/Page update using the structured params provided with this tool call. Use params.message as the LinkedIn post body. Do not use execute_zapier_write_action as the LinkedIn action key.",
@@ -83,9 +83,6 @@ export const SOCIAL_PUBLISH_ACTIONS: Record<SocialPublishChannel, ZapierMcpActio
   linkedin_share: {
     executor: "execute_zapier_write_action",
     app: "LinkedIn",
-    /**
-     * General share/post action. Use only when you intentionally want the general LinkedIn share flow.
-     */
     action: "share",
     instructions:
       "Create a LinkedIn share update using the structured params provided with this tool call. Use params.message as the LinkedIn post body.",

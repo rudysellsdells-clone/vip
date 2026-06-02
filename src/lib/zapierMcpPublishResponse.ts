@@ -1,11 +1,9 @@
 /**
  * VIP Zapier MCP Publish Response Normalizer
  *
- * Fixes the false-failure case where Zapier MCP successfully publishes a post
- * but VIP treats the result as an error because url/status/message are null.
- *
  * Success rule:
- * If a Zapier MCP response contains results.id, treat it as a successful publish.
+ * If a Zapier MCP response contains results.id, treat it as a successful publish,
+ * even when url, status, and message are null.
  */
 
 export interface NormalizedPublishSuccess {
@@ -69,7 +67,9 @@ function collectResponseCandidates(response: unknown): unknown[] {
 
   if (typeof response === "string") {
     const parsed = safeJsonParse(response);
-    if (parsed) candidates.push(parsed);
+    if (parsed) {
+      candidates.push(parsed);
+    }
 
     for (const jsonCandidate of extractJsonObjects(response)) {
       candidates.push(jsonCandidate);
@@ -106,19 +106,18 @@ function findResultsId(value: unknown): SuccessHit | null {
     };
   }
 
-  /**
-   * Common Zapier MCP nesting:
-   * raw.result.content[0].text = "{\"results\":{\"id\":\"...\"}, ... }"
-   */
   const content = value.content;
 
   if (Array.isArray(content)) {
     for (const item of content) {
       if (isRecord(item) && typeof item.text === "string") {
         const parsedText = safeJsonParse(item.text);
+
         if (parsedText) {
           const hit = findResultsId(parsedText);
-          if (hit) return hit;
+          if (hit) {
+            return hit;
+          }
         }
       }
     }
@@ -126,20 +125,16 @@ function findResultsId(value: unknown): SuccessHit | null {
 
   for (const child of Object.values(value)) {
     const hit = findResultsId(child);
-    if (hit) return hit;
+
+    if (hit) {
+      return hit;
+    }
   }
 
   return null;
 }
 
 function deriveFacebookPostUrl(objectId: string): string | null {
-  /**
-   * Facebook object ids commonly come back like:
-   * PAGE_ID_POST_ID
-   *
-   * Example:
-   * 30489698262_1777565287102827
-   */
   if (!objectId.includes("_")) {
     return null;
   }
@@ -169,9 +164,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Conservative balanced-brace JSON extractor for exception/error strings.
- */
 function extractJsonObjects(text: string): unknown[] {
   const results: unknown[] = [];
   let start = -1;
@@ -202,7 +194,9 @@ function extractJsonObjects(text: string): unknown[] {
     }
 
     if (char === "{") {
-      if (depth === 0) start = i;
+      if (depth === 0) {
+        start = i;
+      }
       depth++;
       continue;
     }
@@ -213,7 +207,11 @@ function extractJsonObjects(text: string): unknown[] {
       if (depth === 0 && start >= 0) {
         const candidate = text.slice(start, i + 1);
         const parsed = safeJsonParse(candidate);
-        if (parsed) results.push(parsed);
+
+        if (parsed) {
+          results.push(parsed);
+        }
+
         start = -1;
       }
     }
