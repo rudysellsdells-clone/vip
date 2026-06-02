@@ -135,13 +135,6 @@ function buildWordPressParams(asset: PublishingAsset) {
   const title = String(asset.title ?? "");
   const content = String(asset.content ?? "");
 
-  /*
-    WordPress/Zapier field binding can vary by action.
-    Keep the payload controlled, but provide both common generic names and
-    WordPress-specific names so the MCP action can bind the required fields.
-
-    This intentionally does NOT include body/text/postContent duplicates.
-  */
   return {
     asset_id: String(asset.id ?? ""),
     asset_type: "blog_post",
@@ -161,17 +154,31 @@ function buildWordPressParams(asset: PublishingAsset) {
 
 function buildFacebookParams(asset: PublishingAsset, config: ZapierMcpAssetConfig) {
   const content = String(asset.content ?? "");
+  const pageId = config.pageId ?? env("ZAPIER_FACEBOOK_PAGE_ID") || null;
+  const pageName = config.pageName ?? env("ZAPIER_FACEBOOK_PAGE_NAME") || null;
 
   return {
     asset_id: String(asset.id ?? ""),
-    asset_type: String(asset.asset_type ?? ""),
+    asset_type: "facebook_post",
     campaign_id: asset.campaign_id ?? null,
+    source: "vip",
+
     message: content,
     content,
-    facebook_page_id: config.pageId ?? null,
-    facebook_page_name: config.pageName ?? null,
+
+    Page: pageId,
+    page: pageId,
+    page_id: pageId,
+    pageId,
+    facebook_page_id: pageId,
+    facebookPageId: pageId,
+
+    page_name: pageName,
+    pageName,
+    facebook_page_name: pageName,
+    facebookPageName: pageName,
+
     scheduled_publish_at: asset.scheduled_publish_at ?? null,
-    source: "vip",
   };
 }
 
@@ -221,10 +228,35 @@ export function buildPublishingOutputParams(asset: PublishingAsset) {
   return buildGenericParams(asset);
 }
 
+function buildFacebookInstructions(config: ZapierMcpAssetConfig) {
+  const pageId = config.pageId ?? env("ZAPIER_FACEBOOK_PAGE_ID");
+  const pageName = config.pageName ?? env("ZAPIER_FACEBOOK_PAGE_NAME");
+
+  return [
+    "Create a Facebook Page post using the structured params provided with this tool call.",
+    "",
+    "Critical:",
+    '- For the required Facebook Pages "Page" field, use exactly this value:',
+    pageId || "[missing Facebook page id]",
+    "",
+    "Allowed Page handle / safety lock:",
+    pageName || "[missing Facebook page name]",
+    "",
+    "Use params.message as the Facebook post body.",
+    "Do not route this to WordPress.",
+    "Do not ask a follow-up question if params.message and the locked Page value are present.",
+    "Return the created post id, URL/permalink if available, status, and a concise confirmation message.",
+  ].join("\\n");
+}
+
 export function buildPublishingInstructions(asset: PublishingAsset) {
   const assetType = assetTypeLabel(asset.asset_type);
   const config = zapierMcpConfigForAsset(asset);
   const normalizedAssetType = String(asset.asset_type ?? "").toLowerCase();
+
+  if (normalizedAssetType === "facebook_post") {
+    return buildFacebookInstructions(config);
+  }
 
   return [
     `Send this approved VIP ${assetType} to the configured Zapier destination.`,
