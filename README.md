@@ -1,94 +1,119 @@
-# VIP TypeScript Zapier MCP Social Publish Fix — Clean Vercel-Safe Version
+# VIP LinkedIn Zapier MCP Action-Key Surgical Patch
 
-This version removes the compilable example route that caused the Vercel build error.
+## What this fixes
 
-## Why Vercel failed
-
-The previous patch included:
+This fixes:
 
 ```text
-examples/next-api-route/route.ts
+Action 'execute_zapier_write_action' not found
 ```
 
-Your Vercel/Next build type-checked that file and failed on this import:
+That error means VIP is still using the Zapier MCP executor/tool name as the LinkedIn app action key.
 
-```ts
-import { buildSocialPublishPayload } from "@/src/lib/zapierMcpSocialActions";
-```
-
-That example file should not have been included as a real `.ts` file.
-
-## Immediate cleanup
-
-Delete this file/folder from your repo if it exists:
+## Correct mapping
 
 ```text
-examples/next-api-route/route.ts
+MCP tool/executor: execute_zapier_write_action
+LinkedIn Page action: create_company_update
 ```
 
-Safe cleanup command for Mac/Linux:
+## Files included
+
+```text
+scripts/fix-linkedin-zapier-action.mjs
+docs/manual-linkedin-zapier-action-fix.md
+README.md
+```
+
+No TypeScript example route is included, so this package should not create a Vercel build failure by itself.
+
+## How to use
+
+Copy this file into your repo:
+
+```text
+scripts/fix-linkedin-zapier-action.mjs
+```
+
+From your repo root, run:
 
 ```bash
-rm -rf examples/next-api-route
+node scripts/fix-linkedin-zapier-action.mjs
 ```
 
-Safe cleanup command for Windows PowerShell:
+Then run:
 
-```powershell
-Remove-Item -Recurse -Force .\examples\next-api-route
+```bash
+npm run build
 ```
 
-## Files in this clean patch
+## What the script changes
 
-Copy only these files into your repo:
+It looks at:
 
 ```text
-src/lib/zapierMcpSocialActions.ts
-src/lib/zapierMcpPublishResponse.ts
-docs/zapier-mcp-social-publish-integration.md
+src/lib/zapier/linkedin.ts
+src/lib/zapier/action-registry.ts
 ```
 
-There is no `.ts` file under `examples/`.
-
-## Import path note
-
-If your code is inside `src/app/...` and your TypeScript alias maps `@/*` to `./src/*`, imports usually look like this:
+It keeps this as the MCP tool/executor:
 
 ```ts
-import { buildSocialPublishPayload } from "@/lib/zapierMcpSocialActions";
-import { normalizeZapierMcpPublishResponse } from "@/lib/zapierMcpPublishResponse";
+execute_zapier_write_action
 ```
 
-Not this:
+But prevents it from being used as the LinkedIn action.
+
+It changes likely bad patterns like:
 
 ```ts
-import { buildSocialPublishPayload } from "@/src/lib/zapierMcpSocialActions";
+action: getLinkedInMcpToolName()
 ```
 
-If your alias maps `@/*` to the project root instead, then `@/src/lib/...` may be correct. Your error suggests it is not correct in this repo.
-
-## LinkedIn fix
-
-Use:
+to:
 
 ```ts
-action: "create_company_update"
+action: getLinkedInMcpActionKey()
 ```
 
-Do not use:
+And adds this helper to `src/lib/zapier/linkedin.ts`:
+
+```ts
+export function getLinkedInMcpActionKey() {
+  return process.env.ZAPIER_LINKEDIN_ACTION_KEY?.trim() || "create_company_update";
+}
+```
+
+It also changes this if found:
 
 ```ts
 action: "execute_zapier_write_action"
 ```
 
-Correct structure:
+to:
 
-```text
-Executor/tool: execute_zapier_write_action
-App: LinkedIn
-Action: create_company_update
+```ts
+action: "create_company_update"
 ```
 
-## Facebook fix
+## Recommended Vercel environment variables
 
-Treat a Zapier MCP response containing `results.id` as success, even if `url`, `status`, and `message` are null.
+```text
+ZAPIER_LINKEDIN_MCP_TOOL_NAME=execute_zapier_write_action
+ZAPIER_LINKEDIN_ACTION_KEY=create_company_update
+```
+
+Do not set any LinkedIn action-key environment variable to:
+
+```text
+execute_zapier_write_action
+```
+
+## Backup behavior
+
+The script creates backups before editing files:
+
+```text
+src/lib/zapier/linkedin.ts.bak-...
+src/lib/zapier/action-registry.ts.bak-...
+```
