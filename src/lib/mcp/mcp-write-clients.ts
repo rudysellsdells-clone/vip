@@ -17,7 +17,11 @@ function getZapierMcpServerUrl() {
 }
 
 function getZapierMcpToken() {
-  return process.env.ZAPIER_MCP_TOKEN?.trim() || "";
+  return (
+    process.env.ZAPIER_MCP_TOKEN?.trim() ||
+    process.env.ZAPIER_MCP_AUTH_TOKEN?.trim() ||
+    ""
+  );
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

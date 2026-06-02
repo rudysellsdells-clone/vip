@@ -1,5 +1,13 @@
 export type PublishingAsset = Record<string, any>;
 
+export type ZapierMcpAssetConfig = {
+  app: string;
+  action: string;
+  source: string;
+  pageId?: string | null;
+  pageName?: string | null;
+};
+
 export function assetTypeLabel(value: unknown) {
   return String(value ?? "asset").replaceAll("_", " ");
 }
@@ -17,41 +25,107 @@ export function isApprovedForPublishing(asset: PublishingAsset) {
   return String(asset.status ?? "") === "approved";
 }
 
-export function zapierMcpConfigForAsset(asset: PublishingAsset) {
+function env(name: string) {
+  return process.env[name]?.trim() || "";
+}
+
+function firstValue(...values: Array<string | undefined | null>) {
+  return values.map((value) => String(value ?? "").trim()).find(Boolean) || "";
+}
+
+export function zapierMcpConfigForAsset(asset: PublishingAsset): ZapierMcpAssetConfig {
   const assetType = String(asset.asset_type ?? "").toLowerCase();
 
-  const configByType: Record<string, { app?: string; action?: string }> = {
-    blog_post: {
-      app: process.env.ZAPIER_MCP_BLOG_POST_APP,
-      action: process.env.ZAPIER_MCP_BLOG_POST_ACTION,
-    },
-    linkedin_post: {
-      app: process.env.ZAPIER_MCP_LINKEDIN_POST_APP,
-      action: process.env.ZAPIER_MCP_LINKEDIN_POST_ACTION,
-    },
-    facebook_post: {
-      app: process.env.ZAPIER_MCP_FACEBOOK_POST_APP,
-      action: process.env.ZAPIER_MCP_FACEBOOK_POST_ACTION,
-    },
-    email: {
-      app: process.env.ZAPIER_MCP_EMAIL_APP,
-      action: process.env.ZAPIER_MCP_EMAIL_ACTION,
-    },
-    video_script: {
-      app: process.env.ZAPIER_MCP_VIDEO_SCRIPT_APP,
-      action: process.env.ZAPIER_MCP_VIDEO_SCRIPT_ACTION,
-    },
-  };
+  if (assetType === "facebook_post") {
+    return {
+      app: firstValue(env("ZAPIER_MCP_FACEBOOK_POST_APP"), env("ZAPIER_MCP_DEFAULT_APP"), "Facebook Pages"),
+      action: firstValue(env("ZAPIER_MCP_FACEBOOK_POST_ACTION"), env("ZAPIER_FACEBOOK_MCP_TOOL_NAME"), env("ZAPIER_MCP_DEFAULT_ACTION")),
+      source: env("ZAPIER_MCP_FACEBOOK_POST_ACTION")
+        ? "asset_specific"
+        : env("ZAPIER_FACEBOOK_MCP_TOOL_NAME")
+          ? "legacy_facebook_tool_name"
+          : env("ZAPIER_MCP_DEFAULT_ACTION")
+            ? "default"
+            : "missing_action",
+      pageId: env("ZAPIER_FACEBOOK_PAGE_ID") || null,
+      pageName: env("ZAPIER_FACEBOOK_PAGE_NAME") || null,
+    };
+  }
 
-  const specific = configByType[assetType] ?? {};
+  if (assetType === "linkedin_post") {
+    return {
+      app: firstValue(env("ZAPIER_MCP_LINKEDIN_POST_APP"), env("ZAPIER_MCP_DEFAULT_APP"), "LinkedIn"),
+      action: firstValue(env("ZAPIER_MCP_LINKEDIN_POST_ACTION"), env("ZAPIER_LINKEDIN_MCP_TOOL_NAME"), env("ZAPIER_MCP_DEFAULT_ACTION")),
+      source: env("ZAPIER_MCP_LINKEDIN_POST_ACTION")
+        ? "asset_specific"
+        : env("ZAPIER_LINKEDIN_MCP_TOOL_NAME")
+          ? "legacy_linkedin_tool_name"
+          : env("ZAPIER_MCP_DEFAULT_ACTION")
+            ? "default"
+            : "missing_action",
+      pageId: null,
+      pageName: env("ZAPIER_LINKEDIN_PAGE_NAME") || null,
+    };
+  }
+
+  if (assetType === "blog_post") {
+    return {
+      app: firstValue(env("ZAPIER_MCP_BLOG_POST_APP"), env("ZAPIER_MCP_DEFAULT_APP"), "WordPress"),
+      action: firstValue(env("ZAPIER_MCP_BLOG_POST_ACTION"), env("ZAPIER_WORDPRESS_CREATE_POST_ACTION_KEY"), env("ZAPIER_MCP_DEFAULT_ACTION")),
+      source: env("ZAPIER_MCP_BLOG_POST_ACTION")
+        ? "asset_specific"
+        : env("ZAPIER_WORDPRESS_CREATE_POST_ACTION_KEY")
+          ? "legacy_wordpress_action_key"
+          : env("ZAPIER_MCP_DEFAULT_ACTION")
+            ? "default"
+            : "missing_action",
+      pageId: null,
+      pageName: null,
+    };
+  }
+
+  if (assetType === "email") {
+    return {
+      app: firstValue(env("ZAPIER_MCP_EMAIL_APP"), env("ZAPIER_GMAIL_APP"), env("ZAPIER_MCP_DEFAULT_APP"), "Gmail"),
+      action: firstValue(env("ZAPIER_MCP_EMAIL_ACTION"), env("ZAPIER_GMAIL_CREATE_DRAFT_ACTION"), env("ZAPIER_MCP_DEFAULT_ACTION")),
+      source: env("ZAPIER_MCP_EMAIL_ACTION")
+        ? "asset_specific"
+        : env("ZAPIER_GMAIL_CREATE_DRAFT_ACTION")
+          ? "legacy_gmail_create_draft_action"
+          : env("ZAPIER_MCP_DEFAULT_ACTION")
+            ? "default"
+            : "missing_action",
+      pageId: null,
+      pageName: null,
+    };
+  }
+
+  if (assetType === "video_script") {
+    return {
+      app: firstValue(env("ZAPIER_MCP_VIDEO_SCRIPT_APP"), env("ZAPIER_MCP_DEFAULT_APP")),
+      action: firstValue(env("ZAPIER_MCP_VIDEO_SCRIPT_ACTION"), env("ZAPIER_MCP_DEFAULT_ACTION")),
+      source: env("ZAPIER_MCP_VIDEO_SCRIPT_ACTION")
+        ? "asset_specific"
+        : env("ZAPIER_MCP_DEFAULT_ACTION")
+          ? "default"
+          : "missing_action",
+      pageId: null,
+      pageName: null,
+    };
+  }
 
   return {
-    app: specific.app ?? process.env.ZAPIER_MCP_DEFAULT_APP ?? "",
-    action: specific.action ?? process.env.ZAPIER_MCP_DEFAULT_ACTION ?? "",
+    app: env("ZAPIER_MCP_DEFAULT_APP"),
+    action: env("ZAPIER_MCP_DEFAULT_ACTION"),
+    source: env("ZAPIER_MCP_DEFAULT_ACTION") ? "default" : "missing_action",
+    pageId: null,
+    pageName: null,
   };
 }
 
 export function buildPublishingOutputParams(asset: PublishingAsset) {
+  const config = zapierMcpConfigForAsset(asset);
+
   return {
     asset_id: String(asset.id ?? ""),
     assetId: String(asset.id ?? ""),
@@ -83,23 +157,48 @@ export function buildPublishingOutputParams(asset: PublishingAsset) {
     qualityWorkflowStatus: asset.quality_workflow_status ?? null,
 
     status: asset.status ?? null,
+
+    facebook_page_id: config.pageId ?? null,
+    facebookPageId: config.pageId ?? null,
+    facebook_page_name: config.pageName ?? null,
+    facebookPageName: config.pageName ?? null,
+
+    linkedin_page_name: config.pageName ?? null,
+    linkedInPageName: config.pageName ?? null,
+
+    wordpress_default_post_status: env("WORDPRESS_DEFAULT_POST_STATUS") || null,
+    wordpressDefaultPostStatus: env("WORDPRESS_DEFAULT_POST_STATUS") || null,
+
     source: "vip",
   };
 }
 
 export function buildPublishingInstructions(asset: PublishingAsset) {
   const assetType = assetTypeLabel(asset.asset_type);
+  const config = zapierMcpConfigForAsset(asset);
 
   return [
     `Send this approved VIP ${assetType} to the configured Zapier destination.`,
     "Use the params object as the source of truth.",
+    config.pageName ? `Use destination page/account: ${config.pageName}.` : "",
+    config.pageId ? `Use destination page id: ${config.pageId}.` : "",
     "Do not invent missing facts, statistics, claims, dates, or links.",
     "Return the created record id, url if available, status, and a concise human-readable message.",
-  ].join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 export function missingZapierMcpConfigMessage(asset: PublishingAsset) {
   const assetType = String(asset.asset_type ?? "unknown");
+
+  if (assetType === "facebook_post") {
+    return [
+      "ZapierMCP is not configured for facebook_post.",
+      "You already have Facebook page variables, but no Facebook action key variable was found.",
+      "Add ZAPIER_FACEBOOK_MCP_TOOL_NAME or ZAPIER_MCP_FACEBOOK_POST_ACTION in Vercel.",
+    ].join(" ");
+  }
 
   return [
     `ZapierMCP is not configured for asset type: ${assetType}.`,
