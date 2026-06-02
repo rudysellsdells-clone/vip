@@ -120,7 +120,7 @@ export async function POST(_request: Request, context: RouteContext) {
         "Return the created record id, url if available, status, and a concise message.",
     });
 
-    assertSuccessfulMcpResult(result);
+    assertSuccessfulMcpResult(result, { requireSuccessEvidence: true });
 
     const sentAsset = await markAssetSentToZapier({
       supabase,
