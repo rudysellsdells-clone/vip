@@ -33,6 +33,19 @@ function firstValue(...values: Array<string | undefined | null>) {
   return values.map((value) => String(value ?? "").trim()).find(Boolean) || "";
 }
 
+function wordpressPostType() {
+  /*
+    Zapier WordPress requires post_type.
+    WordPress REST/Zapier action mappings commonly expect "post" for standard posts.
+    This can be overridden in Vercel if the action expects a custom post type.
+  */
+  return firstValue(env("WORDPRESS_DEFAULT_POST_TYPE"), env("ZAPIER_WORDPRESS_DEFAULT_POST_TYPE"), "post");
+}
+
+function wordpressPostStatus() {
+  return firstValue(env("WORDPRESS_DEFAULT_POST_STATUS"), "draft");
+}
+
 export function zapierMcpConfigForAsset(asset: PublishingAsset): ZapierMcpAssetConfig {
   const assetType = String(asset.asset_type ?? "").toLowerCase();
 
@@ -125,18 +138,22 @@ export function zapierMcpConfigForAsset(asset: PublishingAsset): ZapierMcpAssetC
 
 export function buildPublishingOutputParams(asset: PublishingAsset) {
   const config = zapierMcpConfigForAsset(asset);
+  const assetType = String(asset.asset_type ?? "");
+  const title = String(asset.title ?? "");
+  const content = String(asset.content ?? "");
+  const isBlogPost = assetType === "blog_post";
 
   return {
     asset_id: String(asset.id ?? ""),
     assetId: String(asset.id ?? ""),
 
-    asset_type: String(asset.asset_type ?? ""),
-    assetType: String(asset.asset_type ?? ""),
+    asset_type: assetType,
+    assetType,
 
-    title: String(asset.title ?? ""),
-    content: String(asset.content ?? ""),
-    body: String(asset.content ?? ""),
-    text: String(asset.content ?? ""),
+    title,
+    content,
+    body: content,
+    text: content,
 
     campaign_id: asset.campaign_id ?? null,
     campaignId: asset.campaign_id ?? null,
@@ -158,16 +175,30 @@ export function buildPublishingOutputParams(asset: PublishingAsset) {
 
     status: asset.status ?? null,
 
+    /*
+      WordPress-specific fields.
+      These are included for all assets but only populated for blog_post so the WordPress
+      Zapier action receives the required post_type field and common post aliases.
+    */
+    post_type: isBlogPost ? wordpressPostType() : null,
+    postType: isBlogPost ? wordpressPostType() : null,
+    post_status: isBlogPost ? wordpressPostStatus() : null,
+    postStatus: isBlogPost ? wordpressPostStatus() : null,
+    post_title: isBlogPost ? title : null,
+    postTitle: isBlogPost ? title : null,
+    post_content: isBlogPost ? content : null,
+    postContent: isBlogPost ? content : null,
+
     facebook_page_id: config.pageId ?? null,
     facebookPageId: config.pageId ?? null,
     facebook_page_name: config.pageName ?? null,
     facebookPageName: config.pageName ?? null,
 
-    linkedin_page_name: config.pageName ?? null,
-    linkedInPageName: config.pageName ?? null,
+    linkedin_page_name: assetType === "linkedin_post" ? config.pageName ?? null : null,
+    linkedInPageName: assetType === "linkedin_post" ? config.pageName ?? null : null,
 
-    wordpress_default_post_status: env("WORDPRESS_DEFAULT_POST_STATUS") || null,
-    wordpressDefaultPostStatus: env("WORDPRESS_DEFAULT_POST_STATUS") || null,
+    wordpress_default_post_status: wordpressPostStatus(),
+    wordpressDefaultPostStatus: wordpressPostStatus(),
 
     source: "vip",
   };
@@ -176,10 +207,12 @@ export function buildPublishingOutputParams(asset: PublishingAsset) {
 export function buildPublishingInstructions(asset: PublishingAsset) {
   const assetType = assetTypeLabel(asset.asset_type);
   const config = zapierMcpConfigForAsset(asset);
+  const isBlogPost = String(asset.asset_type ?? "") === "blog_post";
 
   return [
     `Send this approved VIP ${assetType} to the configured Zapier destination.`,
     "Use the params object as the source of truth.",
+    isBlogPost ? `For WordPress, use post_type=${wordpressPostType()} and post_status=${wordpressPostStatus()}.` : "",
     config.pageName ? `Use destination page/account: ${config.pageName}.` : "",
     config.pageId ? `Use destination page id: ${config.pageId}.` : "",
     "Do not invent missing facts, statistics, claims, dates, or links.",
