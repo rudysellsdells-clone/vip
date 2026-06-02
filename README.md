@@ -1,112 +1,34 @@
-# VIP Zapier MCP LinkedIn Company Update Fix
+# VIP TypeScript Zapier MCP Social Publish Fix
 
-## Correct LinkedIn action keys
+This is the TypeScript/Next.js version of the Zapier MCP social publishing fix.
 
-For LinkedIn Page publishing, use:
-
-```text
-create_company_update
-```
-
-For general/personal share publishing, the fallback/general action is:
+Your project structure confirms this is a Next.js TypeScript project because it has:
 
 ```text
-share
+next-env.d.ts
+next.config.ts
+package.json
+tailwind.config.ts
+tsconfig.json
+vercel.json
 ```
 
-## What caused the error
+Do not use the PHP patch for this repo.
 
-This error:
+---
 
-```text
-Action 'execute_zapier_write_action' not found
-```
+## Issues fixed
 
-means VIP tried to use the executor/tool name as the LinkedIn action key.
+### 1. Facebook false failure
 
-That is incorrect.
+Facebook published successfully, but VIP treated the response as an error.
 
-## Correct structure
-
-```text
-Executor: write
-App: LinkedIn
-Action: create_company_update
-```
-
-Do not use:
-
-```text
-Action: execute_zapier_write_action
-```
-
-## Files in this patch
-
-```text
-includes/zapier-mcp-linkedin-company-update-fix.php
-examples/example-vip-linkedin-company-update-integration.php
-README.md
-```
-
-## Install
-
-1. Copy the helper file to your VIP plugin:
-
-```text
-includes/zapier-mcp-linkedin-company-update-fix.php
-```
-
-2. Load it:
-
-```php
-require_once plugin_dir_path(__FILE__) . 'includes/zapier-mcp-linkedin-company-update-fix.php';
-```
-
-3. Set the WordPress option, or hardcode the action key in your channel config:
-
-```php
-update_option('vip_zapier_linkedin_action_key', 'create_company_update');
-```
-
-4. Replace any LinkedIn publishing config like this:
-
-```php
-'action' => 'execute_zapier_write_action'
-```
-
-With this:
-
-```php
-'action' => 'create_company_update'
-```
-
-## Example payload
-
-```php
-$payload = VIP_Zapier_MCP_LinkedIn_Company_Update_Fix::build_linkedin_page_publish_payload(
-    $message,
-    array(
-        // Add required LinkedIn company/page params here if your Zapier MCP action requires them.
-    )
-);
-```
-
-Then your MCP call should execute the write action using:
-
-```text
-app: LinkedIn
-action: create_company_update
-params.message: your LinkedIn post body
-```
-
-## Recommended behavior
-
-If LinkedIn returns:
+The successful Zapier MCP response looked like this:
 
 ```json
 {
   "results": {
-    "id": "some_linkedin_update_id",
+    "id": "30489698262_1777565287102827",
     "url": null,
     "status": null,
     "message": null
@@ -114,12 +36,165 @@ If LinkedIn returns:
 }
 ```
 
-VIP should treat that as success.
+That should count as success because `results.id` is present.
 
-The helper includes:
+---
 
-```php
-VIP_Zapier_MCP_LinkedIn_Company_Update_Fix::normalize_publish_response($response);
+### 2. LinkedIn wrong action key
+
+LinkedIn failed with:
+
+```text
+Action 'execute_zapier_write_action' not found
 ```
 
-That mirrors the Facebook response-parser fix.
+That means VIP was using the executor/tool name as the LinkedIn action key.
+
+Wrong:
+
+```ts
+action: "execute_zapier_write_action"
+```
+
+Correct for LinkedIn Page publishing:
+
+```ts
+action: "create_company_update"
+```
+
+Correct structure:
+
+```text
+Executor/tool: execute_zapier_write_action
+App: LinkedIn
+Action: create_company_update
+```
+
+For general LinkedIn sharing, use:
+
+```text
+share
+```
+
+---
+
+## Files
+
+```text
+src/lib/zapierMcpSocialActions.ts
+src/lib/zapierMcpPublishResponse.ts
+examples/next-api-route/route.ts
+README.md
+```
+
+---
+
+## Install
+
+Copy these two files into your repo:
+
+```text
+src/lib/zapierMcpSocialActions.ts
+src/lib/zapierMcpPublishResponse.ts
+```
+
+If your project uses a different source alias, adjust imports as needed.
+
+---
+
+## Find the bug
+
+Search the VIP repo for:
+
+```text
+execute_zapier_write_action
+```
+
+If you see it used as an action value, that is the issue.
+
+Bad:
+
+```ts
+const action = "execute_zapier_write_action";
+```
+
+Good:
+
+```ts
+const executor = "execute_zapier_write_action";
+const action = "create_company_update";
+```
+
+---
+
+## Correct LinkedIn Page action
+
+Use:
+
+```text
+create_company_update
+```
+
+Do not use:
+
+```text
+execute_zapier_write_action
+```
+
+as the LinkedIn action.
+
+---
+
+## Correct Facebook success handling
+
+Use:
+
+```ts
+const normalized = normalizeZapierMcpPublishResponse(zapierResponse, "Facebook");
+
+if (normalized.success) {
+  return {
+    success: true,
+    message: normalized.message,
+    postId: normalized.postId,
+    postUrl: normalized.postUrl,
+    executionId: normalized.executionId,
+    feedbackUrl: normalized.feedbackUrl,
+  };
+}
+```
+
+---
+
+## Correct LinkedIn payload
+
+Use:
+
+```ts
+const payload = buildSocialPublishPayload({
+  channel: "linkedin_page",
+  message: postBody,
+});
+```
+
+This resolves to:
+
+```ts
+{
+  executor: "execute_zapier_write_action",
+  app: "LinkedIn",
+  action: "create_company_update",
+  params: {
+    message: postBody
+  }
+}
+```
+
+---
+
+## Notes
+
+The example route is intentionally not a full replacement for your existing route. It shows where to plug in the two fixes:
+
+1. Build the correct app/action payload.
+2. Normalize the Zapier MCP response so `results.id` counts as success.

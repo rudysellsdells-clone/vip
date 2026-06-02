@@ -1,0 +1,10 @@
+{
+  "name": "vip-typescript-zapier-mcp-social-publish-fix",
+  "description": "Drop-in TypeScript helpers for fixing VIP Zapier MCP Facebook and LinkedIn publish handling.",
+  "files": [
+    "src/lib/zapierMcpSocialActions.ts",
+    "src/lib/zapierMcpPublishResponse.ts",
+    "examples/next-api-route/route.ts",
+    "README.md"
+  ]
+}
