@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { markAssetSentToZapier } from "@/lib/assets/asset-lifecycle";
 import { executeZapierMcpWriteAction } from "@/lib/mcp/mcp-write-clients";
+import { assertSuccessfulMcpResult } from "@/lib/publishing/mcp-result-guard";
 import {
   buildPublishingInstructions,
   buildPublishingOutputParams,
@@ -14,6 +15,16 @@ import { untypedSupabase } from "@/lib/supabase/untyped";
 type RouteContext = {
   params: Promise<{ assetId: string }>;
 };
+
+function isAlreadySentOrPublished(asset: Record<string, any>) {
+  return (
+    Boolean(asset.published_at) ||
+    String(asset.status ?? "") === "published" ||
+    String(asset.status ?? "") === "sent_to_zapier" ||
+    String(asset.scheduling_status ?? "") === "published" ||
+    String(asset.scheduling_status ?? "") === "sent_to_zapier"
+  );
+}
 
 export async function POST(_request: Request, context: RouteContext) {
   const { assetId } = await context.params;
@@ -37,6 +48,23 @@ export async function POST(_request: Request, context: RouteContext) {
 
   if (assetError || !asset) {
     return NextResponse.json({ error: "Asset not found." }, { status: 404 });
+  }
+
+  if (isAlreadySentOrPublished(asset)) {
+    return NextResponse.json(
+      {
+        error:
+          "This asset is already marked as sent/published. Reset the asset before retesting to prevent duplicate publishing.",
+        assetState: {
+          status: asset.status,
+          scheduling_status: asset.scheduling_status,
+          published_at: asset.published_at,
+          published_via: asset.published_via,
+          published_reference: asset.published_reference,
+        },
+      },
+      { status: 409 }
+    );
   }
 
   if (!isApprovedForPublishing(asset)) {
@@ -70,6 +98,19 @@ export async function POST(_request: Request, context: RouteContext) {
   const params = buildPublishingOutputParams(asset);
 
   try {
+    await supabase.from("activity_log").insert({
+      user_id: user.id,
+      activity_type: "asset_zapier_mcp_send_started",
+      title: "ZapierMCP send started",
+      description: asset.title,
+      metadata: {
+        assetId,
+        assetType: asset.asset_type,
+        app: config.app,
+        action: config.action,
+      },
+    });
+
     const result = await executeZapierMcpWriteAction({
       app: config.app,
       action: config.action,
@@ -78,6 +119,8 @@ export async function POST(_request: Request, context: RouteContext) {
       output:
         "Return the created record id, url if available, status, and a concise message.",
     });
+
+    assertSuccessfulMcpResult(result);
 
     const sentAsset = await markAssetSentToZapier({
       supabase,
@@ -109,6 +152,20 @@ export async function POST(_request: Request, context: RouteContext) {
       mcp: result,
     });
   } catch (error) {
+    await supabase.from("activity_log").insert({
+      user_id: user.id,
+      activity_type: "asset_zapier_mcp_send_failed",
+      title: "ZapierMCP send failed",
+      description: asset.title,
+      metadata: {
+        assetId,
+        assetType: asset.asset_type,
+        app: config.app,
+        action: config.action,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+
     return NextResponse.json(
       {
         error:
@@ -155,7 +212,14 @@ export async function GET(_request: Request, context: RouteContext) {
   return NextResponse.json({
     ok: true,
     assetId,
+    alreadySentOrPublished: isAlreadySentOrPublished(asset),
     approvedForPublishing: isApprovedForPublishing(asset),
+    assetState: {
+      status: asset.status,
+      scheduling_status: asset.scheduling_status,
+      published_at: asset.published_at,
+      published_via: asset.published_via,
+    },
     app: config.app || null,
     action: config.action || null,
     params: buildPublishingOutputParams(asset),
