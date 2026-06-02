@@ -34,11 +34,6 @@ function firstValue(...values: Array<string | undefined | null>) {
 }
 
 function wordpressPostType() {
-  /*
-    Zapier WordPress requires post_type.
-    WordPress REST/Zapier action mappings commonly expect "post" for standard posts.
-    This can be overridden in Vercel if the action expects a custom post type.
-  */
   return firstValue(env("WORDPRESS_DEFAULT_POST_TYPE"), env("ZAPIER_WORDPRESS_DEFAULT_POST_TYPE"), "post");
 }
 
@@ -136,83 +131,101 @@ export function zapierMcpConfigForAsset(asset: PublishingAsset): ZapierMcpAssetC
   };
 }
 
-export function buildPublishingOutputParams(asset: PublishingAsset) {
-  const config = zapierMcpConfigForAsset(asset);
-  const assetType = String(asset.asset_type ?? "");
+function buildWordPressParams(asset: PublishingAsset) {
   const title = String(asset.title ?? "");
   const content = String(asset.content ?? "");
-  const isBlogPost = assetType === "blog_post";
+
+  /*
+    Keep WordPress payload lean.
+    The prior payload repeated the full article across content/body/text/post_content/postContent.
+    Long blog posts can cause ZapierMCP to terminate when the request is unnecessarily large.
+  */
+  return {
+    asset_id: String(asset.id ?? ""),
+    asset_type: "blog_post",
+    campaign_id: asset.campaign_id ?? null,
+    title,
+    post_type: wordpressPostType(),
+    post_status: wordpressPostStatus(),
+    post_title: title,
+    post_content: content,
+    source: "vip",
+  };
+}
+
+function buildFacebookParams(asset: PublishingAsset, config: ZapierMcpAssetConfig) {
+  const content = String(asset.content ?? "");
 
   return {
     asset_id: String(asset.id ?? ""),
-    assetId: String(asset.id ?? ""),
-
-    asset_type: assetType,
-    assetType,
-
-    title,
-    content,
-    body: content,
-    text: content,
-
+    asset_type: String(asset.asset_type ?? ""),
     campaign_id: asset.campaign_id ?? null,
-    campaignId: asset.campaign_id ?? null,
-
-    intended_publish_month: asset.intended_publish_month ?? null,
-    intendedPublishMonth: asset.intended_publish_month ?? null,
-
-    planned_publish_date: asset.planned_publish_date ?? null,
-    plannedPublishDate: asset.planned_publish_date ?? null,
-
-    scheduled_publish_at: asset.scheduled_publish_at ?? null,
-    scheduledPublishAt: asset.scheduled_publish_at ?? null,
-
-    publish_timezone: asset.publish_timezone ?? "America/Chicago",
-    publishTimezone: asset.publish_timezone ?? "America/Chicago",
-
-    quality_workflow_status: asset.quality_workflow_status ?? null,
-    qualityWorkflowStatus: asset.quality_workflow_status ?? null,
-
-    status: asset.status ?? null,
-
-    /*
-      WordPress-specific fields.
-      These are included for all assets but only populated for blog_post so the WordPress
-      Zapier action receives the required post_type field and common post aliases.
-    */
-    post_type: isBlogPost ? wordpressPostType() : null,
-    postType: isBlogPost ? wordpressPostType() : null,
-    post_status: isBlogPost ? wordpressPostStatus() : null,
-    postStatus: isBlogPost ? wordpressPostStatus() : null,
-    post_title: isBlogPost ? title : null,
-    postTitle: isBlogPost ? title : null,
-    post_content: isBlogPost ? content : null,
-    postContent: isBlogPost ? content : null,
-
+    message: content,
+    content,
     facebook_page_id: config.pageId ?? null,
-    facebookPageId: config.pageId ?? null,
     facebook_page_name: config.pageName ?? null,
-    facebookPageName: config.pageName ?? null,
-
-    linkedin_page_name: assetType === "linkedin_post" ? config.pageName ?? null : null,
-    linkedInPageName: assetType === "linkedin_post" ? config.pageName ?? null : null,
-
-    wordpress_default_post_status: wordpressPostStatus(),
-    wordpressDefaultPostStatus: wordpressPostStatus(),
-
+    scheduled_publish_at: asset.scheduled_publish_at ?? null,
     source: "vip",
   };
+}
+
+function buildLinkedInParams(asset: PublishingAsset, config: ZapierMcpAssetConfig) {
+  const content = String(asset.content ?? "");
+
+  return {
+    asset_id: String(asset.id ?? ""),
+    asset_type: String(asset.asset_type ?? ""),
+    campaign_id: asset.campaign_id ?? null,
+    text: content,
+    content,
+    linkedin_page_name: config.pageName ?? null,
+    scheduled_publish_at: asset.scheduled_publish_at ?? null,
+    source: "vip",
+  };
+}
+
+function buildGenericParams(asset: PublishingAsset) {
+  return {
+    asset_id: String(asset.id ?? ""),
+    asset_type: String(asset.asset_type ?? ""),
+    title: String(asset.title ?? ""),
+    content: String(asset.content ?? ""),
+    campaign_id: asset.campaign_id ?? null,
+    scheduled_publish_at: asset.scheduled_publish_at ?? null,
+    source: "vip",
+  };
+}
+
+export function buildPublishingOutputParams(asset: PublishingAsset) {
+  const config = zapierMcpConfigForAsset(asset);
+  const assetType = String(asset.asset_type ?? "").toLowerCase();
+
+  if (assetType === "blog_post") {
+    return buildWordPressParams(asset);
+  }
+
+  if (assetType === "facebook_post") {
+    return buildFacebookParams(asset, config);
+  }
+
+  if (assetType === "linkedin_post") {
+    return buildLinkedInParams(asset, config);
+  }
+
+  return buildGenericParams(asset);
 }
 
 export function buildPublishingInstructions(asset: PublishingAsset) {
   const assetType = assetTypeLabel(asset.asset_type);
   const config = zapierMcpConfigForAsset(asset);
-  const isBlogPost = String(asset.asset_type ?? "") === "blog_post";
+  const normalizedAssetType = String(asset.asset_type ?? "").toLowerCase();
 
   return [
     `Send this approved VIP ${assetType} to the configured Zapier destination.`,
     "Use the params object as the source of truth.",
-    isBlogPost ? `For WordPress, use post_type=${wordpressPostType()} and post_status=${wordpressPostStatus()}.` : "",
+    normalizedAssetType === "blog_post"
+      ? `For WordPress, use post_type=${wordpressPostType()}, post_status=${wordpressPostStatus()}, post_title, and post_content.`
+      : "",
     config.pageName ? `Use destination page/account: ${config.pageName}.` : "",
     config.pageId ? `Use destination page id: ${config.pageId}.` : "",
     "Do not invent missing facts, statistics, claims, dates, or links.",
