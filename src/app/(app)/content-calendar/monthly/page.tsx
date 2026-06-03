@@ -15,6 +15,7 @@ import {
 import { defaultViewForPage } from "@/lib/calendar/working-view-config";
 import { pageVisibleAssets, safeRows } from "@/lib/calendar/page-assets";
 import { GenerateMonthlyCampaignsButton } from "@/components/content-calendar/GenerateMonthlyCampaignsButton";
+import { DeleteMonthlyCampaignButton } from "@/components/content-calendar/DeleteMonthlyCampaignButton";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -70,6 +71,14 @@ export default async function MonthlyContentCalendarPage({ searchParams }: PageP
         description="Generate one campaign per week and place the assets into the working calendar."
       >
         <GenerateMonthlyCampaignsButton defaultMonth={range.monthValue} />
+      </WebsiteSection>
+
+      <WebsiteSection
+        eyebrow="Cleanup"
+        title="Remove monthly content"
+        description="Remove the full monthly campaign package for this view with one cleanup control when you need to regenerate the month."
+      >
+        <DeleteMonthlyCampaignButton month={range.monthValue} />
       </WebsiteSection>
 
       <WebsiteSection

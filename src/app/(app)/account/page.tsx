@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
 type SeatRow = Record<string, any>;
+type ProfileRow = Record<string, any> | null;
 
 function formatDate(value: unknown) {
   if (!value) return "Not set";
@@ -32,6 +33,21 @@ function roleLabel(value: unknown) {
   return String(value ?? "viewer").replaceAll("_", " ");
 }
 
+function accountRole(profile: ProfileRow) {
+  return String(profile?.account_role ?? "owner");
+}
+
+function ownerUserId(profile: ProfileRow, fallbackUserId: string) {
+  const owner = String(profile?.account_owner_id ?? "").trim();
+  return owner || fallbackUserId;
+}
+
+function canManageSeats(profile: ProfileRow, currentUserId: string) {
+  const role = accountRole(profile);
+  const ownerId = ownerUserId(profile, currentUserId);
+  return role === "owner" && ownerId === currentUserId;
+}
+
 export default async function AccountPage() {
   const supabase = untypedSupabase(await createClient());
 
@@ -47,10 +63,20 @@ export default async function AccountPage() {
     .eq("id", user.id)
     .maybeSingle();
 
+  const ownerId = ownerUserId(profile, user.id);
+  const role = accountRole(profile);
+  const isOwner = canManageSeats(profile, user.id);
+
+  const { data: ownerProfile } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", ownerId)
+    .maybeSingle();
+
   const { data: seatsData, error: seatsError } = await supabase
     .from("account_seats")
     .select("*")
-    .eq("owner_user_id", user.id)
+    .eq("owner_user_id", ownerId)
     .neq("status", "removed")
     .order("created_at", { ascending: false });
 
@@ -63,7 +89,7 @@ export default async function AccountPage() {
       <WebsiteHero
         eyebrow="Account"
         title="Manage your VIP account and seats."
-        description="Review the signed-in account, add collaborators, and prepare VIP for team-based review and approval workflows."
+        description="Use your owner account to create team seats, invite collaborators, and prepare VIP for multi-user review and approval workflows."
         primaryAction={{ label: "Settings", href: "/settings" }}
         secondaryAction={{ label: "Dashboard", href: "/dashboard" }}
       />
@@ -76,38 +102,47 @@ export default async function AccountPage() {
           dot="blue"
         />
         <WebsiteMetric
-          label="Seats"
-          value={seats.length}
-          description="Active or pending seats attached to this account."
+          label="Account Role"
+          value={roleLabel(role)}
+          description={isOwner ? "This account can create and manage seats." : "This account belongs to an owner account."}
           dot="gold"
         />
         <WebsiteMetric
-          label="Pending"
-          value={pendingSeats}
-          description="Seats waiting for invitation acceptance or manual onboarding."
+          label="Seats"
+          value={seats.length}
+          description="Active or pending seats attached to the owner account."
           dot="purple"
         />
         <WebsiteMetric
           label="Active"
           value={activeSeats}
-          description="Seats marked active in VIP."
+          description={`${pendingSeats} pending seat(s).`}
           dot="green"
         />
       </section>
 
       <section className={websiteStyles.twoColumn}>
         <WebsiteSection
-          eyebrow="Profile"
-          title="Account profile"
-          description="This is the user profile VIP uses for ownership and row-level filtering."
+          eyebrow="Owner"
+          title="Owner account"
+          description="This is the account that owns the VIP workspace and can create additional accounts."
         >
           <article className={websiteStyles.card}>
-            <h3 className={websiteStyles.cardTitle}>{profile?.full_name ?? user.email ?? "VIP user"}</h3>
+            <div className="flex flex-wrap gap-2">
+              <WebsiteBadge status={isOwner ? "owner" : "member"} />
+              <span className={websiteStyles.badge}>{roleLabel(role)}</span>
+            </div>
+            <h3 className={websiteStyles.cardTitle} style={{ marginTop: 16 }}>
+              {ownerProfile?.full_name ?? profile?.full_name ?? user.email ?? "VIP Owner"}
+            </h3>
             <p className={websiteStyles.cardText}>
-              <strong>Email:</strong> {user.email ?? profile?.email ?? "Not available"}
+              <strong>Owner email:</strong> {ownerProfile?.email ?? user.email ?? "Not available"}
             </p>
             <p className={websiteStyles.cardText}>
-              <strong>Timezone:</strong> {profile?.timezone ?? "Not set"}
+              <strong>Your email:</strong> {user.email ?? profile?.email ?? "Not available"}
+            </p>
+            <p className={websiteStyles.cardText}>
+              <strong>Timezone:</strong> {profile?.timezone ?? "America/Chicago"}
             </p>
             <p className={websiteStyles.cardMeta}>
               Profile created {formatDate(profile?.created_at)}
@@ -117,21 +152,31 @@ export default async function AccountPage() {
 
         <WebsiteSection
           eyebrow="Seats"
-          title="Add team members"
-          description="Start building the account layer for reviewers, editors, admins, and viewers."
+          title="Create accounts"
+          description={
+            isOwner
+              ? "Add teammates as admins, editors, reviewers, or viewers. VIP will attempt a Supabase invite when admin credentials are configured."
+              : "Only the owner account can create or remove seats."
+          }
         >
-          <AddSeatForm />
+          {isOwner ? (
+            <AddSeatForm />
+          ) : (
+            <div className={websiteStyles.empty}>
+              You are signed in as a {roleLabel(role)}. Ask the owner account to add or change seats.
+            </div>
+          )}
         </WebsiteSection>
       </section>
 
       <WebsiteSection
         eyebrow="Team"
         title="Current seats"
-        description="Seats are stored as account records. Use this to stage account access before deeper permissions and billing controls are added."
+        description="Seats are stored under the owner account. Removed seats stay out of the active list but preserve audit history."
       >
         {seatsError ? (
           <div className={websiteStyles.empty}>
-            Account seats are not available yet. Run the Phase 3 account seats database migration, then refresh this page.
+            Account seats are not available yet. Run the Phase 3 owner account database migration, then refresh this page.
             <br />
             <br />
             <strong>Database message:</strong> {seatsError.message}
@@ -149,9 +194,11 @@ export default async function AccountPage() {
                 </h3>
                 <p className={websiteStyles.cardText}>{seat.email}</p>
                 <p className={websiteStyles.cardMeta}>Invited {formatDate(seat.invited_at ?? seat.created_at)}</p>
-                <div className={websiteStyles.actionRow} style={{ marginTop: 14 }}>
-                  <RemoveSeatButton seatId={seat.id} email={seat.email} />
-                </div>
+                {isOwner ? (
+                  <div className={websiteStyles.actionRow} style={{ marginTop: 14 }}>
+                    <RemoveSeatButton seatId={seat.id} email={seat.email} />
+                  </div>
+                ) : null}
               </article>
             ))}
           </div>

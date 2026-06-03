@@ -9,6 +9,7 @@ import {
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
 import { BulkQualityReviewButton } from "@/components/content-calendar/BulkQualityReviewButton";
+import { DeleteMonthlyCampaignButton } from "@/components/content-calendar/DeleteMonthlyCampaignButton";
 import { applyWorkingAssetQuery, filterWorkingAssets } from "@/lib/assets/asset-visibility";
 import { buildCalendarViewRangeFromSearchParams } from "@/lib/calendar/view-range";
 import { defaultViewForPage } from "@/lib/calendar/working-view-config";
@@ -95,6 +96,14 @@ export default async function MonthlyReviewPage({ searchParams }: PageProps) {
             <BulkQualityReviewButton month={range.monthValue} />
           </article>
         </div>
+      </WebsiteSection>
+
+      <WebsiteSection
+        eyebrow="Cleanup"
+        title="Remove monthly content"
+        description="Remove the full monthly campaign package when you need to clear and regenerate the month."
+      >
+        <DeleteMonthlyCampaignButton month={range.monthValue} />
       </WebsiteSection>
 
       <WebsiteSection

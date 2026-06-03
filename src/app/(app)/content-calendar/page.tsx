@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ContentCommandCenterMonthSelector } from "@/components/content-calendar/ContentCommandCenterMonthSelector";
+import { DeleteMonthlyCampaignButton } from "@/components/content-calendar/DeleteMonthlyCampaignButton";
 import {
   WebsiteHero,
   WebsitePage,
@@ -325,6 +326,14 @@ export default async function ContentCalendarCommandCenterPage({ searchParams }:
             href: `/content-calendar/monthly?view=month&date=${monthDate}`,
           })}
         </div>
+      </WebsiteSection>
+
+      <WebsiteSection
+        eyebrow="Cleanup"
+        title="Remove monthly content"
+        description="Use this when you want to clear the current month’s generated package and start over."
+      >
+        <DeleteMonthlyCampaignButton month={month} />
       </WebsiteSection>
 
       <WebsiteSection
