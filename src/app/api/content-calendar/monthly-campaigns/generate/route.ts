@@ -3,6 +3,7 @@ import { buildMonthlyCampaignPlan } from "@/lib/content-calendar/monthly-campaig
 import { preparePublicAssetContent } from "@/lib/content/public-content-cleaner";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
+import type { Json } from "@/types/database.types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +21,10 @@ function normalizeMonth(value: unknown) {
 
 function textValue(value: unknown) {
   return String(value ?? "").trim();
+}
+
+function toJson(value: unknown): Json {
+  return JSON.parse(JSON.stringify(value)) as Json;
 }
 
 function campaignIdea(week: ReturnType<typeof buildMonthlyCampaignPlan>[number]) {
