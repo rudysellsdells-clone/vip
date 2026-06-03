@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 import {
-  isAccountRole,
   maybeInviteUserByEmail,
   normalizeEmail,
   slugifyAccountName,
@@ -11,6 +11,14 @@ import {
 
 function canCreateManagedAccount(profile: { platform_role?: string | null } | null) {
   return profile?.platform_role === "owner" || profile?.platform_role === "admin";
+}
+
+function getAccountWriteClient() {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return null;
+  }
+
+  return untypedSupabase(createAdminClient());
 }
 
 export async function GET() {
@@ -103,7 +111,19 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: account, error: accountError } = await supabase
+    const writeSupabase = getAccountWriteClient();
+
+    if (!writeSupabase) {
+      return NextResponse.json(
+        {
+          error:
+            "Account creation requires SUPABASE_SERVICE_ROLE_KEY in Vercel so VIP can create managed accounts safely from the server.",
+        },
+        { status: 500 },
+      );
+    }
+
+    const { data: account, error: accountError } = await writeSupabase
       .from("accounts")
       .insert({
         name,
@@ -128,7 +148,7 @@ export async function POST(request: Request) {
 
     const currentUserEmail = normalizeEmail(user.email);
 
-    const { error: ownerMembershipError } = await supabase
+    const { error: ownerMembershipError } = await writeSupabase
       .from("account_memberships")
       .insert({
         account_id: account.id,
@@ -148,7 +168,7 @@ export async function POST(request: Request) {
     let inviteResult: Awaited<ReturnType<typeof maybeInviteUserByEmail>> | null = null;
 
     if (ownerEmail && ownerEmail !== currentUserEmail) {
-      const { error: invitedOwnerError } = await supabase
+      const { error: invitedOwnerError } = await writeSupabase
         .from("account_memberships")
         .insert({
           account_id: account.id,
