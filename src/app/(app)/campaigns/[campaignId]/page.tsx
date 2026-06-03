@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AssetTitleLink } from "@/components/assets/AssetTitleLink";
+import { RemoveAssetButton } from "@/components/assets/RemoveAssetButton";
 import { DeleteCampaignButton } from "@/components/campaigns/DeleteCampaignButton";
 import { GenerateCampaignAssetsButton } from "@/components/campaigns/GenerateCampaignAssetsButton";
 import { StartLumaYoutubeVideoButton } from "@/components/campaigns/StartLumaYoutubeVideoButton";
@@ -71,6 +72,7 @@ export default async function CampaignDetailPage({ params }: PageProps) {
     .select("*")
     .eq("user_id", user.id)
     .eq("campaign_id", campaign.id)
+    .is("archived_at", null)
     .order("created_at", { ascending: false });
 
   const { data: lumaRunsData } = await supabase
@@ -268,9 +270,12 @@ export default async function CampaignDetailPage({ params }: PageProps) {
                   {String(asset.content).slice(0, 220)}...
                 </p>
 
-                <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
-                  Open asset →
-                </Link>
+                <div className={websiteStyles.actionRow}>
+                  <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
+                    Open asset →
+                  </Link>
+                  <RemoveAssetButton assetId={asset.id} assetTitle={asset.title} compact />
+                </div>
               </article>
             ))}
           </div>

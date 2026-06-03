@@ -162,6 +162,11 @@ const navGroups: NavGroup[] = [
         description: "Manage reusable business knowledge.",
       },
       {
+        label: "Account",
+        href: "/account",
+        description: "Manage account profile, seats, and team access.",
+      },
+      {
         label: "Settings",
         href: "/settings",
         description: "Manage setup, quality thresholds, and product configuration.",

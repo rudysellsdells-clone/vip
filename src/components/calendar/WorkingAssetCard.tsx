@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { RemoveAssetButton } from "@/components/assets/RemoveAssetButton";
 import { QualityScorePanel } from "@/components/content-quality/QualityScorePanel";
 import { WebsiteBadge, websiteStyles } from "@/components/website-ui/WebsitePage";
 import { dateTimeLabel } from "@/lib/calendar/view-range";
@@ -65,6 +66,7 @@ export function WorkingAssetCard({
           Open →
         </Link>
         {extraLinks}
+        <RemoveAssetButton assetId={String(asset.id)} assetTitle={asset.title} compact />
       </div>
     </article>
   );

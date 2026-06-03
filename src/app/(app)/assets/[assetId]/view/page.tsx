@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { RemoveAssetButton } from "@/components/assets/RemoveAssetButton";
 import { redirect } from "next/navigation";
 import {
   WebsiteBadge,
@@ -110,6 +111,7 @@ export default async function AssetReadOnlyViewPage({ params }: PageProps) {
           <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
             Open full asset page →
           </Link>
+          <RemoveAssetButton assetId={asset.id} assetTitle={asset.title} compact />
         </div>
       </WebsiteSection>
     </WebsitePage>

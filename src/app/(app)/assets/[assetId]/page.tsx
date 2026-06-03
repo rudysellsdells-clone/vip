@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AssetTitleLink } from "@/components/assets/AssetTitleLink";
 import { AssetReviewActions } from "@/components/approvals/AssetReviewActions";
 import { PrepareLinkedInPostButton } from "@/components/assets/PrepareLinkedInPostButton";
+import { RemoveAssetButton } from "@/components/assets/RemoveAssetButton";
 import { RequestRevisionButton } from "@/components/assets/RequestRevisionButton";
 import {
   WebsiteBadge,
@@ -158,6 +159,8 @@ export default async function AssetDetailPage({ params }: PageProps) {
             {canRevise ? (
               <RequestRevisionButton assetId={asset.id} assetTitle={asset.title} />
             ) : null}
+
+            <RemoveAssetButton assetId={asset.id} assetTitle={asset.title} />
           </div>
         </WebsiteSection>
 

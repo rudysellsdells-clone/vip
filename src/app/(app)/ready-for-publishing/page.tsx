@@ -126,7 +126,7 @@ export default async function ReadyForPublishingPage() {
   const approvedRows = readyRows.filter((row) => row.asset.status === "approved");
   const waitingApprovalRows = readyRows.filter((row) => row.asset.status !== "approved");
   const socialRows = readyRows.filter((row) =>
-    ["linkedin_post", "facebook_post", "email", "galaxyai_prompt"].includes(row.asset.asset_type)
+    ["linkedin_post", "facebook_post", "email", "video_script"].includes(row.asset.asset_type)
   );
 
   return (
@@ -221,6 +221,7 @@ export default async function ReadyForPublishingPage() {
                   assetId={asset.id}
                   assetType={asset.asset_type}
                   status={asset.status}
+                  assetTitle={asset.title}
                 />
               </article>
             ))}

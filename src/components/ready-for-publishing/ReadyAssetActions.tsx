@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { RemoveAssetButton } from "@/components/assets/RemoveAssetButton";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import formStyles from "@/components/forms/VipForm.module.css";
@@ -14,10 +15,12 @@ export function ReadyAssetActions({
   assetId,
   assetType,
   status,
+  assetTitle,
 }: {
   assetId: string;
   assetType: string;
   status: string;
+  assetTitle?: string | null;
 }) {
   const router = useRouter();
   const [running, setRunning] = useState(false);
@@ -94,6 +97,8 @@ export function ReadyAssetActions({
         <Link href={`/assets/${assetId}`} className={websiteStyles.link}>
           Open asset →
         </Link>
+
+        <RemoveAssetButton assetId={assetId} assetTitle={assetTitle} compact />
       </div>
 
       {message ? <p className={formStyles.message}>{message}</p> : null}
