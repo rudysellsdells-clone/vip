@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   WebsiteBadge,
@@ -178,7 +179,11 @@ export default async function AccountsPage() {
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div>
                       <div className="flex flex-wrap items-center gap-3">
-                        <h3 className="text-xl font-semibold text-slate-950">{account.name}</h3>
+                        <h3 className="text-xl font-semibold text-slate-950">
+                          <Link href={`/accounts/${account.id}`} className="hover:text-blue-700">
+                            {account.name}
+                          </Link>
+                        </h3>
                         <WebsiteBadge status={account.status} />
                       </div>
                       <p className="mt-2 text-sm text-slate-600">
@@ -211,9 +216,17 @@ export default async function AccountsPage() {
                           The account exists now. Next, campaign and asset screens can be scoped to this workspace through an account switcher.
                         </p>
                       </div>
-                      {canCreateAccounts ? (
-                        <ArchiveAccountButton accountId={account.id} accountName={account.name} />
-                      ) : null}
+                      <div className="flex flex-wrap gap-2">
+                        <Link
+                          href={`/accounts/${account.id}`}
+                          className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:text-blue-700"
+                        >
+                          Manage Account
+                        </Link>
+                        {canCreateAccounts ? (
+                          <ArchiveAccountButton accountId={account.id} accountName={account.name} />
+                        ) : null}
+                      </div>
                     </div>
                   </div>
 

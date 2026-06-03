@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { productConfig } from "@/lib/config/product";
+import { AccountSwitcher } from "@/components/accounts/AccountSwitcher";
+import type { AccountContextAccount } from "@/lib/accounts/account-context";
 import styles from "./SidebarNav.module.css";
 
 type NavItem = {
@@ -195,7 +197,17 @@ function Logo() {
   );
 }
 
-export function SidebarNav({ userEmail }: { userEmail: string }) {
+export function SidebarNav({
+  userEmail,
+  accounts,
+  activeAccountId,
+  activeAccountName,
+}: {
+  userEmail: string;
+  accounts: AccountContextAccount[];
+  activeAccountId: string | null;
+  activeAccountName: string | null;
+}) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -254,9 +266,17 @@ export function SidebarNav({ userEmail }: { userEmail: string }) {
         </nav>
 
         <div className={styles.rightSide}>
+          <div className={styles.accountSwitcherWrap}>
+            <span className={styles.accountLabel}>Active account</span>
+            <AccountSwitcher accounts={accounts} activeAccountId={activeAccountId} />
+          </div>
+
           <div className={styles.account}>
             <span className={styles.accountLabel}>Signed in</span>
             <span className={styles.accountEmail}>{userEmail}</span>
+            {activeAccountName ? (
+              <span className={styles.accountContext}>{activeAccountName}</span>
+            ) : null}
           </div>
 
           <button
@@ -274,6 +294,11 @@ export function SidebarNav({ userEmail }: { userEmail: string }) {
       {mobileOpen ? (
         <div id="mobile-navigation" className={styles.mobilePanel}>
           <div className={styles.mobileInner}>
+            <div className={styles.mobileActiveAccount}>
+              <span className={styles.accountLabel}>Active account</span>
+              <AccountSwitcher accounts={accounts} activeAccountId={activeAccountId} />
+            </div>
+
             {navGroups.map((group) => (
               <section key={group.label} className={styles.mobileGroup}>
                 <p className={styles.mobileGroupLabel}>{group.label}</p>

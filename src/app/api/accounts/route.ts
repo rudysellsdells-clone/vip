@@ -146,6 +146,37 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: accountError.message }, { status: 400 });
     }
 
+    await Promise.all([
+      writeSupabase.from("account_brand_profiles").upsert(
+        {
+          account_id: account.id,
+          company_name: name,
+          website_url: websiteUrl || null,
+          primary_cta: primaryCta || null,
+          tone: "Practical, credible, helpful, and professional.",
+          notes: "Created with the account workspace.",
+        },
+        { onConflict: "account_id" },
+      ),
+      writeSupabase.from("account_publishing_settings").upsert(
+        {
+          account_id: account.id,
+          primary_booking_url: primaryCta || null,
+          galaxyai_style:
+            "Polished short-form social video, business-focused, clean motion, no exaggerated claims.",
+        },
+        { onConflict: "account_id" },
+      ),
+      writeSupabase
+        .from("profiles")
+        .update({
+          default_account_id: account.id,
+          last_active_account_id: account.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id),
+    ]);
+
     const currentUserEmail = normalizeEmail(user.email);
 
     const { error: ownerMembershipError } = await writeSupabase
