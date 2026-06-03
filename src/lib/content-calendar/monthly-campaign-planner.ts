@@ -3,6 +3,7 @@ import {
   WeeklyAssetBlueprint,
   assetTypeLabel,
 } from "@/lib/content-calendar/monthly-campaign-blueprint";
+import { buildGalaxyAiPromptFromVideoScript } from "@/lib/galaxyai/prompt-builder";
 
 export type MonthlyCampaignStrategyInput = {
   monthlyObjective?: string;
@@ -462,6 +463,22 @@ function contentForAsset({
         `Close: ${callToAction}`,
       ].join("\n");
 
+    case "galaxyai_prompt":
+      return buildGalaxyAiPromptFromVideoScript({
+        title: publicTitle,
+        videoScript: contentForAsset({
+          assetType: "video_script",
+          publicTitle,
+          campaignAngle,
+          label: "Friday video script",
+          strategy,
+          weekNumber,
+        }),
+        campaignAngle,
+        callToAction,
+        audience: strategy.targetAudience,
+      });
+
     default:
       return `${label}: ${campaignAngle}`;
   }
@@ -507,37 +524,67 @@ export function buildMonthlyCampaignPlan(input: MonthlyCampaignPlanInput): Weekl
       strategy,
       weekStartDate: dateKey(week.start),
       weekEndDate: dateKey(week.end),
-      assets: WEEKLY_CAMPAIGN_ASSET_BLUEPRINT.map((slot) => {
-        const publishDate = addDays(week.start, slot.dayOffset);
-        const scheduledAt = setLocalTime(publishDate, slot.hour, slot.minute);
-        const label = slot.label;
-        const content = contentForAsset({
-          assetType: slot.assetType,
+      assets: (() => {
+        const videoScriptContent = contentForAsset({
+          assetType: "video_script",
           publicTitle,
           campaignAngle,
-          label,
+          label: "Friday video script",
           strategy,
           weekNumber: week.weekNumber,
         });
 
-        return {
-          assetType: slot.assetType,
-          title: `${publicTitle} — ${assetTypeLabel(slot.assetType)}`,
-          content,
-          generationPrompt: [
-            generationPrompt,
-            "",
-            `Asset Type: ${slot.assetType}`,
-            `Asset Slot: ${label}`,
-            "Generate public-facing content only.",
-            "Do not include the private brief, raw strategy labels, internal month, campaign name, week number, or planning notes.",
-          ].join("\n"),
-          plannedPublishDate: dateKey(publishDate),
-          scheduledPublishAt: scheduledAt.toISOString(),
-          sortOrder: slot.sortOrder,
-          calendarNotes: `${label}. Generated as part of weekly campaign package.`,
-        };
-      }),
+        return WEEKLY_CAMPAIGN_ASSET_BLUEPRINT.map((slot) => {
+          const publishDate = addDays(week.start, slot.dayOffset);
+          const scheduledAt = setLocalTime(publishDate, slot.hour, slot.minute);
+          const label = slot.label;
+          const content =
+            slot.assetType === "galaxyai_prompt"
+              ? buildGalaxyAiPromptFromVideoScript({
+                  title: publicTitle,
+                  videoScript: videoScriptContent,
+                  campaignAngle,
+                  callToAction: cta(strategy),
+                  audience: strategy.targetAudience,
+                })
+              : slot.assetType === "video_script"
+                ? videoScriptContent
+                : contentForAsset({
+                    assetType: slot.assetType,
+                    publicTitle,
+                    campaignAngle,
+                    label,
+                    strategy,
+                    weekNumber: week.weekNumber,
+                  });
+
+          return {
+            assetType: slot.assetType,
+            title:
+              slot.assetType === "galaxyai_prompt"
+                ? `${publicTitle} — GalaxyAI video prompt`
+                : `${publicTitle} — ${assetTypeLabel(slot.assetType)}`,
+            content,
+            generationPrompt: [
+              generationPrompt,
+              "",
+              `Asset Type: ${slot.assetType}`,
+              `Asset Slot: ${label}`,
+              slot.assetType === "galaxyai_prompt"
+                ? "Create a production-ready GalaxyAI prompt from the companion Friday video script. Only this prompt asset should be sent to GalaxyAI after approval."
+                : "Generate public-facing content only.",
+              "Do not include the private brief, raw strategy labels, internal month, campaign name, week number, or planning notes.",
+            ].join("\n"),
+            plannedPublishDate: dateKey(publishDate),
+            scheduledPublishAt: scheduledAt.toISOString(),
+            sortOrder: slot.sortOrder,
+            calendarNotes:
+              slot.assetType === "galaxyai_prompt"
+                ? `${label}. Companion GalaxyAI prompt generated from the Friday video script. Review and approve this prompt before sending it to GalaxyAI.`
+                : `${label}. Generated as part of weekly campaign package.`,
+          };
+        });
+      })(),
     };
   });
 }

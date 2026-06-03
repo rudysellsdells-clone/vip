@@ -106,6 +106,12 @@ export async function POST(_request: Request, context: RouteContext) {
             sprint: "5.7",
             cloneMemoryUsed: true,
             cloneMemorySnapshot: memorySnapshot,
+            companionAssetFlow:
+              asset.assetType === "galaxyai_prompt"
+                ? "review_prompt_then_send_prompt_only_to_galaxyai"
+                : null,
+            sourceAssetType: asset.assetType === "galaxyai_prompt" ? "video_script" : null,
+            galaxyAiPromptDerivedFromVideoScript: asset.assetType === "galaxyai_prompt",
           }),
           status: "needs_review",
         }))
@@ -114,6 +120,38 @@ export async function POST(_request: Request, context: RouteContext) {
 
     if (insertAssetsError) {
       return NextResponse.json({ error: insertAssetsError.message }, { status: 400 });
+    }
+
+    const insertedVideoScript = insertedAssets?.find(
+      (asset) => asset.asset_type === "video_script"
+    );
+    const insertedGalaxyPrompt = insertedAssets?.find(
+      (asset) => asset.asset_type === "galaxyai_prompt"
+    );
+
+    if (insertedVideoScript?.id && insertedGalaxyPrompt?.id) {
+      const promptMetadata =
+        insertedGalaxyPrompt.metadata &&
+        typeof insertedGalaxyPrompt.metadata === "object" &&
+        !Array.isArray(insertedGalaxyPrompt.metadata)
+          ? insertedGalaxyPrompt.metadata
+          : {};
+
+      await supabase
+        .from("generated_assets")
+        .update({
+          parent_asset_id: insertedVideoScript.id,
+          metadata: toJson({
+            ...promptMetadata,
+            source_video_script_asset_id: insertedVideoScript.id,
+            display_with_asset_id: insertedVideoScript.id,
+            companion_to_asset_type: "video_script",
+            galaxyAiExecutionAsset: true,
+            executionRule: "Only the approved galaxyai_prompt asset should be sent to GalaxyAI.",
+          }),
+        })
+        .eq("id", insertedGalaxyPrompt.id)
+        .eq("user_id", user.id);
     }
 
     const { data: updatedCampaign, error: updateCampaignError } = await supabase

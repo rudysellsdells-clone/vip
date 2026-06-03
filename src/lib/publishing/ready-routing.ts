@@ -7,7 +7,7 @@ export const PUBLISHABLE_READY_ASSET_TYPES = [
   "linkedin_post",
   "facebook_post",
   "email",
-  "video_script",
+  "galaxyai_prompt",
   "blog_post",
   "white_paper",
   "authority_asset",
@@ -23,6 +23,8 @@ export function channelForAssetType(assetType: string | null | undefined) {
     case "email":
       return "Gmail";
     case "video_script":
+      return "Review / Script";
+    case "galaxyai_prompt":
       return "GalaxyAI";
     case "blog_post":
       return "Website / Blog";
@@ -52,8 +54,11 @@ export function nextStepForAsset({
     case "linkedin_post":
     case "facebook_post":
     case "email":
-    case "video_script":
       return "Open Publishing Ready to execute or prepare the asset.";
+    case "video_script":
+      return "Review the companion GalaxyAI prompt before running video generation.";
+    case "galaxyai_prompt":
+      return "Approve this prompt, then run it through GalaxyAI.";
     case "prospect_what_if_story":
       return "Use What-If PDF and Gmail tools for outreach.";
     case "blog_post":

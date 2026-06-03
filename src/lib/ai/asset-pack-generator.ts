@@ -2,6 +2,7 @@ import {
   buildMarketingAssetPackSystemPrompt,
   buildMarketingAssetPackUserPrompt,
 } from "./prompts";
+import { buildGalaxyAiPromptFromVideoScript } from "@/lib/galaxyai/prompt-builder";
 import type { MarketingAssetPack } from "./asset-pack-types";
 
 type GenerateMarketingAssetPackInput = Parameters<
@@ -81,6 +82,29 @@ function createFallbackAssetPack(input: GenerateMarketingAssetPackInput): Market
   };
 }
 
+function normalizeGalaxyAiPromptFromVideoScript(
+  assetPack: MarketingAssetPack,
+  input: GenerateMarketingAssetPackInput
+): MarketingAssetPack {
+  const script = assetPack.shortVideoScript?.trim();
+
+  if (!script) {
+    return assetPack;
+  }
+
+  return {
+    ...assetPack,
+    galaxyAiCreativePrompt: buildGalaxyAiPromptFromVideoScript({
+      title: input.campaign.name,
+      videoScript: script,
+      campaignAngle: input.campaign.idea,
+      callToAction: input.campaign.cta,
+      brandName: "Web Search Professionals",
+      audience: input.campaign.buyer_segment ?? input.campaign.audience,
+    }),
+  };
+}
+
 async function callOpenAiForAssetPack(input: GenerateMarketingAssetPackInput) {
   const apiKey = process.env.OPENAI_API_KEY;
 
@@ -151,8 +175,8 @@ export async function generateMarketingAssetPackWithCloneMemory(
   const openAiResult = await callOpenAiForAssetPack(input);
 
   if (openAiResult) {
-    return openAiResult;
+    return normalizeGalaxyAiPromptFromVideoScript(openAiResult, input);
   }
 
-  return createFallbackAssetPack(input);
+  return normalizeGalaxyAiPromptFromVideoScript(createFallbackAssetPack(input), input);
 }

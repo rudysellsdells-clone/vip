@@ -4,7 +4,8 @@ export type WeeklyAssetBlueprint = {
     | "linkedin_post"
     | "facebook_post"
     | "email"
-    | "video_script";
+    | "video_script"
+    | "galaxyai_prompt";
   dayOffset: number;
   hour: number;
   minute: number;
@@ -100,6 +101,14 @@ export const WEEKLY_CAMPAIGN_ASSET_BLUEPRINT: WeeklyAssetBlueprint[] = [
     minute: 30,
     sortOrder: 110,
     label: "Friday video script",
+  },
+  {
+    assetType: "galaxyai_prompt",
+    dayOffset: 4,
+    hour: 10,
+    minute: 45,
+    sortOrder: 115,
+    label: "Friday GalaxyAI video prompt",
   },
   {
     assetType: "linkedin_post",

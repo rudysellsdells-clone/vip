@@ -31,7 +31,7 @@ function campaignSummary(week: ReturnType<typeof buildMonthlyCampaignPlan>[numbe
     week.campaignAngle,
     "",
     `Campaign week ${week.weekNumber}: ${week.weekStartDate} to ${week.weekEndDate}.`,
-    "Includes 1 blog post, 5 LinkedIn posts, 5 Facebook posts, 1 email, and 1 video script.",
+    "Includes 1 blog post, 5 LinkedIn posts, 5 Facebook posts, 1 email, 1 video script, and 1 GalaxyAI prompt.",
   ].join("\n");
 }
 
@@ -81,6 +81,7 @@ function campaignPayload({
         facebook_post: 5,
         email: 1,
         video_script: 1,
+        galaxyai_prompt: 1,
       },
     },
   };
@@ -108,6 +109,16 @@ function assetPayload({
       content: asset.content,
       assetType: asset.assetType,
       title: asset.title,
+    }),
+    metadata: toJson({
+      generatedBy: "monthly_campaign_calendar",
+      generationMode: "fast_batch_stable_planner",
+      companionAssetFlow:
+        asset.assetType === "galaxyai_prompt"
+          ? "review_prompt_then_send_prompt_only_to_galaxyai"
+          : null,
+      sourceAssetType: asset.assetType === "galaxyai_prompt" ? "video_script" : null,
+      galaxyAiPromptDerivedFromVideoScript: asset.assetType === "galaxyai_prompt",
     }),
     status: "needs_review",
 
@@ -279,8 +290,56 @@ export async function POST(request: Request) {
     );
   }
 
+  const linkWarnings: string[] = [];
+
+  for (const promptAsset of createdAssets.filter(
+    (asset) => asset.asset_type === "galaxyai_prompt"
+  )) {
+    const companionVideoScript = createdAssets.find(
+      (asset) =>
+        asset.asset_type === "video_script" &&
+        asset.campaign_id === promptAsset.campaign_id &&
+        Number(asset.campaign_week_number) === Number(promptAsset.campaign_week_number)
+    );
+
+    if (!companionVideoScript?.id) {
+      linkWarnings.push(
+        `GalaxyAI prompt ${promptAsset.id} was created, but no matching Friday video script was found for parent linking.`
+      );
+      continue;
+    }
+
+    const metadata =
+      promptAsset.metadata && typeof promptAsset.metadata === "object" && !Array.isArray(promptAsset.metadata)
+        ? promptAsset.metadata
+        : {};
+
+    const { error: linkError } = await supabase
+      .from("generated_assets")
+      .update({
+        parent_asset_id: companionVideoScript.id,
+        metadata: toJson({
+          ...metadata,
+          source_video_script_asset_id: companionVideoScript.id,
+          display_with_asset_id: companionVideoScript.id,
+          companion_to_asset_type: "video_script",
+          galaxyAiExecutionAsset: true,
+          executionRule: "Only the approved galaxyai_prompt asset should be sent to GalaxyAI.",
+        }),
+      })
+      .eq("id", promptAsset.id)
+      .eq("user_id", user.id);
+
+    if (linkError) {
+      linkWarnings.push(
+        `Unable to link GalaxyAI prompt ${promptAsset.id} to video script ${companionVideoScript.id}: ${linkError.message}`
+      );
+    }
+  }
+
   const warnings = [
     "Fast batch generation mode is active. The route does not call OpenAI or memory, which prevents Vercel function timeouts during monthly package creation.",
+    ...linkWarnings,
   ];
 
   await supabase.from("activity_log").insert({
