@@ -133,14 +133,13 @@ export default async function SettingsPage() {
             </Link>
           </article>
 
-
           <article className={websiteStyles.card}>
-            <h3 className={websiteStyles.cardTitle}>Account</h3>
+            <h3 className={websiteStyles.cardTitle}>Accounts</h3>
             <p className={websiteStyles.cardText}>
-              Manage account profile, team seats, roles, and collaborator access.
+              Create separate client or brand accounts, assign owners, and invite seats for review and approval.
             </p>
-            <Link href="/account" className={websiteStyles.link}>
-              Open Account →
+            <Link href="/accounts" className={websiteStyles.link}>
+              Open Accounts →
             </Link>
           </article>
 

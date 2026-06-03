@@ -162,9 +162,9 @@ const navGroups: NavGroup[] = [
         description: "Manage reusable business knowledge.",
       },
       {
-        label: "Account",
-        href: "/account",
-        description: "Manage account profile, seats, and team access.",
+        label: "Accounts",
+        href: "/accounts",
+        description: "Create client accounts, owners, seats, and workspace access.",
       },
       {
         label: "Settings",
