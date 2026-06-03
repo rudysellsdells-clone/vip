@@ -140,9 +140,16 @@ where c.account_id is null
   and c.user_id = a.owner_user_id;
 
 update public.generated_assets ga
-set account_id = coalesce(c.account_id, a.id)
+set account_id = coalesce(
+  (
+    select c.account_id
+    from public.campaigns c
+    where c.id = ga.campaign_id
+    limit 1
+  ),
+  a.id
+)
 from public.accounts a
-left join public.campaigns c on c.id = ga.campaign_id
 where ga.account_id is null
   and ga.user_id = a.owner_user_id;
 
