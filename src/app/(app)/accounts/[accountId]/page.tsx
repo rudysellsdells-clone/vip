@@ -12,6 +12,7 @@ import { AccountBrandProfileForm } from "@/components/accounts/AccountBrandProfi
 import { AccountPublishingSettingsForm } from "@/components/accounts/AccountPublishingSettingsForm";
 import { ArchiveAccountButton } from "@/components/accounts/ArchiveAccountButton";
 import { InviteAccountMemberForm } from "@/components/accounts/InviteAccountMemberForm";
+import { RemoveAccountMemberButton } from "@/components/accounts/RemoveAccountMemberButton";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -76,6 +77,7 @@ export default async function AccountDetailPage({
   const profileRow = profile as { platform_role?: string | null } | null;
   const memberRows = (memberships ?? []) as Array<{
     id: string;
+    user_id: string | null;
     email: string;
     full_name: string | null;
     role: string;
@@ -181,6 +183,7 @@ export default async function AccountDetailPage({
                   <th className="px-4 py-3">Role</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Invited</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
@@ -194,11 +197,31 @@ export default async function AccountDetailPage({
                       <td className="px-4 py-3 capitalize text-slate-700">{membership.role}</td>
                       <td className="px-4 py-3"><WebsiteBadge status={membership.status} /></td>
                       <td className="px-4 py-3 text-slate-600">{formatDate(membership.invited_at)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end">
+                          {canManage ? (
+                            <RemoveAccountMemberButton
+                              accountId={account.id}
+                              membershipId={membership.id}
+                              memberLabel={membership.full_name || membership.email}
+                              disabledReason={
+                                membership.user_id === user.id
+                                  ? "You cannot remove your own access from this account."
+                                  : membership.user_id && membership.user_id === account.owner_user_id
+                                    ? "The primary account owner cannot be removed from this screen."
+                                    : null
+                              }
+                            />
+                          ) : (
+                            <span className="text-xs text-slate-400">—</span>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td className="px-4 py-4 text-slate-500" colSpan={4}>No members recorded yet.</td>
+                    <td className="px-4 py-4 text-slate-500" colSpan={5}>No members recorded yet.</td>
                   </tr>
                 )}
               </tbody>
