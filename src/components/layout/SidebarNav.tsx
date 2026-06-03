@@ -21,7 +21,7 @@ type NavGroup = {
 
 const navGroups: NavGroup[] = [
   {
-    label: "Command",
+    label: "Home",
     items: [
       {
         label: "Dashboard",
@@ -31,12 +31,22 @@ const navGroups: NavGroup[] = [
       {
         label: "Phase Two",
         href: "/phase-two",
-        description: "Authority, prospecting, repurposing, and execution hub.",
+        description: "Growth system hub and core workflows.",
       },
       {
         label: "Reporting",
         href: "/phase-two-reporting",
-        description: "Proof of work for planning, assets, drafts, and execution.",
+        description: "Proof of work and campaign progress.",
+      },
+    ],
+  },
+  {
+    label: "Plan",
+    items: [
+      {
+        label: "Campaigns",
+        href: "/campaigns",
+        description: "Create and manage campaign asset packs.",
       },
       {
         label: "Content Calendar",
@@ -46,42 +56,32 @@ const navGroups: NavGroup[] = [
       {
         label: "Monthly Calendar",
         href: "/content-calendar/monthly",
-        description: "Campaign-aware month view of planned and generated content.",
+        description: "Month view of planned and generated content.",
       },
       {
         label: "Publishing Schedule",
         href: "/publishing-schedule",
-        description: "Assign publish dates and times across the month.",
+        description: "Assign publish dates and times.",
       },
-      {
-        label: "Quality Automation",
-        href: "/quality-automation",
-        description: "Apply quality gates to reviewed assets in bulk.",
-      },
-      {
-        label: "Ready Queue",
-        href: "/ready-for-publishing",
-        description: "Assets that passed quality gates and are ready for next steps.",
-      },
-      {
-        label: "Publishing Ready",
-        href: "/publishing-ready",
-        description: "Execute approved assets and track runs.",
-      },
-      {
-        label: "Campaigns",
-        href: "/campaigns",
-        description: "Create and manage campaign asset packs.",
-      },
+    ],
+  },
+  {
+    label: "Review",
+    items: [
       {
         label: "Approvals",
         href: "/approvals",
         description: "Review, revise, and approve assets.",
       },
       {
-        label: "Actions",
-        href: "/actions",
-        description: "Execute approved external actions.",
+        label: "Quality Automation",
+        href: "/quality-automation",
+        description: "Apply quality gates to reviewed assets.",
+      },
+      {
+        label: "Ready Queue",
+        href: "/ready-for-publishing",
+        description: "Assets that passed quality gates.",
       },
       {
         label: "Archive",
@@ -91,7 +91,32 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    label: "Content",
+    label: "Publish",
+    items: [
+      {
+        label: "Publishing Ready",
+        href: "/publishing-ready",
+        description: "Execute approved assets and track runs.",
+      },
+      {
+        label: "Actions",
+        href: "/actions",
+        description: "Execute approved external actions.",
+      },
+      {
+        label: "Zapier",
+        href: "/zapier",
+        description: "Review Zapier MCP setup and action status.",
+      },
+      {
+        label: "GalaxyAI",
+        href: "/galaxyai",
+        description: "Manage creative media generation workflows.",
+      },
+    ],
+  },
+  {
+    label: "Create",
     items: [
       {
         label: "Authority Content",
@@ -106,7 +131,7 @@ const navGroups: NavGroup[] = [
       {
         label: "Content Quality",
         href: "/content-quality",
-        description: "Score brand fit, clarity, CTA strength, and SEO/AIO readiness.",
+        description: "Score brand fit, clarity, CTA strength, and SEO readiness.",
       },
       {
         label: "What-If Stories",
@@ -116,7 +141,7 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    label: "Growth",
+    label: "Grow",
     items: [
       {
         label: "Prospects",
@@ -136,23 +161,13 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    label: "Automation",
+    label: "Workspace",
     items: [
       {
-        label: "Zapier",
-        href: "/zapier",
-        description: "Review Zapier MCP setup and action status.",
+        label: "Accounts",
+        href: "/accounts",
+        description: "Create client accounts, owners, seats, and access.",
       },
-      {
-        label: "GalaxyAI",
-        href: "/galaxyai",
-        description: "Manage creative media generation workflows.",
-      },
-    ],
-  },
-  {
-    label: "Memory",
-    items: [
       {
         label: "Brand Voice",
         href: "/brand-voice",
@@ -164,14 +179,9 @@ const navGroups: NavGroup[] = [
         description: "Manage reusable business knowledge.",
       },
       {
-        label: "Accounts",
-        href: "/accounts",
-        description: "Create client accounts, owners, seats, and workspace access.",
-      },
-      {
         label: "Settings",
         href: "/settings",
-        description: "Manage setup, quality thresholds, and product configuration.",
+        description: "Manage setup, thresholds, and product configuration.",
       },
     ],
   },
