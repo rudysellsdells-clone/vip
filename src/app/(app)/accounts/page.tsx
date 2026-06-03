@@ -9,6 +9,7 @@ import {
 } from "@/components/website-ui/WebsitePage";
 import { CreateAccountForm } from "@/components/accounts/CreateAccountForm";
 import { InviteAccountMemberForm } from "@/components/accounts/InviteAccountMemberForm";
+import { ArchiveAccountButton } from "@/components/accounts/ArchiveAccountButton";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -83,6 +84,7 @@ export default async function AccountsPage() {
     supabase
       .from("accounts")
       .select("*")
+      .neq("status", "archived")
       .order("created_at", { ascending: false }),
     supabase
       .from("account_memberships")
@@ -91,7 +93,7 @@ export default async function AccountsPage() {
   ]);
 
   const currentProfile = profile as ProfileRow | null;
-  const accounts = (accountsData ?? []) as AccountRow[];
+  const accounts = ((accountsData ?? []) as AccountRow[]).filter((account) => account.status !== "archived");
   const memberships = ((membershipsData ?? []) as MembershipRow[]).filter(
     (membership) => !membership.removed_at,
   );
@@ -202,11 +204,16 @@ export default async function AccountsPage() {
                       </div>
                     </div>
 
-                    <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                      <p className="font-semibold text-slate-900">Phase 3B foundation</p>
-                      <p className="mt-1 max-w-sm">
-                        The account exists now. Next, campaign and asset screens can be scoped to this workspace through an account switcher.
-                      </p>
+                    <div className="space-y-3 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                      <div>
+                        <p className="font-semibold text-slate-900">Phase 3B foundation</p>
+                        <p className="mt-1 max-w-sm">
+                          The account exists now. Next, campaign and asset screens can be scoped to this workspace through an account switcher.
+                        </p>
+                      </div>
+                      {canCreateAccounts ? (
+                        <ArchiveAccountButton accountId={account.id} accountName={account.name} />
+                      ) : null}
                     </div>
                   </div>
 
