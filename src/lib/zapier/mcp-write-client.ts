@@ -85,11 +85,10 @@ function throwIfMcpToolError(json: any, toolText: string | null) {
             parsedToolText?.errorDetails?.message ??
             toolText
         );
-      } catch (error) {
-        if (error instanceof Error && error.message !== "Unexpected end of JSON input") {
-          throw error;
-        }
-
+      } catch {
+        // Zapier MCP sometimes returns a plain-text tool error such as
+        // "MCP error ..." instead of JSON. Surface that real tool error
+        // instead of masking it with "Unexpected token ... is not valid JSON".
         throw new Error(toolText);
       }
     }
