@@ -61,27 +61,25 @@ export function zapierMcpConfigForAsset(asset: PublishingAsset): ZapierMcpAssetC
   }
 
   if (assetType === "linkedin_post") {
-    const linkedInAction = firstValue(
-      env("ZAPIER_MCP_LINKEDIN_POST_ACTION"),
-      env("ZAPIER_LINKEDIN_ACTION_KEY"),
-      "create_company_update"
-    );
-
     return {
-      app: firstValue(env("ZAPIER_MCP_LINKEDIN_POST_APP"), "LinkedIn"),
-      action: linkedInAction,
+      app: firstValue(env("ZAPIER_MCP_LINKEDIN_POST_APP"), env("ZAPIER_MCP_DEFAULT_APP"), "LinkedIn"),
+      action: firstValue(
+        env("ZAPIER_MCP_LINKEDIN_POST_ACTION"),
+        env("ZAPIER_LINKEDIN_CREATE_POST_ACTION_KEY"),
+        env("LINKEDIN_CREATE_POST_ACTION_KEY"),
+        "create_company_update"
+      ),
       source: env("ZAPIER_MCP_LINKEDIN_POST_ACTION")
         ? "asset_specific"
-        : env("ZAPIER_LINKEDIN_ACTION_KEY")
+        : env("ZAPIER_LINKEDIN_CREATE_POST_ACTION_KEY") || env("LINKEDIN_CREATE_POST_ACTION_KEY")
           ? "legacy_linkedin_action_key"
           : "built_in_linkedin_company_update",
       pageId:
-        firstValue(
-          env("ZAPIER_LINKEDIN_ORGANIZATION_ID"),
-          env("LINKEDIN_COMPANY_PAGE_ID"),
-          env("ZAPIER_LINKEDIN_COMPANY_ID")
-        ) || null,
-      pageName: env("ZAPIER_LINKEDIN_PAGE_NAME") || null,
+        env("ZAPIER_LINKEDIN_ORGANIZATION_ID") ||
+        env("LINKEDIN_COMPANY_PAGE_ID") ||
+        env("ZAPIER_LINKEDIN_COMPANY_ID") ||
+        null,
+      pageName: env("ZAPIER_LINKEDIN_PAGE_NAME") || env("LINKEDIN_COMPANY_PAGE_NAME") || null,
     };
   }
 
@@ -193,15 +191,15 @@ function buildFacebookParams(asset: PublishingAsset, config: ZapierMcpAssetConfi
 
 function buildLinkedInParams(asset: PublishingAsset, config: ZapierMcpAssetConfig) {
   const content = String(asset.content ?? "");
-  const companyId =
-    config.pageId ||
-    firstValue(
-      env("ZAPIER_LINKEDIN_ORGANIZATION_ID"),
-      env("LINKEDIN_COMPANY_PAGE_ID"),
-      env("ZAPIER_LINKEDIN_COMPANY_ID"),
-      config.pageName
-    ) ||
-    null;
+  const companyId = firstValue(
+    config.pageId,
+    env("ZAPIER_LINKEDIN_ORGANIZATION_ID"),
+    env("LINKEDIN_COMPANY_PAGE_ID"),
+    env("ZAPIER_LINKEDIN_COMPANY_ID"),
+    config.pageName,
+    env("ZAPIER_LINKEDIN_PAGE_NAME"),
+    "McCormick Web Marketing"
+  );
 
   return {
     asset_id: String(asset.id ?? ""),
@@ -209,19 +207,17 @@ function buildLinkedInParams(asset: PublishingAsset, config: ZapierMcpAssetConfi
     campaign_id: asset.campaign_id ?? null,
     source: "vip",
 
-    // Zapier LinkedIn Create Company Update fields.
-    // These are the important fields for create_company_update.
-    company_id: companyId,
-    company: companyId,
-    organization_id: companyId,
-    comment: content,
-
-    // Keep these aliases for compatibility/debugging, but do not rely on them
-    // as the primary fields for the LinkedIn Zapier action.
+    // Common VIP fields.
     text: content,
     content,
     message: content,
+
+    // Zapier LinkedIn Create Company Update commonly expects these fields.
+    company_id: companyId,
+    company: companyId,
+    organization_id: companyId,
     linkedin_page_name: config.pageName ?? null,
+    comment: content,
 
     scheduled_publish_at: asset.scheduled_publish_at ?? null,
   };
@@ -291,18 +287,14 @@ export function buildPublishingInstructions(asset: PublishingAsset) {
   if (normalizedAssetType === "linkedin_post") {
     return [
       "Create a LinkedIn Company/Page update using the structured params provided with this tool call.",
-      "",
-      "Critical:",
-      "- Use params.comment as the LinkedIn post body.",
-      "- Use params.company_id as the LinkedIn company/page selector when the action asks for Company or Organization.",
-      "- Do not publish to a personal LinkedIn profile.",
-      "- Do not ask a follow-up question if params.comment and params.company_id are present.",
-      config.pageName ? `Allowed LinkedIn page/account: ${config.pageName}.` : "",
-      config.pageId ? `LinkedIn company/page id: ${config.pageId}.` : "",
-      "Return the created LinkedIn update id, URL/permalink if available, status, and a concise confirmation message.",
+      "Use params.comment as the LinkedIn post body. If comment is unavailable, use params.message or params.content.",
+      "Do not publish to a personal LinkedIn profile.",
+      config.pageName ? `Use destination company/page: ${config.pageName}.` : "",
+      config.pageId ? `Use destination company/page id: ${config.pageId}.` : "",
+      "Return the created update id, url if available, status, and a concise confirmation message.",
     ]
       .filter(Boolean)
-      .join("\n");
+      .join(" ");
   }
 
   return [

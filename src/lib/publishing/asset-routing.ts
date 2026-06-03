@@ -38,10 +38,11 @@ export function getPublishingRoute(assetType: string | null | undefined): Publis
         provider: "zapier",
         channel: "linkedin",
         actionKey: envValue(
+          "ZAPIER_MCP_LINKEDIN_POST_ACTION",
           "ZAPIER_LINKEDIN_CREATE_POST_ACTION_KEY",
           "LINKEDIN_CREATE_POST_ACTION_KEY",
           "NEXT_PUBLIC_ZAPIER_LINKEDIN_CREATE_POST_ACTION_KEY"
-        ),
+        ) || "create_company_update",
         destinationLabel: "LinkedIn",
         requiresConfiguredAction: true,
       };
@@ -104,13 +105,13 @@ export function getPublishingRoute(assetType: string | null | undefined): Publis
 export function getZapierAppForChannel(channel: PublishingRoute["channel"]) {
   switch (channel) {
     case "linkedin":
-      return "linkedin";
+      return "LinkedIn";
     case "facebook":
-      return "facebook";
+      return "Facebook Pages";
     case "gmail":
-      return "gmail";
+      return "Gmail";
     case "wordpress":
-      return "wordpress";
+      return "WordPress";
     default:
       return "zapier";
   }
@@ -286,7 +287,34 @@ export function buildPublishingParams({
     };
   }
 
-  if (route.channel === "linkedin" || route.channel === "facebook") {
+  if (route.channel === "linkedin") {
+    const companyId =
+      envValue(
+        "ZAPIER_LINKEDIN_ORGANIZATION_ID",
+        "LINKEDIN_COMPANY_PAGE_ID",
+        "ZAPIER_LINKEDIN_COMPANY_ID",
+        "ZAPIER_LINKEDIN_PAGE_NAME",
+        "LINKEDIN_COMPANY_PAGE_NAME"
+      ) || "McCormick Web Marketing";
+
+    return {
+      message: content,
+      text: content,
+      content,
+      comment: content,
+      title,
+      company_id: companyId,
+      company: companyId,
+      organization_id: companyId,
+      linkedin_page_name:
+        envValue("ZAPIER_LINKEDIN_PAGE_NAME", "LINKEDIN_COMPANY_PAGE_NAME") || null,
+      asset_id: asset.id,
+      asset_type: asset.asset_type,
+      scheduled_publish_at: scheduledPublishAt,
+    };
+  }
+
+  if (route.channel === "facebook") {
     return {
       message: content,
       text: content,

@@ -4,6 +4,8 @@ type ZapierWriteActionArgs = {
   instructions: string;
   params?: Record<string, unknown> | null;
   output?: string;
+  selected_api?: string;
+  selectedApi?: string;
 };
 
 function getZapierMcpServerUrl() {
@@ -22,6 +24,40 @@ function getZapierMcpToken() {
     process.env.ZAPIER_MCP_AUTH_TOKEN?.trim() ||
     ""
   );
+}
+
+function envValue(...keys: string[]) {
+  for (const key of keys) {
+    const value = process.env[key]?.trim();
+
+    if (value) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
+function selectedApiForApp(app: string) {
+  const normalized = String(app ?? "").trim().toLowerCase();
+
+  if (normalized === "linkedin" || normalized.includes("linkedin")) {
+    return envValue("ZAPIER_LINKEDIN_SELECTED_API", "ZAPIER_MCP_LINKEDIN_SELECTED_API") || "LinkedInCLIAPI";
+  }
+
+  if (normalized === "facebook" || normalized.includes("facebook")) {
+    return envValue("ZAPIER_FACEBOOK_SELECTED_API", "ZAPIER_MCP_FACEBOOK_SELECTED_API") || "FacebookV2CLIAPI";
+  }
+
+  if (normalized === "gmail" || normalized.includes("gmail") || normalized.includes("google mail")) {
+    return envValue("ZAPIER_GMAIL_SELECTED_API", "ZAPIER_MCP_GMAIL_SELECTED_API") || "GoogleMailV2CLIAPI";
+  }
+
+  if (normalized === "wordpress" || normalized.includes("wordpress")) {
+    return envValue("ZAPIER_WORDPRESS_SELECTED_API", "ZAPIER_MCP_WORDPRESS_SELECTED_API") || "WordPressCLIAPI";
+  }
+
+  return envValue("ZAPIER_MCP_SELECTED_API");
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -124,10 +160,13 @@ function throwIfMcpToolError(json: any, toolText: string | null) {
             parsedToolText?.errorDetails?.message ??
             toolText
         );
-      } catch {
-        // Zapier MCP sometimes returns a plain-text tool error such as
-        // "MCP error ..." instead of JSON. Surface that real tool error
-        // instead of masking it with "Unexpected token ... is not valid JSON".
+      } catch (error) {
+        const message = readableUnknown(error);
+
+        if (message && message !== "Unexpected end of JSON input") {
+          throw new Error(message);
+        }
+
         throw new Error(toolText);
       }
     }
@@ -163,11 +202,15 @@ function buildZapierWriteArguments({
   instructions,
   params,
   output,
+  selected_api,
+  selectedApi,
 }: ZapierWriteActionArgs) {
   const safeParams = cleanRecord(asRecord(params));
+  const safeApp = requiredString(app, "app");
 
   return {
-    app: requiredString(app, "app"),
+    selected_api: requiredString(selected_api ?? selectedApi ?? selectedApiForApp(safeApp), "selected_api"),
+    app: safeApp,
     action: requiredString(action, "action"),
     instructions: requiredString(instructions, "instructions"),
     params: safeParams,

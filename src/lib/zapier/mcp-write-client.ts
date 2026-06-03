@@ -4,6 +4,8 @@ type ZapierWriteActionArgs = {
   instructions: string;
   params?: Record<string, unknown>;
   output?: string;
+  selected_api?: string;
+  selectedApi?: string;
 };
 
 function getZapierMcpServerUrl() {
@@ -18,6 +20,51 @@ function getZapierMcpServerUrl() {
 
 function getZapierMcpToken() {
   return process.env.ZAPIER_MCP_TOKEN?.trim() || "";
+}
+
+function envValue(...keys: string[]) {
+  for (const key of keys) {
+    const value = process.env[key]?.trim();
+
+    if (value) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
+function selectedApiForApp(app: string) {
+  const normalized = String(app ?? "").trim().toLowerCase();
+
+  if (normalized === "linkedin" || normalized.includes("linkedin")) {
+    return envValue("ZAPIER_LINKEDIN_SELECTED_API", "ZAPIER_MCP_LINKEDIN_SELECTED_API") || "LinkedInCLIAPI";
+  }
+
+  if (normalized === "facebook" || normalized.includes("facebook")) {
+    return envValue("ZAPIER_FACEBOOK_SELECTED_API", "ZAPIER_MCP_FACEBOOK_SELECTED_API") || "FacebookV2CLIAPI";
+  }
+
+  if (normalized === "gmail" || normalized.includes("gmail") || normalized.includes("google mail")) {
+    return envValue("ZAPIER_GMAIL_SELECTED_API", "ZAPIER_MCP_GMAIL_SELECTED_API") || "GoogleMailV2CLIAPI";
+  }
+
+  if (normalized === "wordpress" || normalized.includes("wordpress")) {
+    return envValue("ZAPIER_WORDPRESS_SELECTED_API", "ZAPIER_MCP_WORDPRESS_SELECTED_API") || "WordPressCLIAPI";
+  }
+
+  return envValue("ZAPIER_MCP_SELECTED_API");
+}
+
+
+function requiredString(value: unknown, fieldName: string) {
+  const text = String(value ?? "").trim();
+
+  if (!text) {
+    throw new Error(`Missing Zapier MCP ${fieldName}.`);
+  }
+
+  return text;
 }
 
 function parseSsePayload(text: string) {
@@ -85,10 +132,11 @@ function throwIfMcpToolError(json: any, toolText: string | null) {
             parsedToolText?.errorDetails?.message ??
             toolText
         );
-      } catch {
-        // Zapier MCP sometimes returns a plain-text tool error such as
-        // "MCP error ..." instead of JSON. Surface that real tool error
-        // instead of masking it with "Unexpected token ... is not valid JSON".
+      } catch (error) {
+        if (error instanceof Error && error.message !== "Unexpected end of JSON input") {
+          throw error;
+        }
+
         throw new Error(toolText);
       }
     }
@@ -122,6 +170,8 @@ export async function executeZapierMcpWriteAction({
   instructions,
   params = {},
   output = "Return the created record ID, URL if available, and any status or error details.",
+  selected_api,
+  selectedApi,
 }: ZapierWriteActionArgs) {
   const token = getZapierMcpToken();
   const headers: Record<string, string> = {
@@ -133,6 +183,16 @@ export async function executeZapierMcpWriteAction({
     headers.Authorization = `Bearer ${token}`;
   }
 
+  const safeApp = requiredString(app, "app");
+  const zapierArguments = {
+    selected_api: requiredString(selected_api ?? selectedApi ?? selectedApiForApp(safeApp), "selected_api"),
+    app: safeApp,
+    action: requiredString(action, "action"),
+    instructions: requiredString(instructions, "instructions"),
+    params,
+    output,
+  };
+
   const requestBody = {
     jsonrpc: "2.0",
     id:
@@ -142,13 +202,7 @@ export async function executeZapierMcpWriteAction({
     method: "tools/call",
     params: {
       name: "execute_zapier_write_action",
-      arguments: {
-        app,
-        action,
-        instructions,
-        params,
-        output,
-      },
+      arguments: zapierArguments,
     },
   };
 
