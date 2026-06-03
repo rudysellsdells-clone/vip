@@ -116,6 +116,7 @@ function hasCreatedObjectEvidence(value: unknown) {
     const objectValue = item as Record<string, any>;
 
     if (objectValue.id || objectValue.post_id || objectValue.postId) return true;
+    if (objectValue.record_id || objectValue.recordId) return true;
     if (objectValue.url || objectValue.link || objectValue.permalink) return true;
     if (objectValue.status && !String(objectValue.status).toLowerCase().includes("error")) return true;
     if (objectValue.success === true || objectValue.ok === true) return true;
@@ -139,6 +140,8 @@ function hasSuccessTextEvidence(value: unknown) {
     text.includes("success") ||
     text.includes("successfully") ||
     text.includes("record id") ||
+    text.includes("record_id") ||
+    text.includes("record created successfully") ||
     text.includes("post id")
   );
 }
@@ -157,11 +160,17 @@ export function assertSuccessfulMcpResult(
     throw new Error(`ZapierMCP returned an error-like response: ${valueToText(result).slice(0, 1000)}`);
   }
 
+  const hasSuccessEvidence = hasCreatedObjectEvidence(result) || hasSuccessTextEvidence(result);
+
+  if (requireSuccessEvidence && hasSuccessEvidence) {
+    return true;
+  }
+
   if (hasFollowUpOrPreview(result)) {
     throw new Error(`ZapierMCP asked for more information instead of confirming execution: ${valueToText(result).slice(0, 1000)}`);
   }
 
-  if (requireSuccessEvidence && !hasCreatedObjectEvidence(result) && !hasSuccessTextEvidence(result)) {
+  if (requireSuccessEvidence && !hasSuccessEvidence) {
     throw new Error(
       `ZapierMCP response did not include clear create/publish confirmation, so VIP will not mark this asset published: ${valueToText(result).slice(0, 1000)}`
     );
