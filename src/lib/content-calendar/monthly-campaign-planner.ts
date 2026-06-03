@@ -385,7 +385,7 @@ function contentForAsset({
   label: string;
   strategy: MonthlyCampaignStrategyInput;
   weekNumber: number;
-}) {
+}): string {
   const callToAction = cta(strategy);
   const topic = topicForWeek(strategy, weekNumber);
   const offer = publicOfferPhrase(strategy);
