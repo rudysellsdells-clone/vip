@@ -33,6 +33,18 @@ function firstValue(...values: Array<string | undefined | null>) {
   return values.map((value) => String(value ?? "").trim()).find(Boolean) || "";
 }
 
+function isZapierMcpExecutorName(value: string) {
+  return value === "execute_zapier_write_action" || value === "execute_zapier_read_action";
+}
+
+function firstActionValue(...values: Array<string | undefined | null>) {
+  return (
+    values
+      .map((value) => String(value ?? "").trim())
+      .find((value) => Boolean(value) && !isZapierMcpExecutorName(value)) || ""
+  );
+}
+
 function wordpressPostType() {
   return firstValue(env("WORDPRESS_DEFAULT_POST_TYPE"), env("ZAPIER_WORDPRESS_DEFAULT_POST_TYPE"), "post");
 }
@@ -47,14 +59,14 @@ export function zapierMcpConfigForAsset(asset: PublishingAsset): ZapierMcpAssetC
   if (assetType === "facebook_post") {
     return {
       app: firstValue(env("ZAPIER_MCP_FACEBOOK_POST_APP"), env("ZAPIER_MCP_DEFAULT_APP"), "Facebook Pages"),
-      action: firstValue(env("ZAPIER_MCP_FACEBOOK_POST_ACTION"), env("ZAPIER_FACEBOOK_MCP_TOOL_NAME"), env("ZAPIER_MCP_DEFAULT_ACTION")),
+      action: firstActionValue(env("ZAPIER_MCP_FACEBOOK_POST_ACTION"), env("ZAPIER_FACEBOOK_ACTION_KEY"), env("ZAPIER_MCP_DEFAULT_ACTION"), "page_stream"),
       source: env("ZAPIER_MCP_FACEBOOK_POST_ACTION")
         ? "asset_specific"
-        : env("ZAPIER_FACEBOOK_MCP_TOOL_NAME")
-          ? "legacy_facebook_tool_name"
-          : env("ZAPIER_MCP_DEFAULT_ACTION")
+        : env("ZAPIER_FACEBOOK_ACTION_KEY")
+          ? "facebook_action_key"
+          : env("ZAPIER_MCP_DEFAULT_ACTION") && !isZapierMcpExecutorName(env("ZAPIER_MCP_DEFAULT_ACTION"))
             ? "default"
-            : "missing_action",
+            : "default_page_stream",
       pageId: env("ZAPIER_FACEBOOK_PAGE_ID") || null,
       pageName: env("ZAPIER_FACEBOOK_PAGE_NAME") || null,
     };
@@ -63,14 +75,25 @@ export function zapierMcpConfigForAsset(asset: PublishingAsset): ZapierMcpAssetC
   if (assetType === "linkedin_post") {
     return {
       app: firstValue(env("ZAPIER_MCP_LINKEDIN_POST_APP"), env("ZAPIER_MCP_DEFAULT_APP"), "LinkedIn"),
-      action: firstValue(env("ZAPIER_MCP_LINKEDIN_POST_ACTION"), env("ZAPIER_LINKEDIN_MCP_TOOL_NAME"), env("ZAPIER_MCP_DEFAULT_ACTION")),
+      action: firstActionValue(
+        env("ZAPIER_MCP_LINKEDIN_POST_ACTION"),
+        env("ZAPIER_LINKEDIN_ACTION_KEY"),
+        env("ZAPIER_LINKEDIN_CREATE_COMPANY_UPDATE_ACTION_KEY"),
+        env("ZAPIER_LINKEDIN_CREATE_POST_ACTION_KEY"),
+        env("ZAPIER_MCP_DEFAULT_ACTION"),
+        "create_company_update"
+      ),
       source: env("ZAPIER_MCP_LINKEDIN_POST_ACTION")
         ? "asset_specific"
-        : env("ZAPIER_LINKEDIN_MCP_TOOL_NAME")
-          ? "legacy_linkedin_tool_name"
-          : env("ZAPIER_MCP_DEFAULT_ACTION")
-            ? "default"
-            : "missing_action",
+        : env("ZAPIER_LINKEDIN_ACTION_KEY")
+          ? "linkedin_action_key"
+          : env("ZAPIER_LINKEDIN_CREATE_COMPANY_UPDATE_ACTION_KEY")
+            ? "linkedin_company_update_action_key"
+            : env("ZAPIER_LINKEDIN_CREATE_POST_ACTION_KEY")
+              ? "linkedin_create_post_action_key"
+              : env("ZAPIER_MCP_DEFAULT_ACTION") && !isZapierMcpExecutorName(env("ZAPIER_MCP_DEFAULT_ACTION"))
+                ? "default"
+                : "default_create_company_update",
       pageId: null,
       pageName: env("ZAPIER_LINKEDIN_PAGE_NAME") || null,
     };

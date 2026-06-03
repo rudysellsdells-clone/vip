@@ -1,119 +1,50 @@
-# VIP LinkedIn Zapier MCP Action-Key Surgical Patch
+# VIP LinkedIn Action Output Payload Fix
 
-## What this fixes
+This is a surgical patch for the uploaded VIP Next.js/TypeScript repo.
 
-This fixes:
+## File to replace
 
-```text
-Action 'execute_zapier_write_action' not found
-```
-
-That error means VIP is still using the Zapier MCP executor/tool name as the LinkedIn app action key.
-
-## Correct mapping
+Copy this file into the repo, replacing the existing file:
 
 ```text
-MCP tool/executor: execute_zapier_write_action
-LinkedIn Page action: create_company_update
+src/lib/publishing/output-payload.ts
 ```
 
-## Files included
+## What changed
+
+The old LinkedIn config could fall back to:
 
 ```text
-scripts/fix-linkedin-zapier-action.mjs
-docs/manual-linkedin-zapier-action-fix.md
-README.md
+ZAPIER_LINKEDIN_MCP_TOOL_NAME
 ```
 
-No TypeScript example route is included, so this package should not create a Vercel build failure by itself.
-
-## How to use
-
-Copy this file into your repo:
+as the `action` value. Since that environment variable is supposed to contain:
 
 ```text
-scripts/fix-linkedin-zapier-action.mjs
+execute_zapier_write_action
 ```
 
-From your repo root, run:
+VIP ended up sending the wrong LinkedIn action.
 
-```bash
-node scripts/fix-linkedin-zapier-action.mjs
+The new code separates action keys from executor/tool names and defaults LinkedIn Page publishing to:
+
+```text
+create_company_update
 ```
 
-Then run:
+## After applying
+
+Run or let Vercel run:
 
 ```bash
 npm run build
 ```
 
-## What the script changes
+Then test the LinkedIn publish again. The payload preview should show:
 
-It looks at:
-
-```text
-src/lib/zapier/linkedin.ts
-src/lib/zapier/action-registry.ts
-```
-
-It keeps this as the MCP tool/executor:
-
-```ts
-execute_zapier_write_action
-```
-
-But prevents it from being used as the LinkedIn action.
-
-It changes likely bad patterns like:
-
-```ts
-action: getLinkedInMcpToolName()
-```
-
-to:
-
-```ts
-action: getLinkedInMcpActionKey()
-```
-
-And adds this helper to `src/lib/zapier/linkedin.ts`:
-
-```ts
-export function getLinkedInMcpActionKey() {
-  return process.env.ZAPIER_LINKEDIN_ACTION_KEY?.trim() || "create_company_update";
+```json
+{
+  "app": "LinkedIn",
+  "action": "create_company_update"
 }
-```
-
-It also changes this if found:
-
-```ts
-action: "execute_zapier_write_action"
-```
-
-to:
-
-```ts
-action: "create_company_update"
-```
-
-## Recommended Vercel environment variables
-
-```text
-ZAPIER_LINKEDIN_MCP_TOOL_NAME=execute_zapier_write_action
-ZAPIER_LINKEDIN_ACTION_KEY=create_company_update
-```
-
-Do not set any LinkedIn action-key environment variable to:
-
-```text
-execute_zapier_write_action
-```
-
-## Backup behavior
-
-The script creates backups before editing files:
-
-```text
-src/lib/zapier/linkedin.ts.bak-...
-src/lib/zapier/action-registry.ts.bak-...
 ```
