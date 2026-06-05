@@ -17,7 +17,10 @@ function buttonLabel(assetType: string) {
     case "email":
       return "Create Gmail Draft";
     case "video_script":
+    case "galaxyai_prompt":
       return "Prepare GalaxyAI";
+    case "galaxyai_image_prompt":
+      return "Prepare GalaxyAI Image";
     case "blog_post":
       return "Create WordPress Draft";
     default:
@@ -28,6 +31,14 @@ function buttonLabel(assetType: string) {
 function confirmText(assetType: string) {
   if (assetType === "blog_post") {
     return "Send this approved blog post to WordPress through Zapier? The recommended first step is creating a WordPress draft.";
+  }
+
+  if (assetType === "galaxyai_image_prompt") {
+    return "Prepare this approved image prompt for GalaxyAI? This will not publish the social post yet.";
+  }
+
+  if (assetType === "galaxyai_prompt") {
+    return "Prepare this approved GalaxyAI prompt? This will not publish the generated media yet.";
   }
 
   return "Execute this approved asset now? This should only be used when the asset is due according to its publishing schedule.";

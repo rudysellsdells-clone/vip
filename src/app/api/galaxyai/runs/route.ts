@@ -81,9 +81,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Asset not found." }, { status: 404 });
     }
 
-    if (asset.asset_type !== "galaxyai_prompt") {
+    const supportedGalaxyPromptTypes = ["galaxyai_prompt", "galaxyai_image_prompt"];
+
+    if (!supportedGalaxyPromptTypes.includes(String(asset.asset_type))) {
       return NextResponse.json(
-        { error: "Only GalaxyAI prompt assets can be sent to GalaxyAI." },
+        {
+          error:
+            "Only approved GalaxyAI prompt assets can be sent to GalaxyAI. Supported types: galaxyai_prompt and galaxyai_image_prompt.",
+        },
         { status: 400 }
       );
     }
@@ -119,6 +124,16 @@ export async function POST(request: Request) {
         input: toJson({
           workflowId,
           values,
+          assetType: asset.asset_type,
+          promptPurpose:
+            asset.asset_type === "galaxyai_image_prompt"
+              ? "social_image_generation"
+              : "video_or_media_generation",
+          parentAssetId: asset.parent_asset_id ?? null,
+          sourceSocialAssetType: asset.metadata?.sourceSocialAssetType ?? null,
+          sourceSocialAssetSortOrder: asset.metadata?.sourceSocialAssetSortOrder ?? null,
+          imagePlatform: asset.metadata?.imagePlatform ?? null,
+          imageFormat: asset.metadata?.imageFormat ?? null,
           inputMapping:
             GALAXYAI_WORKFLOW_INPUT_MAPPINGS[workflowId] ?? "fallback_prompt_mapping",
         }),
@@ -134,13 +149,21 @@ export async function POST(request: Request) {
 
     await logActivity(supabase, {
       userId: user.id,
-      activityType: "galaxyai_run_started",
-      title: "GalaxyAI workflow run started",
-      description: `Started GalaxyAI workflow ${workflowId}.`,
+      activityType:
+        asset.asset_type === "galaxyai_image_prompt"
+          ? "galaxyai_image_run_started"
+          : "galaxyai_run_started",
+      title:
+        asset.asset_type === "galaxyai_image_prompt"
+          ? "GalaxyAI image workflow run started"
+          : "GalaxyAI workflow run started",
+      description: `Started GalaxyAI workflow ${workflowId} for ${asset.asset_type}.`,
       metadata: {
         workflowId,
         runId: galaxyRunId,
         assetId: asset.id,
+        assetType: asset.asset_type,
+        parentAssetId: asset.parent_asset_id ?? null,
         campaignId: campaignId ?? asset.campaign_id ?? null,
         inputMapping:
           GALAXYAI_WORKFLOW_INPUT_MAPPINGS[workflowId] ?? "fallback_prompt_mapping",

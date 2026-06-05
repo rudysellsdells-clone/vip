@@ -1,26 +1,30 @@
 "use client";
 
 import Link from "next/link";
-import { RemoveAssetButton } from "@/components/assets/RemoveAssetButton";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import formStyles from "@/components/forms/VipForm.module.css";
 import { websiteStyles } from "@/components/website-ui/WebsitePage";
 
 function canUsePublishingReady(assetType: string) {
-  return ["linkedin_post", "facebook_post", "email", "video_script"].includes(assetType);
+  return [
+    "linkedin_post",
+    "facebook_post",
+    "email",
+    "video_script",
+    "galaxyai_prompt",
+    "galaxyai_image_prompt",
+  ].includes(assetType);
 }
 
 export function ReadyAssetActions({
   assetId,
   assetType,
   status,
-  assetTitle,
 }: {
   assetId: string;
   assetType: string;
   status: string;
-  assetTitle?: string | null;
 }) {
   const router = useRouter();
   const [running, setRunning] = useState(false);
@@ -97,8 +101,6 @@ export function ReadyAssetActions({
         <Link href={`/assets/${assetId}`} className={websiteStyles.link}>
           Open asset →
         </Link>
-
-        <RemoveAssetButton assetId={assetId} assetTitle={assetTitle} compact />
       </div>
 
       {message ? <p className={formStyles.message}>{message}</p> : null}

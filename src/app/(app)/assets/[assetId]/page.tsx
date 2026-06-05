@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { AssetTitleLink } from "@/components/assets/AssetTitleLink";
 import { AssetReviewActions } from "@/components/approvals/AssetReviewActions";
 import { PrepareLinkedInPostButton } from "@/components/assets/PrepareLinkedInPostButton";
-import { RemoveAssetButton } from "@/components/assets/RemoveAssetButton";
+import { RunGalaxyAiAssetButton } from "@/components/galaxyai/RunGalaxyAiAssetButton";
 import { RequestRevisionButton } from "@/components/assets/RequestRevisionButton";
 import {
   WebsiteBadge,
@@ -88,11 +88,27 @@ export default async function AssetDetailPage({ params }: PageProps) {
     .order("created_at", { ascending: false })
     .limit(10);
 
+  const { data: galaxyWorkflows } = canRunGalaxyAi
+    ? await supabase
+        .from("galaxyai_workflows")
+        .select("galaxy_workflow_id,name")
+        .eq("user_id", user.id)
+        .order("updated_at", { ascending: false })
+    : { data: [] };
+
+  const workflows = (galaxyWorkflows ?? []) as Array<{
+    galaxy_workflow_id: string;
+    name: string;
+  }>;
+
   const revisions = (childRevisions ?? []) as Array<Record<string, any>>;
   const approvalRows = (approvals ?? []) as Array<Record<string, any>>;
   const canRevise = asset.status !== "published" && asset.status !== "sent";
   const canPrepareLinkedIn =
     asset.status === "approved" && isLinkedInAsset(asset.asset_type, asset.title);
+  const canRunGalaxyAi =
+    asset.status === "approved" &&
+    ["galaxyai_prompt", "galaxyai_image_prompt"].includes(String(asset.asset_type));
 
   return (
     <WebsitePage>
@@ -156,11 +172,17 @@ export default async function AssetDetailPage({ params }: PageProps) {
               <PrepareLinkedInPostButton assetId={asset.id} />
             ) : null}
 
+            {canRunGalaxyAi ? (
+              <RunGalaxyAiAssetButton
+                assetId={asset.id}
+                campaignId={asset.campaign_id ?? ""}
+                workflows={workflows}
+              />
+            ) : null}
+
             {canRevise ? (
               <RequestRevisionButton assetId={asset.id} assetTitle={asset.title} />
             ) : null}
-
-            <RemoveAssetButton assetId={asset.id} assetTitle={asset.title} />
           </div>
         </WebsiteSection>
 
@@ -201,7 +223,20 @@ export default async function AssetDetailPage({ params }: PageProps) {
             <article className={websiteStyles.card} style={{ marginTop: 16 }}>
               <h3 className={websiteStyles.cardTitle}>LinkedIn execution</h3>
               <p className={websiteStyles.cardText}>
-                This approved LinkedIn asset can be prepared as a Zapier MCP action for the McCormick Web Marketing LinkedIn company page.
+                This approved LinkedIn asset can be prepared as a Zapier MCP action for the configured LinkedIn company page.
+              </p>
+            </article>
+          ) : null}
+
+          {canRunGalaxyAi ? (
+            <article className={websiteStyles.card} style={{ marginTop: 16 }}>
+              <h3 className={websiteStyles.cardTitle}>
+                {asset.asset_type === "galaxyai_image_prompt"
+                  ? "GalaxyAI image generation"
+                  : "GalaxyAI media generation"}
+              </h3>
+              <p className={websiteStyles.cardText}>
+                This approved prompt can be sent to a synced GalaxyAI workflow. Image prompts generate social creative for review before attaching the file to a post.
               </p>
             </article>
           ) : null}

@@ -16,6 +16,7 @@ export const PUBLISHABLE_ASSET_TYPES = [
   "facebook_post",
   "email",
   "galaxyai_prompt",
+  "galaxyai_image_prompt",
   "blog_post",
 ];
 
@@ -79,6 +80,15 @@ export function getPublishingRoute(assetType: string | null | undefined): Publis
         channel: "galaxyai",
         actionKey: "prepare_galaxyai_media_request",
         destinationLabel: "GalaxyAI Media",
+        requiresConfiguredAction: false,
+      };
+
+    case "galaxyai_image_prompt":
+      return {
+        provider: "galaxyai",
+        channel: "galaxyai",
+        actionKey: "prepare_galaxyai_image_request",
+        destinationLabel: "GalaxyAI Social Image",
         requiresConfiguredAction: false,
       };
 
@@ -220,12 +230,20 @@ export function buildPublishingInstructions({
   }
 
   if (route.channel === "galaxyai") {
+    const isImagePrompt = asset.asset_type === "galaxyai_image_prompt";
+
     return [
-      "Prepare a GalaxyAI media request for this approved VIP video script.",
+      isImagePrompt
+        ? "Prepare a GalaxyAI social image generation request for this approved VIP image prompt."
+        : "Prepare a GalaxyAI media request for this approved VIP video/media prompt.",
       "",
       `Title: ${title}`,
       "",
       content,
+      "",
+      isImagePrompt
+        ? "Important: This should generate a social media image asset. Do not publish the prompt text as a post."
+        : "Important: This should generate a video or media asset. Do not publish the prompt text as a post.",
     ].join("\n");
   }
 
@@ -300,8 +318,15 @@ export function buildPublishingParams({
   return {
     title,
     content,
+    prompt: content,
     asset_id: asset.id,
     asset_type: asset.asset_type,
+    parent_asset_id: asset.parent_asset_id ?? null,
+    campaign_id: asset.campaign_id ?? null,
     scheduled_publish_at: scheduledPublishAt,
+    image_platform: asset.metadata?.imagePlatform ?? null,
+    image_format: asset.metadata?.imageFormat ?? null,
+    source_social_asset_type: asset.metadata?.sourceSocialAssetType ?? null,
+    source_social_asset_sort_order: asset.metadata?.sourceSocialAssetSortOrder ?? null,
   };
 }

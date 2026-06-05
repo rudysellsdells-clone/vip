@@ -8,6 +8,7 @@ export const PUBLISHABLE_READY_ASSET_TYPES = [
   "facebook_post",
   "email",
   "galaxyai_prompt",
+  "galaxyai_image_prompt",
   "blog_post",
   "white_paper",
   "authority_asset",
@@ -25,7 +26,9 @@ export function channelForAssetType(assetType: string | null | undefined) {
     case "video_script":
       return "Review / Script";
     case "galaxyai_prompt":
-      return "GalaxyAI";
+      return "GalaxyAI Video / Media";
+    case "galaxyai_image_prompt":
+      return "GalaxyAI Image";
     case "blog_post":
       return "Website / Blog";
     case "white_paper":
@@ -59,6 +62,8 @@ export function nextStepForAsset({
       return "Review the companion GalaxyAI prompt before running video generation.";
     case "galaxyai_prompt":
       return "Approve this prompt, then run it through GalaxyAI.";
+    case "galaxyai_image_prompt":
+      return "Approve this image prompt, then run it through GalaxyAI to generate a social image.";
     case "prospect_what_if_story":
       return "Use What-If PDF and Gmail tools for outreach.";
     case "blog_post":
