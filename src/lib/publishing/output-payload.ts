@@ -245,7 +245,7 @@ function buildFacebookParams(asset: PublishingAsset, config: ZapierMcpAssetConfi
 function buildLinkedInParams(asset: PublishingAsset, config: ZapierMcpAssetConfig) {
   const content = String(asset.content ?? "");
   const socialImage = socialImageForAsset(asset);
-  const pageName = config.pageName ?? env("ZAPIER_LINKEDIN_PAGE_NAME") || null;
+  const pageName = firstValue(config.pageName, env("ZAPIER_LINKEDIN_PAGE_NAME")) || null;
   const companyId = firstValue(
     env("ZAPIER_LINKEDIN_COMPANY_ID"),
     env("ZAPIER_LINKEDIN_ORGANIZATION_ID"),
