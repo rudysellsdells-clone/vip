@@ -10,6 +10,7 @@ import {
 } from "@/components/website-ui/WebsitePage";
 import { AccountBrandProfileForm } from "@/components/accounts/AccountBrandProfileForm";
 import { AccountPublishingSettingsForm } from "@/components/accounts/AccountPublishingSettingsForm";
+import { AccountMarketProfileManager } from "@/components/accounts/AccountMarketProfileManager";
 import { ArchiveAccountButton } from "@/components/accounts/ArchiveAccountButton";
 import { InviteAccountMemberForm } from "@/components/accounts/InviteAccountMemberForm";
 import { RemoveAccountMemberButton } from "@/components/accounts/RemoveAccountMemberButton";
@@ -51,6 +52,9 @@ export default async function AccountDetailPage({
     { data: memberships },
     { data: brandProfile },
     { data: publishingSettings },
+    { data: serviceLines },
+    { data: audiences },
+    { data: offers },
     { count: campaignCount },
     { count: assetCount },
   ] = await Promise.all([
@@ -64,6 +68,26 @@ export default async function AccountDetailPage({
       .order("created_at", { ascending: true }),
     supabase.from("account_brand_profiles").select("*").eq("account_id", accountId).maybeSingle(),
     supabase.from("account_publishing_settings").select("*").eq("account_id", accountId).maybeSingle(),
+    supabase
+      .from("service_lines")
+      .select("id,name,short_name,description,primary_outcome")
+      .eq("account_id", accountId)
+      .eq("active", true)
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true }),
+    supabase
+      .from("buyer_segments")
+      .select("id,name,description,common_pains,desired_outcomes,objections")
+      .eq("account_id", accountId)
+      .eq("active", true)
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true }),
+    supabase
+      .from("offers")
+      .select("id,service_line_id,name,description,offer_type,primary_cta,outcome,price_notes,target_buyer_segments")
+      .eq("account_id", accountId)
+      .eq("active", true)
+      .order("name", { ascending: true }),
     supabase
       .from("campaigns")
       .select("id", { count: "exact", head: true })
@@ -87,6 +111,32 @@ export default async function AccountDetailPage({
     role: string;
     status: string;
     invited_at: string;
+  }>;
+  const serviceLineRows = (serviceLines ?? []) as Array<{
+    id: string;
+    name: string;
+    short_name: string | null;
+    description: string | null;
+    primary_outcome: string | null;
+  }>;
+  const audienceRows = (audiences ?? []) as Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    common_pains: string[] | null;
+    desired_outcomes: string[] | null;
+    objections: string[] | null;
+  }>;
+  const offerRows = (offers ?? []) as Array<{
+    id: string;
+    service_line_id: string | null;
+    name: string;
+    description: string | null;
+    offer_type: string | null;
+    primary_cta: string | null;
+    outcome: string | null;
+    price_notes: string | null;
+    target_buyer_segments: string[] | null;
   }>;
   const activeMembers = memberRows.filter((membership) => membership.status === "active").length;
   const pendingMembers = memberRows.filter((membership) => membership.status === "pending").length;
@@ -122,6 +172,7 @@ export default async function AccountDetailPage({
         <WebsiteMetric label="Campaigns" value={campaignCount ?? 0} description="Campaigns tied to this account." dot="green" />
         <WebsiteMetric label="Assets" value={assetCount ?? 0} description="Generated assets tied to this account." dot="purple" />
         <WebsiteMetric label="Seats" value={`${activeMembers} active`} description={`${pendingMembers} pending invitation${pendingMembers === 1 ? "" : "s"}.`} dot="gold" />
+        <WebsiteMetric label="Strategy" value={`${serviceLineRows.length}/${audienceRows.length}/${offerRows.length}`} description="Services, audiences, and offers." dot="blue" />
       </section>
 
       <WebsiteSection
@@ -139,6 +190,7 @@ export default async function AccountDetailPage({
                 {[
                   ["Overview", "#overview"],
                   ["Brand Profile", "#brand-profile"],
+                  ["Strategy", "#strategy"],
                   ["Publishing", "#publishing"],
                   ["Team", "#team"],
                   ["Danger Zone", "#danger-zone"],
@@ -194,6 +246,23 @@ export default async function AccountDetailPage({
                 ) : (
                   <p className={websiteStyles.cardText}>You can view this account, but only owners and admins can edit the brand profile.</p>
                 )}
+              </div>
+            </section>
+
+            <section id="strategy" className="scroll-mt-28 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+              <SectionHeading
+                eyebrow="Strategy"
+                title="Services, offers, and audiences"
+                description="Define what this account sells and who it sells to so VIP generates account-specific campaigns instead of default marketing-agency content."
+              />
+              <div className="mt-6">
+                <AccountMarketProfileManager
+                  accountId={account.id}
+                  canManage={canManage}
+                  serviceLines={serviceLineRows}
+                  audiences={audienceRows}
+                  offers={offerRows}
+                />
               </div>
             </section>
 
