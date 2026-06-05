@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import formStyles from "@/components/forms/VipForm.module.css";
 import { websiteStyles } from "@/components/website-ui/WebsitePage";
+import type { AccountMarketProfile } from "@/lib/accounts/account-market-profile";
 
 function currentMonthValue() {
   const now = new Date();
@@ -48,13 +49,22 @@ async function readJson(response: Response) {
 
 export function GenerateMonthlyCampaignsButton({
   defaultMonth,
+  activeAccountId,
+  activeAccountName,
+  marketProfile,
 }: {
   defaultMonth?: string;
+  activeAccountId?: string | null;
+  activeAccountName?: string | null;
+  marketProfile?: AccountMarketProfile;
 }) {
   const router = useRouter();
   const initialMonth = useMemo(() => defaultMonth || currentMonthValue(), [defaultMonth]);
   const [month, setMonth] = useState(initialMonth);
   const [campaignTheme, setCampaignTheme] = useState("Authority Growth");
+  const [serviceLineId, setServiceLineId] = useState("");
+  const [audienceId, setAudienceId] = useState("");
+  const [offerId, setOfferId] = useState("");
   const [monthlyObjective, setMonthlyObjective] = useState("");
   const [targetAudience, setTargetAudience] = useState("");
   const [primaryOffer, setPrimaryOffer] = useState("");
@@ -72,6 +82,10 @@ export function GenerateMonthlyCampaignsButton({
     return {
       month,
       campaignTheme,
+      accountId: activeAccountId,
+      serviceLineId,
+      audienceId,
+      offerId,
       businessContext,
       monthlyObjective,
       targetAudience,
@@ -147,6 +161,72 @@ export function GenerateMonthlyCampaignsButton({
         <p className={formStyles.description}>
           Creates one campaign per usable week and generates the full asset package using your strategy inputs.
         </p>
+      </div>
+
+      <div className={websiteStyles.card}>
+        <h4 className={websiteStyles.cardTitle}>Account strategy context</h4>
+        <p className={websiteStyles.cardMeta}>
+          {activeAccountName
+            ? `Generating for ${activeAccountName}. Pick a service line, audience, and offer to keep this campaign aligned with what the account actually sells.`
+            : "No active account selected. VIP will use the manual strategy fields below."}
+        </p>
+
+        {marketProfile &&
+        (marketProfile.serviceLines.length || marketProfile.audiences.length || marketProfile.offers.length) ? (
+          <div className={[formStyles.row, formStyles.grid2].join(" ")}>
+            <label className={formStyles.field}>
+              <span className={formStyles.label}>Service Line</span>
+              <select
+                value={serviceLineId}
+                onChange={(event) => setServiceLineId(event.target.value)}
+                className={formStyles.input}
+              >
+                <option value="">Use default service line</option>
+                {marketProfile.serviceLines.map((serviceLine) => (
+                  <option key={serviceLine.id} value={serviceLine.id}>
+                    {serviceLine.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className={formStyles.field}>
+              <span className={formStyles.label}>Audience</span>
+              <select
+                value={audienceId}
+                onChange={(event) => setAudienceId(event.target.value)}
+                className={formStyles.input}
+              >
+                <option value="">Use default audience</option>
+                {marketProfile.audiences.map((audience) => (
+                  <option key={audience.id} value={audience.id}>
+                    {audience.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className={formStyles.field}>
+              <span className={formStyles.label}>Offer</span>
+              <select
+                value={offerId}
+                onChange={(event) => setOfferId(event.target.value)}
+                className={formStyles.input}
+              >
+                <option value="">Use default offer</option>
+                {marketProfile.offers.map((offer) => (
+                  <option key={offer.id} value={offer.id}>
+                    {offer.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        ) : (
+          <p className={formStyles.description}>
+            Add service lines, audiences, and offers in the account Strategy section to make monthly campaign generation account-specific.
+          </p>
+        )}
       </div>
 
       <div className={[formStyles.row, formStyles.grid2].join(" ")}>
@@ -262,7 +342,7 @@ export function GenerateMonthlyCampaignsButton({
       <div className={websiteStyles.card}>
         <h4 className={websiteStyles.cardTitle}>Generation Mode</h4>
         <p className={websiteStyles.cardMeta}>
-          Fast batch mode is active. This avoids Vercel timeouts by creating the full campaign package without OpenAI calls inside the generation request.
+          Fast batch mode is active. This avoids Vercel timeouts by creating the full campaign package without OpenAI calls inside the generation request. Account strategy fields are used as private generation context and are not printed as raw labels in the final assets.
         </p>
       </div>
 

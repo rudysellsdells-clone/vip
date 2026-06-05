@@ -15,7 +15,8 @@ import {
 import { defaultViewForPage } from "@/lib/calendar/working-view-config";
 import { pageVisibleAssets, safeRows } from "@/lib/calendar/page-assets";
 import { GenerateMonthlyCampaignsButton } from "@/components/content-calendar/GenerateMonthlyCampaignsButton";
-import { DeleteMonthlyCampaignButton } from "@/components/content-calendar/DeleteMonthlyCampaignButton";
+import { getUserAccountContext } from "@/lib/accounts/account-context";
+import { fetchAccountMarketProfile } from "@/lib/accounts/account-market-profile";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -39,6 +40,12 @@ export default async function MonthlyContentCalendarPage({ searchParams }: PageP
   if (!user) {
     redirect("/login");
   }
+
+  const accountContext = await getUserAccountContext({ supabase, userId: user.id });
+  const marketProfile = await fetchAccountMarketProfile({
+    supabase,
+    accountId: accountContext.activeAccountId,
+  });
 
   const baseQuery = supabase
     .from("generated_assets")
@@ -70,15 +77,12 @@ export default async function MonthlyContentCalendarPage({ searchParams }: PageP
         title="Create monthly campaign content"
         description="Generate one campaign per week and place the assets into the working calendar."
       >
-        <GenerateMonthlyCampaignsButton defaultMonth={range.monthValue} />
-      </WebsiteSection>
-
-      <WebsiteSection
-        eyebrow="Cleanup"
-        title="Remove monthly content"
-        description="Remove the full monthly campaign package for this view with one cleanup control when you need to regenerate the month."
-      >
-        <DeleteMonthlyCampaignButton month={range.monthValue} />
+        <GenerateMonthlyCampaignsButton
+          defaultMonth={range.monthValue}
+          activeAccountId={accountContext.activeAccountId}
+          activeAccountName={accountContext.activeAccountName}
+          marketProfile={marketProfile}
+        />
       </WebsiteSection>
 
       <WebsiteSection

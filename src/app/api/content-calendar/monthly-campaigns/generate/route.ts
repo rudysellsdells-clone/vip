@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
 import { buildMonthlyCampaignPlan } from "@/lib/content-calendar/monthly-campaign-planner";
+import { getUserAccountContext } from "@/lib/accounts/account-context";
+import {
+  fetchAccountMarketProfile,
+  marketProfileSummary,
+  mergeStrategyWithMarketDefaults,
+  resolveAccountMarketProfile,
+} from "@/lib/accounts/account-market-profile";
 import { preparePublicAssetContent } from "@/lib/content/public-content-cleaner";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
@@ -42,21 +49,26 @@ function campaignSummary(week: ReturnType<typeof buildMonthlyCampaignPlan>[numbe
 
 function campaignPayload({
   userId,
+  accountId,
   month,
   campaignTheme,
   businessContext,
+  marketProfile,
   week,
 }: {
   userId: string;
+  accountId: string | null;
   month: string;
   campaignTheme: string;
   businessContext: string;
+  marketProfile: Record<string, unknown>;
   week: ReturnType<typeof buildMonthlyCampaignPlan>[number];
 }) {
   const idea = campaignIdea(week);
 
   return {
     user_id: userId,
+    account_id: accountId,
     name: week.campaignName,
     idea,
     campaign_month: month,
@@ -70,6 +82,8 @@ function campaignPayload({
       generationMode: "fast_batch_stable_planner",
       campaignTheme,
       businessContext,
+      accountId,
+      marketProfile,
       campaignName: week.campaignName,
       campaignIdea: idea,
       campaignAngle: week.campaignAngle,
@@ -94,19 +108,24 @@ function campaignPayload({
 
 function assetPayload({
   userId,
+  accountId,
   campaignId,
   month,
   week,
   asset,
+  marketProfile,
 }: {
   userId: string;
+  accountId: string | null;
   campaignId: string;
   month: string;
   week: ReturnType<typeof buildMonthlyCampaignPlan>[number];
   asset: ReturnType<typeof buildMonthlyCampaignPlan>[number]["assets"][number];
+  marketProfile: Record<string, unknown>;
 }) {
   return {
     user_id: userId,
+    account_id: accountId,
     campaign_id: campaignId,
     asset_type: asset.assetType,
     title: asset.title,
@@ -118,6 +137,8 @@ function assetPayload({
     metadata: toJson({
       generatedBy: "monthly_campaign_calendar",
       generationMode: "fast_batch_stable_planner",
+      accountId,
+      marketProfile,
       companionAssetFlow:
         asset.assetType === "galaxyai_prompt"
           ? "review_prompt_then_send_prompt_only_to_galaxyai"
@@ -160,10 +181,31 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const month = normalizeMonth(body.month);
   const campaignTheme = textValue(body.campaignTheme) || "Authority Growth";
-  const businessContext = textValue(body.businessContext);
+  const enteredBusinessContext = textValue(body.businessContext);
   const overwriteExisting = Boolean(body.overwriteExisting);
 
-  const strategy = {
+  const accountContext = await getUserAccountContext({ supabase, userId: user.id });
+  const requestedAccountId = textValue(body.accountId);
+  const activeAccountId =
+    accountContext.accounts.find((account) => account.id === requestedAccountId)?.id ??
+    accountContext.activeAccountId ??
+    null;
+
+  const marketProfileOptions = await fetchAccountMarketProfile({
+    supabase,
+    accountId: activeAccountId,
+  });
+
+  const resolvedMarketProfile = resolveAccountMarketProfile({
+    profile: marketProfileOptions,
+    selection: {
+      serviceLineId: textValue(body.serviceLineId),
+      audienceId: textValue(body.audienceId),
+      offerId: textValue(body.offerId),
+    },
+  });
+
+  const enteredStrategy = {
     monthlyObjective: textValue(body.monthlyObjective),
     targetAudience: textValue(body.targetAudience),
     primaryOffer: textValue(body.primaryOffer),
@@ -173,12 +215,22 @@ export async function POST(request: Request) {
     proofPoints: textValue(body.proofPoints),
   };
 
+  const strategy = mergeStrategyWithMarketDefaults({
+    entered: enteredStrategy,
+    defaults: resolvedMarketProfile.strategyDefaults,
+  });
+
+  const businessContext = [enteredBusinessContext, resolvedMarketProfile.businessContext]
+    .filter(Boolean)
+    .join("\n\n");
+
   if (!overwriteExisting) {
     const { count, error: countError } = await supabase
       .from("campaigns")
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id)
       .eq("campaign_month", month)
+      .eq("account_id", activeAccountId)
       .is("archived_at", null);
 
     if (countError) {
@@ -223,9 +275,11 @@ export async function POST(request: Request) {
   const campaignRows = plan.map((week) =>
     campaignPayload({
       userId: user.id,
+      accountId: activeAccountId,
       month,
       campaignTheme,
       businessContext,
+      marketProfile: resolvedMarketProfile.metadata,
       week,
     })
   );
@@ -259,10 +313,12 @@ export async function POST(request: Request) {
     return week.assets.map((asset) =>
       assetPayload({
         userId: user.id,
+        accountId: activeAccountId,
         campaignId: campaign.id,
         month,
         week,
         asset,
+        marketProfile: resolvedMarketProfile.metadata,
       })
     );
   });
@@ -349,6 +405,7 @@ export async function POST(request: Request) {
 
   await supabase.from("activity_log").insert({
     user_id: user.id,
+    account_id: activeAccountId,
     activity_type: "monthly_campaign_package_generated",
     title: "Monthly campaign package generated",
     description: `${createdCampaigns.length} campaign(s) and ${createdAssets.length} generated asset(s) created for ${month}.`,
@@ -357,6 +414,9 @@ export async function POST(request: Request) {
       generationMode: "fast_batch_stable_planner",
       campaignTheme,
       businessContext,
+      activeAccountId,
+      marketProfile: resolvedMarketProfile.metadata,
+      marketProfileSummary: marketProfileSummary(marketProfileOptions),
       privateStrategy: strategy,
       campaignCount: createdCampaigns.length,
       assetCount: createdAssets.length,
@@ -370,6 +430,8 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: true,
     month,
+    activeAccountId,
+    marketProfile: resolvedMarketProfile.metadata,
     generationMode: "fast_batch_stable_planner",
     campaignCount: createdCampaigns.length,
     assetCount: createdAssets.length,

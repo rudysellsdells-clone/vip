@@ -167,11 +167,11 @@ function topicForWeek(strategy: MonthlyCampaignStrategyInput, weekNumber: number
   }
 
   const defaults = [
-    "AI search visibility",
-    "local authority building",
-    "content consistency",
-    "lead generation trust signals",
-    "monthly recap and promotion",
+    "customer problem awareness",
+    "service value and trust",
+    "seasonal timing",
+    "common objections",
+    "next step and offer reminder",
   ];
 
   return defaults[(weekNumber - 1) % defaults.length];
@@ -220,13 +220,13 @@ function publicCampaignAngle({
   strategy: MonthlyCampaignStrategyInput;
 }) {
   const topic = topicForWeek(strategy, weekNumber);
-  const audience = strategy.targetAudience || "local business owners";
-  const offer = strategy.primaryOffer || "stronger online visibility";
-  const differentiator = strategy.differentiator || "a practical visibility strategy";
+  const audience = strategy.targetAudience || "the right customers";
+  const offer = strategy.primaryOffer || "the right next step";
+  const differentiator = strategy.differentiator || "a practical service plan";
 
   const angles = [
-    `${audience} are paying closer attention to ${topic}, and the businesses that explain it clearly are more likely to earn trust before the first conversation.`,
-    `Improving ${topic} does not have to be complicated. The right plan connects helpful content, search visibility, and a clear next step for the customer.`,
+    `${audience} are paying closer attention to ${topic}, and the service businesses that explain it clearly are more likely to earn trust before the first conversation.`,
+    `Improving how people understand ${topic} does not have to be complicated. The right plan connects helpful education, clear proof, and a simple next step for the customer.`,
     `Many businesses waste time creating disconnected content. A better approach is to use ${topic} as the weekly anchor and turn it into useful posts, emails, and video ideas.`,
     `${topic} works best when it gives people a simple reason to act. That is where ${differentiator} can turn attention into real opportunities.`,
     `A strong month of content should not feel random. It should reinforce the same message, build confidence, and point people toward ${offer}.`,
@@ -280,11 +280,11 @@ function privateGenerationPrompt({
 }
 
 function cta(strategy: MonthlyCampaignStrategyInput) {
-  return strategy.callToAction || "Start with a visibility review and find the best opportunities to improve.";
+  return strategy.callToAction || "Reach out to learn the best next step.";
 }
 
 function publicOfferPhrase(strategy: MonthlyCampaignStrategyInput) {
-  return strategy.primaryOffer || "a stronger visibility plan";
+  return strategy.primaryOffer || "the recommended next step";
 }
 
 function hashtagFromPhrase(value: string) {
@@ -359,9 +359,8 @@ function socialHashtags({
     hashtagFromPhrase(topic),
     strategy.primaryOffer ? hashtagFromPhrase(strategy.primaryOffer) : "",
     strategy.differentiator ? hashtagFromPhrase(strategy.differentiator) : "",
-    "#WebSearchPros",
-    "#DigitalMarketing",
-    "#LocalSEO",
+    strategy.targetAudience ? hashtagFromPhrase(strategy.targetAudience) : "",
+    "#ServiceBusiness",
   ];
 
   const channelTag = assetType === "linkedin_post" ? "#BusinessGrowth" : "#LocalBusiness";
@@ -399,7 +398,7 @@ function contentForAsset({
         campaignAngle,
         "",
         "## What Business Owners Should Know",
-        `A clear plan around ${topic} helps people understand why your business is relevant before they ever reach out.`,
+        `A clear plan around ${topic} helps people understand why your service is relevant before they ever reach out.`,
         "",
         "The strongest content does not try to say everything at once. It focuses on one useful idea, explains it clearly, and connects that idea to the next step.",
         "",
@@ -414,7 +413,7 @@ function contentForAsset({
       return [
         `${socialEmojiSet({ topic, assetType })} ${campaignAngle}`,
         "",
-        "A good campaign does more than fill the calendar. It gives your audience a clear reason to trust you, remember you, and take the next step.",
+        "A good campaign does more than fill the calendar. It gives the right audience a clear reason to trust you, remember you, and take the next step.",
         "",
         callToAction,
         "",
@@ -427,7 +426,7 @@ function contentForAsset({
         "",
         campaignAngle,
         "",
-        "When your content is built around one clear idea, it becomes easier for people to understand what you do and why it matters.",
+        "When your content is built around one clear service idea, it becomes easier for people to understand what you do and why it matters.",
         "",
         callToAction,
         "",
@@ -442,12 +441,12 @@ function contentForAsset({
         "",
         campaignAngle,
         "",
-        `This is a good time to look at how ${topic} supports your visibility and how it connects to the next step you want people to take.`,
+        `This is a good time to look at how ${topic} supports the customer's decision and how it connects to the next step you want people to take.`,
         "",
         callToAction,
         "",
         "Best,",
-        "Web Search Pros",
+        "The Team",
       ].join("\n");
 
     case "video_script":
@@ -456,7 +455,7 @@ function contentForAsset({
         "",
         "20-second video script:",
         "",
-        `Hook: Most businesses do not need more random content. They need a clearer message around ${topic}.`,
+        `Hook: Most service businesses do not need more random content. They need a clearer message around ${topic}.`,
         "",
         `Main point: ${campaignAngle}`,
         "",
