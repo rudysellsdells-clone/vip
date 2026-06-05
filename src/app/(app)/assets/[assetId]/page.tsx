@@ -88,6 +88,15 @@ export default async function AssetDetailPage({ params }: PageProps) {
     .order("created_at", { ascending: false })
     .limit(10);
 
+  const revisions = (childRevisions ?? []) as Array<Record<string, any>>;
+  const approvalRows = (approvals ?? []) as Array<Record<string, any>>;
+  const canRevise = asset.status !== "published" && asset.status !== "sent";
+  const canPrepareLinkedIn =
+    asset.status === "approved" && isLinkedInAsset(asset.asset_type, asset.title);
+  const canRunGalaxyAi =
+    asset.status === "approved" &&
+    ["galaxyai_prompt", "galaxyai_image_prompt"].includes(String(asset.asset_type));
+
   const { data: galaxyWorkflows } = canRunGalaxyAi
     ? await supabase
         .from("galaxyai_workflows")
@@ -100,15 +109,6 @@ export default async function AssetDetailPage({ params }: PageProps) {
     galaxy_workflow_id: string;
     name: string;
   }>;
-
-  const revisions = (childRevisions ?? []) as Array<Record<string, any>>;
-  const approvalRows = (approvals ?? []) as Array<Record<string, any>>;
-  const canRevise = asset.status !== "published" && asset.status !== "sent";
-  const canPrepareLinkedIn =
-    asset.status === "approved" && isLinkedInAsset(asset.asset_type, asset.title);
-  const canRunGalaxyAi =
-    asset.status === "approved" &&
-    ["galaxyai_prompt", "galaxyai_image_prompt"].includes(String(asset.asset_type));
 
   return (
     <WebsitePage>
