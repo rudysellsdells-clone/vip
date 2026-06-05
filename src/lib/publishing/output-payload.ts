@@ -33,6 +33,52 @@ function firstValue(...values: Array<string | undefined | null>) {
   return values.map((value) => String(value ?? "").trim()).find(Boolean) || "";
 }
 
+function recordValue(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function socialImageForAsset(asset: PublishingAsset) {
+  const metadata = recordValue(asset.metadata);
+
+  const imageUrl = firstValue(
+    stringValue(metadata.hostedImageUrl),
+    stringValue(metadata.generatedSocialImageUrl),
+    stringValue(metadata.socialImageUrl),
+    stringValue(metadata.imageUrl),
+    stringValue(metadata.mediaUrl),
+    stringValue(asset.hosted_image_url),
+    stringValue(asset.generated_social_image_url),
+    stringValue(asset.image_url),
+    stringValue(asset.media_url)
+  );
+
+  const imageAssetId = firstValue(
+    stringValue(metadata.generatedSocialImageAssetId),
+    stringValue(metadata.socialImageAssetId),
+    stringValue(metadata.imageAssetId)
+  );
+
+  const imagePromptAssetId = firstValue(
+    stringValue(metadata.galaxyAiImagePromptAssetId),
+    stringValue(metadata.imagePromptAssetId)
+  );
+
+  return {
+    ready: Boolean(imageUrl),
+    url: imageUrl || null,
+    assetId: imageAssetId || null,
+    promptAssetId: imagePromptAssetId || null,
+  };
+}
+
 function wordpressPostType() {
   return firstValue(env("WORDPRESS_DEFAULT_POST_TYPE"), env("ZAPIER_WORDPRESS_DEFAULT_POST_TYPE"), "post");
 }
@@ -65,21 +111,17 @@ export function zapierMcpConfigForAsset(asset: PublishingAsset): ZapierMcpAssetC
       app: firstValue(env("ZAPIER_MCP_LINKEDIN_POST_APP"), env("ZAPIER_MCP_DEFAULT_APP"), "LinkedIn"),
       action: firstValue(
         env("ZAPIER_MCP_LINKEDIN_POST_ACTION"),
-        env("ZAPIER_LINKEDIN_CREATE_POST_ACTION_KEY"),
-        env("LINKEDIN_CREATE_POST_ACTION_KEY"),
-        "create_company_update"
+        env("ZAPIER_LINKEDIN_ACTION_KEY"),
+        "create_company_update",
+        env("ZAPIER_MCP_DEFAULT_ACTION")
       ),
       source: env("ZAPIER_MCP_LINKEDIN_POST_ACTION")
         ? "asset_specific"
-        : env("ZAPIER_LINKEDIN_CREATE_POST_ACTION_KEY") || env("LINKEDIN_CREATE_POST_ACTION_KEY")
-          ? "legacy_linkedin_action_key"
-          : "built_in_linkedin_company_update",
-      pageId:
-        env("ZAPIER_LINKEDIN_ORGANIZATION_ID") ||
-        env("LINKEDIN_COMPANY_PAGE_ID") ||
-        env("ZAPIER_LINKEDIN_COMPANY_ID") ||
-        null,
-      pageName: env("ZAPIER_LINKEDIN_PAGE_NAME") || env("LINKEDIN_COMPANY_PAGE_NAME") || null,
+        : env("ZAPIER_LINKEDIN_ACTION_KEY")
+          ? "linkedin_action_key"
+          : "default_create_company_update",
+      pageId: null,
+      pageName: env("ZAPIER_LINKEDIN_PAGE_NAME") || null,
     };
   }
 
@@ -163,6 +205,7 @@ function buildFacebookParams(asset: PublishingAsset, config: ZapierMcpAssetConfi
   const content = String(asset.content ?? "");
   const pageId = (config.pageId ?? env("ZAPIER_FACEBOOK_PAGE_ID")) || null;
   const pageName = (config.pageName ?? env("ZAPIER_FACEBOOK_PAGE_NAME")) || null;
+  const socialImage = socialImageForAsset(asset);
 
   return {
     asset_id: String(asset.id ?? ""),
@@ -185,41 +228,57 @@ function buildFacebookParams(asset: PublishingAsset, config: ZapierMcpAssetConfi
     facebook_page_name: pageName,
     facebookPageName: pageName,
 
+    has_generated_image: socialImage.ready,
+    hosted_image_url: socialImage.url,
+    generated_social_image_url: socialImage.url,
+    image_url: socialImage.url,
+    media_url: socialImage.url,
+    photo_url: socialImage.url,
+    picture: socialImage.url,
+    generated_social_image_asset_id: socialImage.assetId,
+    galaxyai_image_prompt_asset_id: socialImage.promptAssetId,
+
     scheduled_publish_at: asset.scheduled_publish_at ?? null,
   };
 }
 
 function buildLinkedInParams(asset: PublishingAsset, config: ZapierMcpAssetConfig) {
   const content = String(asset.content ?? "");
+  const socialImage = socialImageForAsset(asset);
+  const pageName = config.pageName ?? env("ZAPIER_LINKEDIN_PAGE_NAME") || null;
   const companyId = firstValue(
-    config.pageId,
+    env("ZAPIER_LINKEDIN_COMPANY_ID"),
     env("ZAPIER_LINKEDIN_ORGANIZATION_ID"),
     env("LINKEDIN_COMPANY_PAGE_ID"),
-    env("ZAPIER_LINKEDIN_COMPANY_ID"),
-    config.pageName,
-    env("ZAPIER_LINKEDIN_PAGE_NAME"),
-    "McCormick Web Marketing"
+    pageName
   );
 
   return {
     asset_id: String(asset.id ?? ""),
     asset_type: String(asset.asset_type ?? ""),
     campaign_id: asset.campaign_id ?? null,
-    source: "vip",
 
-    // Common VIP fields.
     text: content,
     content,
     message: content,
-
-    // Zapier LinkedIn Create Company Update commonly expects these fields.
-    company_id: companyId,
-    company: companyId,
-    organization_id: companyId,
-    linkedin_page_name: config.pageName ?? null,
     comment: content,
 
+    linkedin_page_name: pageName,
+    company_id: companyId || null,
+    company: companyId || pageName,
+    organization_id: companyId || null,
+
+    has_generated_image: socialImage.ready,
+    hosted_image_url: socialImage.url,
+    generated_social_image_url: socialImage.url,
+    image_url: socialImage.url,
+    media_url: socialImage.url,
+    thumbnail_url: socialImage.url,
+    generated_social_image_asset_id: socialImage.assetId,
+    galaxyai_image_prompt_asset_id: socialImage.promptAssetId,
+
     scheduled_publish_at: asset.scheduled_publish_at ?? null,
+    source: "vip",
   };
 }
 
@@ -269,6 +328,8 @@ function buildFacebookInstructions(config: ZapierMcpAssetConfig) {
     pageName || "[missing Facebook page name]",
     "",
     "Use params.message as the Facebook post body.",
+    "If params.hosted_image_url or params.image_url is present and the action supports media, attach it as the Facebook post image.",
+    "Do not append the image URL to the message text unless the platform/action requires it.",
     "Do not route this to WordPress.",
     "Do not ask a follow-up question if params.message and the locked Page value are present.",
     "Return the created post id, URL/permalink if available, status, and a concise confirmation message.",
@@ -284,19 +345,6 @@ export function buildPublishingInstructions(asset: PublishingAsset) {
     return buildFacebookInstructions(config);
   }
 
-  if (normalizedAssetType === "linkedin_post") {
-    return [
-      "Create a LinkedIn Company/Page update using the structured params provided with this tool call.",
-      "Use params.comment as the LinkedIn post body. If comment is unavailable, use params.message or params.content.",
-      "Do not publish to a personal LinkedIn profile.",
-      config.pageName ? `Use destination company/page: ${config.pageName}.` : "",
-      config.pageId ? `Use destination company/page id: ${config.pageId}.` : "",
-      "Return the created update id, url if available, status, and a concise confirmation message.",
-    ]
-      .filter(Boolean)
-      .join(" ");
-  }
-
   return [
     `Send this approved VIP ${assetType} to the configured Zapier destination.`,
     "Use the params object as the source of truth.",
@@ -306,6 +354,9 @@ export function buildPublishingInstructions(asset: PublishingAsset) {
     config.pageName ? `Use destination page/account: ${config.pageName}.` : "",
     config.pageId ? `Use destination page id: ${config.pageId}.` : "",
     "Do not invent missing facts, statistics, claims, dates, or links.",
+    normalizedAssetType === "linkedin_post" || normalizedAssetType === "facebook_post"
+      ? "If params.hosted_image_url or params.image_url is present and the selected action supports image/media attachment, attach that hosted image to the social post. Do not ask a follow-up question just because an image is present."
+      : "",
     "Return the created record id, url if available, status, and a concise human-readable message.",
   ]
     .filter(Boolean)
