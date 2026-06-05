@@ -4,6 +4,10 @@ import {
   assetTypeLabel,
 } from "@/lib/content-calendar/monthly-campaign-blueprint";
 import { buildGalaxyAiPromptFromVideoScript } from "@/lib/galaxyai/prompt-builder";
+import {
+  buildCampaignVisualDirection,
+  buildGalaxyAiSocialImagePrompt,
+} from "@/lib/galaxyai/image-prompt-builder";
 
 export type MonthlyCampaignStrategyInput = {
   monthlyObjective?: string;
@@ -41,6 +45,7 @@ export type WeeklyCampaignPlan = {
     sortOrder: number;
     calendarNotes: string;
     generationPrompt: string;
+    metadata?: Record<string, unknown>;
   }>;
 };
 
@@ -533,54 +538,118 @@ export function buildMonthlyCampaignPlan(input: MonthlyCampaignPlanInput): Weekl
           weekNumber: week.weekNumber,
         });
 
+        const campaignVisualDirectionContent = buildCampaignVisualDirection({
+          publicTitle,
+          campaignAngle,
+          businessContext: input.businessContext,
+          strategy,
+        });
+
         return WEEKLY_CAMPAIGN_ASSET_BLUEPRINT.map((slot) => {
           const publishDate = addDays(week.start, slot.dayOffset);
           const scheduledAt = setLocalTime(publishDate, slot.hour, slot.minute);
           const label = slot.label;
+          const sourceSocialAssetType = slot.sourceAssetType;
+          const sourceSocialPostContent = sourceSocialAssetType
+            ? contentForAsset({
+                assetType: sourceSocialAssetType,
+                publicTitle,
+                campaignAngle,
+                label: label.replace(/ image prompt$/i, " post"),
+                strategy,
+                weekNumber: week.weekNumber,
+              })
+            : "";
+
           const content =
-            slot.assetType === "galaxyai_prompt"
-              ? buildGalaxyAiPromptFromVideoScript({
-                  title: publicTitle,
-                  videoScript: videoScriptContent,
-                  campaignAngle,
-                  callToAction: cta(strategy),
-                  audience: strategy.targetAudience,
-                })
-              : slot.assetType === "video_script"
-                ? videoScriptContent
-                : contentForAsset({
-                    assetType: slot.assetType,
+            slot.assetType === "campaign_visual_direction"
+              ? campaignVisualDirectionContent
+              : slot.assetType === "galaxyai_image_prompt" && sourceSocialAssetType
+                ? buildGalaxyAiSocialImagePrompt({
+                    platform: sourceSocialAssetType === "linkedin_post" ? "linkedin" : "facebook",
                     publicTitle,
                     campaignAngle,
-                    label,
+                    campaignVisualDirection: campaignVisualDirectionContent,
+                    postCopy: sourceSocialPostContent,
                     strategy,
-                    weekNumber: week.weekNumber,
-                  });
+                  })
+                : slot.assetType === "galaxyai_prompt"
+                  ? buildGalaxyAiPromptFromVideoScript({
+                      title: publicTitle,
+                      videoScript: videoScriptContent,
+                      campaignAngle,
+                      callToAction: cta(strategy),
+                      audience: strategy.targetAudience,
+                    })
+                  : slot.assetType === "video_script"
+                    ? videoScriptContent
+                    : contentForAsset({
+                        assetType: slot.assetType,
+                        publicTitle,
+                        campaignAngle,
+                        label,
+                        strategy,
+                        weekNumber: week.weekNumber,
+                      });
+
+          const metadata =
+            slot.assetType === "campaign_visual_direction"
+              ? {
+                  visualAssetRole: "weekly_campaign_visual_direction",
+                  appliesToAssetTypes: ["linkedin_post", "facebook_post", "galaxyai_image_prompt"],
+                }
+              : slot.assetType === "galaxyai_image_prompt"
+                ? {
+                    visualAssetRole: "social_image_prompt",
+                    galaxyAiImagePrompt: true,
+                    sourceSocialAssetType,
+                    sourceSocialAssetSortOrder: slot.sourceSortOrder ?? null,
+                    imagePlatform: sourceSocialAssetType === "linkedin_post" ? "linkedin" : "facebook",
+                    imageFormat: "square_1200x1200",
+                    requiresHumanReviewBeforeGalaxyAiRun: true,
+                    artifactReviewInstruction:
+                      "Review the output at least three times for artifacts, distorted people, malformed text, fake metrics, and mismatched objects before accepting the generated image.",
+                  }
+                : null;
 
           return {
             assetType: slot.assetType,
             title:
-              slot.assetType === "galaxyai_prompt"
-                ? `${publicTitle} — GalaxyAI video prompt`
-                : `${publicTitle} — ${assetTypeLabel(slot.assetType)}`,
+              slot.assetType === "campaign_visual_direction"
+                ? `${publicTitle} — Weekly visual direction`
+                : slot.assetType === "galaxyai_image_prompt"
+                  ? `${publicTitle} — ${sourceSocialAssetType === "linkedin_post" ? "LinkedIn" : "Facebook"} image prompt`
+                  : slot.assetType === "galaxyai_prompt"
+                    ? `${publicTitle} — GalaxyAI video prompt`
+                    : `${publicTitle} — ${assetTypeLabel(slot.assetType)}`,
             content,
+            metadata,
             generationPrompt: [
               generationPrompt,
               "",
               `Asset Type: ${slot.assetType}`,
               `Asset Slot: ${label}`,
-              slot.assetType === "galaxyai_prompt"
-                ? "Create a production-ready GalaxyAI prompt from the companion Friday video script. Only this prompt asset should be sent to GalaxyAI after approval."
-                : "Generate public-facing content only.",
+              slot.assetType === "campaign_visual_direction"
+                ? "Create the shared weekly visual direction for all campaign social images."
+                : slot.assetType === "galaxyai_image_prompt"
+                  ? "Create a production-ready GalaxyAI social image prompt that supports the companion social post. Do not generate or publish the image automatically."
+                  : slot.assetType === "galaxyai_prompt"
+                    ? "Create a production-ready GalaxyAI video prompt from the companion Friday video script. Only this prompt asset should be sent to GalaxyAI after approval."
+                    : "Generate public-facing content only.",
               "Do not include the private brief, raw strategy labels, internal month, campaign name, week number, or planning notes.",
-            ].join("\n"),
+            ].join("
+"),
             plannedPublishDate: dateKey(publishDate),
             scheduledPublishAt: scheduledAt.toISOString(),
             sortOrder: slot.sortOrder,
             calendarNotes:
-              slot.assetType === "galaxyai_prompt"
-                ? `${label}. Companion GalaxyAI prompt generated from the Friday video script. Review and approve this prompt before sending it to GalaxyAI.`
-                : `${label}. Generated as part of weekly campaign package.`,
+              slot.assetType === "campaign_visual_direction"
+                ? `${label}. Shared visual system for this campaign week. Use it to keep image prompts consistent across platforms.`
+                : slot.assetType === "galaxyai_image_prompt"
+                  ? `${label}. Companion GalaxyAI image prompt for the matching ${sourceSocialAssetType === "linkedin_post" ? "LinkedIn" : "Facebook"} post. Review and approve before sending to GalaxyAI.`
+                  : slot.assetType === "galaxyai_prompt"
+                    ? `${label}. Companion GalaxyAI prompt generated from the Friday video script. Review and approve this prompt before sending it to GalaxyAI.`
+                    : `${label}. Generated as part of weekly campaign package.`,
           };
         });
       })(),

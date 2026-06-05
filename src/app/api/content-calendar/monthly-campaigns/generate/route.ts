@@ -43,7 +43,7 @@ function campaignSummary(week: ReturnType<typeof buildMonthlyCampaignPlan>[numbe
     week.campaignAngle,
     "",
     `Campaign week ${week.weekNumber}: ${week.weekStartDate} to ${week.weekEndDate}.`,
-    "Includes 1 blog post, 5 LinkedIn posts, 5 Facebook posts, 1 email, 1 video script, and 1 GalaxyAI prompt.",
+    "Includes 1 blog post, 5 LinkedIn posts, 5 Facebook posts, 1 email, 1 video script, 1 GalaxyAI video prompt, 1 weekly visual direction, and 10 GalaxyAI social image prompts.",
   ].join("\n");
 }
 
@@ -101,6 +101,8 @@ function campaignPayload({
         email: 1,
         video_script: 1,
         galaxyai_prompt: 1,
+        campaign_visual_direction: 1,
+        galaxyai_image_prompt: 10,
       },
     },
   };
@@ -145,6 +147,7 @@ function assetPayload({
           : null,
       sourceAssetType: asset.assetType === "galaxyai_prompt" ? "video_script" : null,
       galaxyAiPromptDerivedFromVideoScript: asset.assetType === "galaxyai_prompt",
+      ...(asset.metadata ?? {}),
     }),
     status: "needs_review",
 
@@ -394,6 +397,70 @@ export async function POST(request: Request) {
     if (linkError) {
       linkWarnings.push(
         `Unable to link GalaxyAI prompt ${promptAsset.id} to video script ${companionVideoScript.id}: ${linkError.message}`
+      );
+    }
+  }
+
+
+  for (const imagePromptAsset of createdAssets.filter(
+    (asset) => asset.asset_type === "galaxyai_image_prompt"
+  )) {
+    const imagePromptMetadata =
+      imagePromptAsset.metadata &&
+      typeof imagePromptAsset.metadata === "object" &&
+      !Array.isArray(imagePromptAsset.metadata)
+        ? imagePromptAsset.metadata
+        : {};
+
+    const sourceSocialAssetType = String(imagePromptMetadata.sourceSocialAssetType ?? "");
+    const sourceSocialAssetSortOrder = Number(imagePromptMetadata.sourceSocialAssetSortOrder ?? 0);
+
+    const companionSocialPost = createdAssets.find(
+      (asset) =>
+        asset.campaign_id === imagePromptAsset.campaign_id &&
+        Number(asset.campaign_week_number) === Number(imagePromptAsset.campaign_week_number) &&
+        asset.asset_type === sourceSocialAssetType &&
+        Number(asset.calendar_sort_order) === sourceSocialAssetSortOrder
+    );
+
+    const visualDirectionAsset = createdAssets.find(
+      (asset) =>
+        asset.campaign_id === imagePromptAsset.campaign_id &&
+        Number(asset.campaign_week_number) === Number(imagePromptAsset.campaign_week_number) &&
+        asset.asset_type === "campaign_visual_direction"
+    );
+
+    if (!companionSocialPost?.id) {
+      linkWarnings.push(
+        `GalaxyAI image prompt ${imagePromptAsset.id} was created, but no matching social post was found for parent linking.`
+      );
+      continue;
+    }
+
+    const { error: imageLinkError } = await supabase
+      .from("generated_assets")
+      .update({
+        parent_asset_id: companionSocialPost.id,
+        metadata: toJson({
+          ...imagePromptMetadata,
+          source_social_asset_id: companionSocialPost.id,
+          source_social_asset_type: sourceSocialAssetType,
+          display_with_asset_id: companionSocialPost.id,
+          companion_to_asset_type: sourceSocialAssetType,
+          visual_direction_asset_id: visualDirectionAsset?.id ?? null,
+          galaxyAiExecutionAsset: false,
+          executionRule:
+            "This is a GalaxyAI social image prompt. It should be reviewed and approved before a later image-generation flow sends it to GalaxyAI.",
+          storagePlan:
+            "Future generated images should be stored in Supabase Storage under account/campaign/asset paths before being attached to social publishing payloads.",
+        }),
+      })
+      .eq("id", imagePromptAsset.id)
+      .eq("user_id", user.id);
+
+    if (imageLinkError) {
+      linkWarnings.push(
+        `Unable to link GalaxyAI image prompt ${imagePromptAsset.id} to social post ${companionSocialPost.id}: ${imageLinkError.message}`
       );
     }
   }
