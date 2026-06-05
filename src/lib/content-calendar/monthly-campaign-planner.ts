@@ -637,8 +637,7 @@ export function buildMonthlyCampaignPlan(input: MonthlyCampaignPlanInput): Weekl
                     ? "Create a production-ready GalaxyAI video prompt from the companion Friday video script. Only this prompt asset should be sent to GalaxyAI after approval."
                     : "Generate public-facing content only.",
               "Do not include the private brief, raw strategy labels, internal month, campaign name, week number, or planning notes.",
-            ].join("
-"),
+            ].join("\n"),
             plannedPublishDate: dateKey(publishDate),
             scheduledPublishAt: scheduledAt.toISOString(),
             sortOrder: slot.sortOrder,
