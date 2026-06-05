@@ -556,6 +556,8 @@ export async function GET(_request: Request, context: RouteContext) {
       }
     }
 
+    const createdSocialImageMetadata = jsonRecord(createdSocialImageAsset?.metadata);
+
     const { data: updatedRun, error: updateError } = await supabase
       .from("galaxyai_runs")
       .update({
@@ -569,7 +571,7 @@ export async function GET(_request: Request, context: RouteContext) {
           socialImageAssetId: createdSocialImageAsset?.id ?? null,
           generatedImageUrl:
             stringOrNull(createdSocialImageAsset?.content) ??
-            stringOrNull(createdSocialImageAsset?.metadata?.hostedImageUrl) ??
+            stringOrNull(createdSocialImageMetadata.hostedImageUrl) ??
             null,
         }),
         error:
