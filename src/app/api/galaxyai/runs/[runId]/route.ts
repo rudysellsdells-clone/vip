@@ -603,16 +603,16 @@ export async function GET(_request: Request, context: RouteContext) {
             ? "GalaxyAI image run completed and social image asset was created."
             : `GalaxyAI run completed with ${matchedMedia.length} media item(s).`
           : `GalaxyAI run is ${status}.`,
-      metadata: {
-        localRunId: localRun.id,
-        galaxyRunId: localRun.galaxy_run_id,
+      metadata: toJson({
+        localRunId: stringOrNull(localRun.id),
+        galaxyRunId: stringOrNull(localRun.galaxy_run_id),
         status,
         mediaCount: matchedMedia.length,
         mediaAssetCreated: Boolean(createdMediaAsset),
-        mediaAssetId: createdMediaAsset?.id ?? null,
+        mediaAssetId: stringOrNull(createdMediaAsset?.id),
         socialImageAssetCreated: Boolean(createdSocialImageAsset),
-        socialImageAssetId: createdSocialImageAsset?.id ?? null,
-      },
+        socialImageAssetId: stringOrNull(createdSocialImageAsset?.id),
+      }),
     });
 
     return NextResponse.json({
