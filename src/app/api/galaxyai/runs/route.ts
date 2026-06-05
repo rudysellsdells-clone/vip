@@ -20,6 +20,23 @@ function toJson(value: unknown): Json {
   return JSON.parse(JSON.stringify(value)) as Json;
 }
 
+function jsonRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function numberOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+
 function buildGalaxyAiValues(input: {
   workflowId: string;
   prompt: string;
@@ -100,6 +117,8 @@ export async function POST(request: Request) {
       );
     }
 
+    const assetMetadata = jsonRecord(asset.metadata);
+
     const values = buildGalaxyAiValues({
       workflowId,
       prompt: asset.content,
@@ -130,10 +149,10 @@ export async function POST(request: Request) {
               ? "social_image_generation"
               : "video_or_media_generation",
           parentAssetId: asset.parent_asset_id ?? null,
-          sourceSocialAssetType: asset.metadata?.sourceSocialAssetType ?? null,
-          sourceSocialAssetSortOrder: asset.metadata?.sourceSocialAssetSortOrder ?? null,
-          imagePlatform: asset.metadata?.imagePlatform ?? null,
-          imageFormat: asset.metadata?.imageFormat ?? null,
+          sourceSocialAssetType: stringOrNull(assetMetadata.sourceSocialAssetType),
+          sourceSocialAssetSortOrder: numberOrNull(assetMetadata.sourceSocialAssetSortOrder),
+          imagePlatform: stringOrNull(assetMetadata.imagePlatform),
+          imageFormat: stringOrNull(assetMetadata.imageFormat),
           inputMapping:
             GALAXYAI_WORKFLOW_INPUT_MAPPINGS[workflowId] ?? "fallback_prompt_mapping",
         }),
