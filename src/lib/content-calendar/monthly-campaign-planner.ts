@@ -610,7 +610,7 @@ export function buildMonthlyCampaignPlan(input: MonthlyCampaignPlanInput): Weekl
                     artifactReviewInstruction:
                       "Review the output at least three times for artifacts, distorted people, malformed text, fake metrics, and mismatched objects before accepting the generated image.",
                   }
-                : null;
+                : undefined;
 
           return {
             assetType: slot.assetType,
