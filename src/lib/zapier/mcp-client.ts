@@ -77,26 +77,38 @@ function extractNestedToolError(result: unknown) {
     content?: Array<{ type?: string; text?: string }>;
   };
 
-  if (maybeResult.isError !== true) return null;
-
-  const textContent = maybeResult.content?.find(
-    (item) => item.type === "text" && typeof item.text === "string"
-  )?.text;
+  const textContent = maybeResult.content
+    ?.map((item) => (item.type === "text" && typeof item.text === "string" ? item.text : ""))
+    .filter(Boolean)
+    .join("\n")
+    .trim();
 
   if (!textContent) {
-    return "Zapier MCP returned an error.";
+    return maybeResult.isError === true ? "Zapier MCP returned an error." : null;
   }
 
   try {
     const parsed = JSON.parse(textContent) as {
       error?: string;
       message?: string;
+      errorDetails?: { message?: string };
     };
 
-    return parsed.error ?? parsed.message ?? textContent;
+    const parsedError =
+      parsed.error ?? parsed.message ?? parsed.errorDetails?.message ?? null;
+
+    if (parsedError) {
+      return parsedError;
+    }
   } catch {
+    // Non-JSON text is allowed unless it clearly looks like an MCP error.
+  }
+
+  if (/^MCP error/i.test(textContent) || /Input validation error/i.test(textContent)) {
     return textContent;
   }
+
+  return maybeResult.isError === true ? textContent : null;
 }
 
 function readOptionString(options: Record<string, any>, keys: string[]) {
@@ -180,6 +192,72 @@ function getCompatToolArgs(
   return getZapierToolArgs(input, actionName, toolName);
 }
 
+
+function isGenericZapierExecutor(toolName: string) {
+  return toolName === "execute_zapier_write_action" || toolName === "execute_zapier_read_action";
+}
+
+function envValue(...keys: string[]) {
+  for (const key of keys) {
+    const value = process.env[key]?.trim();
+
+    if (value) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
+function selectedApiForApp(app: unknown) {
+  const normalized = String(app ?? "").trim().toLowerCase();
+
+  if (normalized.includes("linkedin")) {
+    return envValue("ZAPIER_LINKEDIN_SELECTED_API", "ZAPIER_MCP_LINKEDIN_SELECTED_API") || "LinkedInCLIAPI";
+  }
+
+  if (normalized.includes("facebook")) {
+    return envValue("ZAPIER_FACEBOOK_SELECTED_API", "ZAPIER_MCP_FACEBOOK_SELECTED_API") || "FacebookV2CLIAPI";
+  }
+
+  if (normalized.includes("gmail") || normalized.includes("google mail")) {
+    return envValue("ZAPIER_GMAIL_SELECTED_API", "ZAPIER_MCP_GMAIL_SELECTED_API") || "GoogleMailV2CLIAPI";
+  }
+
+  if (normalized.includes("wordpress")) {
+    return envValue("ZAPIER_WORDPRESS_SELECTED_API", "ZAPIER_MCP_WORDPRESS_SELECTED_API") || "WordPressCLIAPI";
+  }
+
+  return envValue("ZAPIER_MCP_SELECTED_API");
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function normalizeGenericZapierArgs(toolName: string, args: Record<string, unknown>) {
+  if (!isGenericZapierExecutor(toolName)) {
+    return args;
+  }
+
+  const normalized = { ...args };
+  const app = normalized.app;
+  const params = asRecord(normalized.params);
+
+  normalized.selected_api =
+    typeof normalized.selected_api === "string" && normalized.selected_api.trim()
+      ? normalized.selected_api.trim()
+      : selectedApiForApp(app);
+
+  normalized.params = params;
+
+  return normalized;
+}
+
 export async function callZapierMcpTool({
   toolName,
   args,
@@ -190,6 +268,7 @@ export async function callZapierMcpTool({
   requestId: string;
 }) {
   const serverUrl = getMcpServerUrl();
+  const normalizedArgs = normalizeGenericZapierArgs(toolName, args);
   const token = getMcpToken();
 
   const headers: Record<string, string> = {
@@ -210,7 +289,7 @@ export async function callZapierMcpTool({
       method: "tools/call",
       params: {
         name: toolName,
-        arguments: args,
+        arguments: normalizedArgs,
       },
     }),
   });

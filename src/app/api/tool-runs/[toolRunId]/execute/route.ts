@@ -14,6 +14,70 @@ function canExecuteToolRun(status: string) {
   return ["planned", "waiting_approval", "failed"].includes(status);
 }
 
+
+function isGenericZapierExecutor(toolName: string) {
+  return toolName === "execute_zapier_write_action" || toolName === "execute_zapier_read_action";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function validateZapierToolArgs(toolName: string, toolArgs: Record<string, unknown>) {
+  if (!isGenericZapierExecutor(toolName)) {
+    return "";
+  }
+
+  const selectedApi = typeof toolArgs.selected_api === "string" ? toolArgs.selected_api.trim() : "";
+
+  if (!selectedApi) {
+    return "Zapier MCP selected_api is missing for the generic executor.";
+  }
+
+  if (!isRecord(toolArgs.params)) {
+    return "Zapier MCP params object is missing for the generic executor.";
+  }
+
+  if (Object.keys(toolArgs.params).length === 0) {
+    return "Zapier MCP params object is empty. The field values must be sent as structured params, not only as instructions.";
+  }
+
+  return "";
+}
+
+function toolResultContainsError(result: unknown) {
+  if (!result || typeof result !== "object") return "";
+
+  const content = (result as { content?: Array<{ text?: string }> }).content;
+
+  if (!Array.isArray(content)) return "";
+
+  const text = content
+    .map((item) => (typeof item.text === "string" ? item.text : ""))
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+
+  if (!text) return "";
+
+  try {
+    const parsed = JSON.parse(text) as { error?: string; message?: string };
+
+    if (parsed.error || parsed.message?.toLowerCase().includes("error")) {
+      return parsed.error ?? parsed.message ?? text;
+    }
+  } catch {
+    // Keep checking text below.
+  }
+
+  if (/^MCP error/i.test(text) || /Input validation error/i.test(text)) {
+    return text;
+  }
+
+  return "";
+}
+
+
 export async function POST(_request: Request, context: RouteContext) {
   const { toolRunId } = await context.params;
   const supabase = await createClient();
@@ -58,6 +122,25 @@ export async function POST(_request: Request, context: RouteContext) {
   const input = toolRun.input ?? {};
   const toolName = getZapierToolName(input, toolRun.action_name);
   const toolArgs = getZapierToolArgs(input, toolRun.action_name, toolName);
+  const preflightError = validateZapierToolArgs(toolName, toolArgs);
+
+  if (preflightError) {
+    await supabase
+      .from("tool_runs")
+      .update({
+        status: "failed",
+        error: preflightError,
+        output: toJsonValue({
+          toolName,
+          toolArgs,
+          error: preflightError,
+        }),
+      })
+      .eq("id", toolRun.id)
+      .eq("user_id", user.id);
+
+    return NextResponse.json({ error: preflightError, toolArgs }, { status: 400 });
+  }
 
   await supabase
     .from("tool_runs")
@@ -75,6 +158,12 @@ export async function POST(_request: Request, context: RouteContext) {
       args: toolArgs,
       requestId: toolRun.id,
     });
+
+    const resultError = toolResultContainsError(result);
+
+    if (resultError) {
+      throw new Error(resultError);
+    }
 
     const output = toJsonValue({
       toolName,

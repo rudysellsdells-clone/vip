@@ -56,6 +56,89 @@ function readObject(value: unknown) {
   return value as Record<string, unknown>;
 }
 
+function nonEmptyRecord(value: Record<string, unknown>) {
+  return Object.values(value).some((item) => item !== null && item !== undefined && item !== "");
+}
+
+function pickKnownParams(input: Record<string, unknown>, keys: string[]) {
+  const picked: Record<string, unknown> = {};
+
+  for (const key of keys) {
+    const value = input[key];
+
+    if (value !== null && value !== undefined && value !== "") {
+      picked[key] = value;
+    }
+  }
+
+  return picked;
+}
+
+function paramsForConfig(input: Record<string, unknown>, config: ZapierActionConfig) {
+  const explicitParams = readObject(input.params);
+
+  if (nonEmptyRecord(explicitParams)) {
+    return explicitParams;
+  }
+
+  const normalizedApp = config.app.toLowerCase();
+
+  if (normalizedApp.includes("linkedin")) {
+    return pickKnownParams(input, [
+      "comment",
+      "message",
+      "content",
+      "text",
+      "company_id",
+      "company",
+      "organization_id",
+      "linkedin_page_name",
+      "allow_reserved_characters",
+      "image",
+      "image_url",
+      "hosted_image_url",
+      "media_url",
+      "image_type",
+    ]);
+  }
+
+  if (normalizedApp.includes("facebook")) {
+    return pickKnownParams(input, [
+      "message",
+      "content",
+      "Page",
+      "page",
+      "page_id",
+      "pageId",
+      "facebook_page_id",
+      "facebookPageId",
+      "source",
+      "photo_url",
+      "picture",
+      "image_url",
+      "hosted_image_url",
+      "media_url",
+    ]);
+  }
+
+  if (normalizedApp.includes("gmail")) {
+    return pickKnownParams(input, [
+      "to",
+      "recipient",
+      "subject",
+      "body",
+      "message",
+      "content",
+      "html",
+      "cc",
+      "bcc",
+    ]);
+  }
+
+  return explicitParams;
+}
+
+
 function firstString(...values: unknown[]) {
   for (const value of values) {
     if (typeof value === "string" && value.trim()) {
@@ -256,8 +339,8 @@ export function getZapierToolArgs(
   toolName?: string | null
 ) {
   const objectInput = getZapierInputObject(input);
-  const params = readObject(objectInput.params);
   const config = getZapierActionConfig(input, actionName);
+  const params = config ? paramsForConfig(objectInput, config) : readObject(objectInput.params);
 
   if (config && isGenericZapierExecutor(toolName)) {
     return {
