@@ -39,6 +39,16 @@ function dateLabel(value: unknown) {
   }).format(date);
 }
 
+function isAlreadySentOrPublished(asset: Record<string, any>) {
+  return (
+    Boolean(asset.published_at) ||
+    String(asset.status ?? "") === "published" ||
+    String(asset.status ?? "") === "sent_to_zapier" ||
+    String(asset.scheduling_status ?? "") === "published" ||
+    String(asset.scheduling_status ?? "") === "sent_to_zapier"
+  );
+}
+
 export default async function PublishingReadyPage({ searchParams }: PageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const assetId = firstValue(resolvedSearchParams.asset);
@@ -84,6 +94,7 @@ export default async function PublishingReadyPage({ searchParams }: PageProps) {
     );
   }
 
+  const alreadySentOrPublished = isAlreadySentOrPublished(asset);
   const approvedForPublishing = isApprovedForPublishing(asset);
   const config = zapierMcpConfigForAsset(asset);
   const params = buildPublishingOutputParams(asset);
@@ -112,7 +123,11 @@ export default async function PublishingReadyPage({ searchParams }: PageProps) {
                 Quality: {String(asset.quality_workflow_status ?? "not_checked").replaceAll("_", " ")}
               </span>
               <span className={websiteStyles.badge}>
-                {approvedForPublishing ? "Eligible to send" : "Not eligible"}
+                {alreadySentOrPublished
+                  ? "Already sent/published"
+                  : approvedForPublishing
+                    ? "Eligible to send"
+                    : "Not eligible"}
               </span>
             </div>
 
@@ -144,13 +159,23 @@ export default async function PublishingReadyPage({ searchParams }: PageProps) {
         title="Send to ZapierMCP"
         description="This sends the structured VIP output payload to the configured ZapierMCP action."
       >
-        {approvedForPublishing ? (
+        {alreadySentOrPublished ? (
+          <article className={websiteStyles.card}>
+            <h3 className={websiteStyles.cardTitle}>Already sent or published</h3>
+            <p className={websiteStyles.cardText}>
+              VIP has this asset marked as sent or published. This is not a failure state. Reset or duplicate the asset before retesting to avoid posting the same content twice.
+            </p>
+            <p className={websiteStyles.cardMeta}>
+              Status: {String(asset.status ?? "unknown")} · Scheduling: {String(asset.scheduling_status ?? "unknown")}
+            </p>
+          </article>
+        ) : approvedForPublishing ? (
           <article className={websiteStyles.card}>
             <SendAssetToZapierMcpButton assetId={String(asset.id)} />
           </article>
         ) : (
           <div className={websiteStyles.empty}>
-            This asset is not approved, active, and latest-version. It cannot be sent yet.
+            This asset is not ready to send yet. It must be approved, active, and the latest version.
           </div>
         )}
       </WebsiteSection>

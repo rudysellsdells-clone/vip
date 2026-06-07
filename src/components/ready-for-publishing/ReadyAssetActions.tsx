@@ -7,14 +7,7 @@ import formStyles from "@/components/forms/VipForm.module.css";
 import { websiteStyles } from "@/components/website-ui/WebsitePage";
 
 function canUsePublishingReady(assetType: string) {
-  return [
-    "linkedin_post",
-    "facebook_post",
-    "email",
-    "video_script",
-    "galaxyai_prompt",
-    "galaxyai_image_prompt",
-  ].includes(assetType);
+  return assetType === "linkedin_post" || assetType === "facebook_post";
 }
 
 export function ReadyAssetActions({
@@ -81,8 +74,8 @@ export function ReadyAssetActions({
         ) : null}
 
         {status === "approved" && canUsePublishingReady(assetType) ? (
-          <Link href="/publishing-ready" className={websiteStyles.link}>
-            Open Publishing Ready →
+          <Link href={`/publishing-ready?asset=${assetId}`} className={websiteStyles.link}>
+            Publish via ZapierMCP →
           </Link>
         ) : null}
 

@@ -39,10 +39,12 @@ export function getPublishingRoute(assetType: string | null | undefined): Publis
         provider: "zapier",
         channel: "linkedin",
         actionKey: envValue(
+          "ZAPIER_MCP_LINKEDIN_POST_ACTION",
+          "ZAPIER_LINKEDIN_ACTION_KEY",
           "ZAPIER_LINKEDIN_CREATE_POST_ACTION_KEY",
           "LINKEDIN_CREATE_POST_ACTION_KEY",
           "NEXT_PUBLIC_ZAPIER_LINKEDIN_CREATE_POST_ACTION_KEY"
-        ),
+        ) || "create_company_update",
         destinationLabel: "LinkedIn",
         requiresConfiguredAction: true,
       };
@@ -52,10 +54,12 @@ export function getPublishingRoute(assetType: string | null | undefined): Publis
         provider: "zapier",
         channel: "facebook",
         actionKey: envValue(
+          "ZAPIER_MCP_FACEBOOK_POST_ACTION",
+          "ZAPIER_FACEBOOK_ACTION_KEY",
           "ZAPIER_FACEBOOK_CREATE_POST_ACTION_KEY",
           "FACEBOOK_CREATE_POST_ACTION_KEY",
           "NEXT_PUBLIC_ZAPIER_FACEBOOK_CREATE_POST_ACTION_KEY"
-        ),
+        ) || "page_stream",
         destinationLabel: "Facebook",
         requiresConfiguredAction: true,
       };
@@ -65,11 +69,13 @@ export function getPublishingRoute(assetType: string | null | undefined): Publis
         provider: "zapier",
         channel: "gmail",
         actionKey: envValue(
+          "ZAPIER_MCP_EMAIL_ACTION",
+          "ZAPIER_GMAIL_CREATE_DRAFT_ACTION",
           "ZAPIER_GMAIL_DRAFT_ACTION_KEY",
           "GMAIL_DRAFT_ACTION_KEY",
           "GMAIL_CREATE_DRAFT_ACTION_KEY",
           "NEXT_PUBLIC_ZAPIER_GMAIL_DRAFT_ACTION_KEY"
-        ),
+        ) || "create_draft",
         destinationLabel: "Gmail Draft",
         requiresConfiguredAction: true,
       };
@@ -114,13 +120,13 @@ export function getPublishingRoute(assetType: string | null | undefined): Publis
 export function getZapierAppForChannel(channel: PublishingRoute["channel"]) {
   switch (channel) {
     case "linkedin":
-      return "linkedin";
+      return "LinkedIn";
     case "facebook":
-      return "facebook";
+      return "Facebook Pages";
     case "gmail":
-      return "gmail";
+      return "Gmail";
     case "wordpress":
-      return "wordpress";
+      return "WordPress";
     default:
       return "zapier";
   }
@@ -296,8 +302,11 @@ export function buildPublishingParams({
     return {
       to: recipientEmail ?? "",
       recipient_email: recipientEmail ?? "",
+      recipientEmail: recipientEmail ?? "",
       subject: title,
       body: content,
+      body_plain: content,
+      email_body: content,
       asset_id: asset.id,
       asset_type: asset.asset_type,
       scheduled_publish_at: scheduledPublishAt,

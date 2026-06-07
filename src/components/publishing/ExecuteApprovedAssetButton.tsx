@@ -8,12 +8,16 @@ function needsRecipient(assetType: string) {
   return assetType === "email";
 }
 
+function usesCanonicalZapierMcp(assetType: string) {
+  return assetType === "linkedin_post" || assetType === "facebook_post";
+}
+
 function buttonLabel(assetType: string) {
   switch (assetType) {
     case "linkedin_post":
-      return "Execute LinkedIn";
+      return "Publish LinkedIn via ZapierMCP";
     case "facebook_post":
-      return "Execute Facebook";
+      return "Publish Facebook via ZapierMCP";
     case "email":
       return "Create Gmail Draft";
     case "video_script":
@@ -29,6 +33,10 @@ function buttonLabel(assetType: string) {
 }
 
 function confirmText(assetType: string) {
+  if (assetType === "linkedin_post" || assetType === "facebook_post") {
+    return "Publish this approved social post through the canonical ZapierMCP route now?";
+  }
+
   if (assetType === "blog_post") {
     return "Send this approved blog post to WordPress through Zapier? The recommended first step is creating a WordPress draft.";
   }
@@ -82,14 +90,17 @@ export function ExecuteApprovedAssetButton({
 
     try {
       const formData = new FormData();
+      const endpoint = usesCanonicalZapierMcp(assetType)
+        ? `/api/publishing/assets/${assetId}/execute-zapier-mcp`
+        : `/api/publishing/assets/${assetId}/execute`;
 
       if (recipientEmail.trim()) {
         formData.set("recipient_email", recipientEmail.trim());
       }
 
-      const response = await fetch(`/api/publishing/assets/${assetId}/execute`, {
+      const response = await fetch(endpoint, {
         method: "POST",
-        body: formData,
+        body: usesCanonicalZapierMcp(assetType) ? undefined : formData,
       });
 
       const result = await response.json().catch(() => ({}));
@@ -102,6 +113,8 @@ export function ExecuteApprovedAssetButton({
         setMessage(result.message ?? "Duplicate execution prevented.");
       } else if (result.preparedOnly) {
         setMessage("Asset prepared for the next provider step.");
+      } else if (usesCanonicalZapierMcp(assetType)) {
+        setMessage("Published through ZapierMCP. Check the execution details and destination channel.");
       } else if (assetType === "blog_post") {
         setMessage("WordPress draft request completed.");
       } else {
