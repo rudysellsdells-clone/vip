@@ -115,6 +115,45 @@ export function getZapierToolName(input: unknown, actionName?: string | null) {
   return process.env[config.envToolNameKey]?.trim() || config.defaultToolName;
 }
 
+
+function selectedApiForApp(app: string) {
+  const normalized = String(app ?? "").trim().toLowerCase();
+
+  if (normalized === "linkedin" || normalized.includes("linkedin")) {
+    return (
+      process.env.ZAPIER_LINKEDIN_SELECTED_API?.trim() ||
+      process.env.ZAPIER_MCP_LINKEDIN_SELECTED_API?.trim() ||
+      "LinkedInCLIAPI"
+    );
+  }
+
+  if (normalized === "facebook" || normalized.includes("facebook")) {
+    return (
+      process.env.ZAPIER_FACEBOOK_SELECTED_API?.trim() ||
+      process.env.ZAPIER_MCP_FACEBOOK_SELECTED_API?.trim() ||
+      "FacebookV2CLIAPI"
+    );
+  }
+
+  if (normalized === "gmail" || normalized.includes("gmail") || normalized.includes("google mail")) {
+    return (
+      process.env.ZAPIER_GMAIL_SELECTED_API?.trim() ||
+      process.env.ZAPIER_MCP_GMAIL_SELECTED_API?.trim() ||
+      "GoogleMailV2CLIAPI"
+    );
+  }
+
+  if (normalized === "wordpress" || normalized.includes("wordpress")) {
+    return (
+      process.env.ZAPIER_WORDPRESS_SELECTED_API?.trim() ||
+      process.env.ZAPIER_MCP_WORDPRESS_SELECTED_API?.trim() ||
+      "WordPressCLIAPI"
+    );
+  }
+
+  return process.env.ZAPIER_MCP_SELECTED_API?.trim() || "";
+}
+
 function isGenericZapierExecutor(toolName?: string | null) {
   return toolName === "execute_zapier_write_action" || toolName === "execute_zapier_read_action";
 }
@@ -222,6 +261,11 @@ export function getZapierToolArgs(
 
   if (config && isGenericZapierExecutor(toolName)) {
     return {
+      selected_api: firstString(
+        objectInput.selected_api,
+        objectInput.selectedApi,
+        selectedApiForApp(config.app)
+      ),
       app: config.app,
       action: config.action,
       instructions: buildGenericZapierInstructions({
@@ -229,6 +273,7 @@ export function getZapierToolArgs(
         params,
         config,
       }),
+      params,
       output: buildGenericZapierOutput(config),
     };
   }
