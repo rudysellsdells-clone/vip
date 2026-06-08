@@ -121,7 +121,7 @@ async function createPublishingExecutionRun({
       instructions,
       params,
       metadata: {
-        assetType: assetForPublishing.asset_type,
+        assetType: asset.asset_type,
         assetTitle: asset.title,
         app: config.app,
         action: config.action,
