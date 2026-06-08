@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { loadGalaxyMediaForAsset } from "@/lib/galaxyai/media";
+import {
+  attachAccountPublishingSettingsToAsset,
+  isLikelyLinkedInOrganizationId,
+  publishingSettingsFromAsset,
+} from "@/lib/accounts/account-publishing-settings";
 import { createClient } from "@/lib/supabase/server";
 import {
   LINKEDIN_ACTION_NAME,
@@ -7,6 +12,7 @@ import {
   LINKEDIN_POLICY_KEY,
   buildLinkedInMcpInput,
   getLinkedInCompanyPageName,
+  getLinkedInOrganizationId,
   isLinkedInAsset,
 } from "@/lib/zapier/linkedin";
 
@@ -41,14 +47,36 @@ export async function POST(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Asset not found." }, { status: 404 });
     }
 
-    if (asset.status !== "approved") {
+    const assetForPublishing = await attachAccountPublishingSettingsToAsset({
+      supabase,
+      asset,
+    });
+    const publishingSettings = publishingSettingsFromAsset(assetForPublishing);
+    const pageName =
+      publishingSettings?.linkedin_page_name?.trim() || getLinkedInCompanyPageName();
+    const organizationId =
+      publishingSettings?.linkedin_company_id?.trim() || getLinkedInOrganizationId();
+
+    if (!isLikelyLinkedInOrganizationId(organizationId)) {
+      return NextResponse.json(
+        {
+          error:
+            "LinkedIn Company ID is missing or is not an actual organization ID. Add the numeric LinkedIn organization ID or urn:li:organization:<id> in account Publishing settings before preparing a LinkedIn post.",
+          pageName,
+          organizationId: organizationId ?? null,
+        },
+        { status: 400 },
+      );
+    }
+
+    if (assetForPublishing.status !== "approved") {
       return NextResponse.json(
         { error: "Only approved LinkedIn post assets can be prepared." },
         { status: 400 }
       );
     }
 
-    if (!isLinkedInAsset(asset.asset_type, asset.title)) {
+    if (!isLinkedInAsset(assetForPublishing.asset_type, assetForPublishing.title)) {
       return NextResponse.json(
         { error: "This asset does not appear to be a LinkedIn post." },
         { status: 400 }
@@ -58,15 +86,17 @@ export async function POST(_request: Request, context: RouteContext) {
     const mediaAttachments = await loadGalaxyMediaForAsset({
       supabase,
       userId: user.id,
-      assetId: asset.id,
-      campaignId: asset.campaign_id ?? null,
+      assetId: assetForPublishing.id,
+      campaignId: assetForPublishing.campaign_id ?? null,
     });
 
     const mcpInput = buildLinkedInMcpInput({
-      assetId: asset.id,
-      campaignId: asset.campaign_id ?? null,
-      assetTitle: asset.title ?? null,
-      content: asset.content,
+      assetId: assetForPublishing.id,
+      campaignId: assetForPublishing.campaign_id ?? null,
+      assetTitle: assetForPublishing.title ?? null,
+      content: assetForPublishing.content,
+      pageName,
+      organizationId,
       mediaAttachments,
     });
 
@@ -124,15 +154,15 @@ export async function POST(_request: Request, context: RouteContext) {
       user_id: user.id,
       activity_type: "zapier_action_prepared",
       title: "LinkedIn post prepared",
-      description: `Prepared LinkedIn company page post for ${getLinkedInCompanyPageName()}.`,
+      description: `Prepared LinkedIn company page post for ${pageName}.`,
       metadata: {
         app: LINKEDIN_APP_NAME,
         action: LINKEDIN_ACTION_NAME,
         policyKey: LINKEDIN_POLICY_KEY,
-        assetId: asset.id,
-        campaignId: asset.campaign_id ?? null,
+        assetId: assetForPublishing.id,
+        campaignId: assetForPublishing.campaign_id ?? null,
         toolRunId: toolRun.id,
-        pageName: getLinkedInCompanyPageName(),
+        pageName,
         mediaUploadMode: mcpInput.mediaUploadMode,
         mediaAttachmentCount: mediaAttachments.length,
         primaryMediaUrl: mcpInput.primaryMediaUrl,
@@ -143,7 +173,7 @@ export async function POST(_request: Request, context: RouteContext) {
     return NextResponse.json({
       ok: true,
       toolRunId: toolRun.id,
-      pageName: getLinkedInCompanyPageName(),
+      pageName,
       mediaUploadMode: mcpInput.mediaUploadMode,
       mediaAttachmentCount: mediaAttachments.length,
       primaryMediaUrl: mcpInput.primaryMediaUrl,

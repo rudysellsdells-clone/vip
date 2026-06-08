@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { markAssetSentToZapier } from "@/lib/assets/asset-lifecycle";
+import {
+  attachAccountPublishingSettingsToAsset,
+  isLikelyLinkedInOrganizationId,
+} from "@/lib/accounts/account-publishing-settings";
 import { executeZapierMcpWriteAction } from "@/lib/mcp/mcp-write-clients";
 import { assertSuccessfulMcpResult } from "@/lib/publishing/mcp-result-guard";
 import {
@@ -36,6 +40,44 @@ function publishingChannelForAsset(assetType: unknown) {
   if (normalized === "galaxyai_prompt" || normalized === "galaxyai_image_prompt") return "galaxyai";
 
   return "manual";
+}
+
+
+function isLinkedInPostAsset(assetType: unknown) {
+  return String(assetType ?? "").toLowerCase() === "linkedin_post";
+}
+
+function validateLinkedInDestination({
+  asset,
+  params,
+}: {
+  asset: Record<string, any>;
+  params: Record<string, unknown>;
+}) {
+  if (!isLinkedInPostAsset(asset.asset_type)) {
+    return "";
+  }
+
+  const companyId = String(params.company_id ?? "").trim();
+  const pageName = String(params.linkedin_page_name ?? params.company_name ?? "").trim();
+
+  if (!companyId) {
+    return [
+      "LinkedIn destination is not locked. VIP needs the real LinkedIn organization/company ID before publishing.",
+      pageName ? `The page label is ${pageName}, but that is not enough for params.company_id.` : "The LinkedIn page label is also missing.",
+      "Add the actual LinkedIn organization ID in the account Publishing settings, then retry.",
+    ].join(" ");
+  }
+
+  if (!isLikelyLinkedInOrganizationId(companyId)) {
+    return [
+      `LinkedIn company_id looks like a page name instead of an organization ID: ${companyId}.`,
+      "Do not publish because Zapier may fall back to the wrong connected LinkedIn page.",
+      "Use a numeric organization ID or urn:li:organization:<id> in the account Publishing settings.",
+    ].join(" ");
+  }
+
+  return "";
 }
 
 function publishingDestinationForAsset(assetType: unknown) {
@@ -79,7 +121,7 @@ async function createPublishingExecutionRun({
       instructions,
       params,
       metadata: {
-        assetType: asset.asset_type,
+        assetType: assetForPublishing.asset_type,
         assetTitle: asset.title,
         app: config.app,
         action: config.action,
@@ -122,7 +164,12 @@ export async function POST(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Asset not found." }, { status: 404 });
   }
 
-  if (isAlreadySentOrPublished(asset)) {
+  const assetForPublishing = await attachAccountPublishingSettingsToAsset({
+    supabase,
+    asset,
+  });
+
+  if (isAlreadySentOrPublished(assetForPublishing)) {
     return NextResponse.json(
       {
         error:
@@ -139,43 +186,59 @@ export async function POST(_request: Request, context: RouteContext) {
     );
   }
 
-  if (!isApprovedForPublishing(asset)) {
+  if (!isApprovedForPublishing(assetForPublishing)) {
     return NextResponse.json(
       {
         error:
           "Only approved, active, latest-version assets can be sent through ZapierMCP.",
         assetState: {
-          status: asset.status,
-          archived_at: asset.archived_at,
-          is_active_version: asset.is_active_version,
-          superseded_by_asset_id: asset.superseded_by_asset_id,
+          status: assetForPublishing.status,
+          archived_at: assetForPublishing.archived_at,
+          is_active_version: assetForPublishing.is_active_version,
+          superseded_by_asset_id: assetForPublishing.superseded_by_asset_id,
         },
       },
       { status: 409 }
     );
   }
 
-  const config = zapierMcpConfigForAsset(asset);
+  const config = zapierMcpConfigForAsset(assetForPublishing);
 
   if (!config.app || !config.action) {
     return NextResponse.json(
       {
         error: missingZapierMcpConfigMessage(asset),
-        assetType: asset.asset_type,
+        assetType: assetForPublishing.asset_type,
       },
       { status: 400 }
     );
   }
 
-  const params = buildPublishingOutputParams(asset);
-  const instructions = buildPublishingInstructions(asset);
+  const params = buildPublishingOutputParams(assetForPublishing);
+  const destinationError = validateLinkedInDestination({ asset: assetForPublishing, params });
+
+  if (destinationError) {
+    return NextResponse.json(
+      {
+        error: destinationError,
+        payloadPreview: {
+          app: config.app,
+          action: config.action,
+          params,
+        },
+      },
+      { status: 400 },
+    );
+  }
+
+  const instructions = buildPublishingInstructions(assetForPublishing);
   let publishingRun: Record<string, any> | null = null;
 
   try {
     publishingRun = await createPublishingExecutionRun({
       supabase,
       userId: user.id,
-      asset,
+      asset: assetForPublishing,
       config,
       params,
       instructions,
@@ -185,7 +248,7 @@ export async function POST(_request: Request, context: RouteContext) {
       user_id: user.id,
       activity_type: "asset_zapier_mcp_send_started",
       title: "ZapierMCP send started",
-      description: asset.title,
+      description: assetForPublishing.title,
       metadata: {
         assetId,
         runId: publishingRun.id,
@@ -332,22 +395,30 @@ export async function GET(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Asset not found." }, { status: 404 });
   }
 
-  const config = zapierMcpConfigForAsset(asset);
+  const assetForPublishing = await attachAccountPublishingSettingsToAsset({
+    supabase,
+    asset,
+  });
+  const config = zapierMcpConfigForAsset(assetForPublishing);
+  const params = buildPublishingOutputParams(assetForPublishing);
 
   return NextResponse.json({
     ok: true,
     assetId,
-    alreadySentOrPublished: isAlreadySentOrPublished(asset),
-    approvedForPublishing: isApprovedForPublishing(asset),
+    alreadySentOrPublished: isAlreadySentOrPublished(assetForPublishing),
+    approvedForPublishing: isApprovedForPublishing(assetForPublishing),
     assetState: {
-      status: asset.status,
-      scheduling_status: asset.scheduling_status,
-      published_at: asset.published_at,
-      published_via: asset.published_via,
+      status: assetForPublishing.status,
+      scheduling_status: assetForPublishing.scheduling_status,
+      published_at: assetForPublishing.published_at,
+      published_via: assetForPublishing.published_via,
     },
     app: config.app || null,
     action: config.action || null,
-    params: buildPublishingOutputParams(asset),
-    instructions: buildPublishingInstructions(asset),
+    params,
+    linkedinDestinationLocked: isLinkedInPostAsset(assetForPublishing.asset_type)
+      ? isLikelyLinkedInOrganizationId(params.company_id)
+      : null,
+    instructions: buildPublishingInstructions(assetForPublishing),
   });
 }

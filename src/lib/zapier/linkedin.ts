@@ -1,3 +1,4 @@
+import { normalizeLinkedInOrganizationId } from "@/lib/accounts/account-publishing-settings";
 import type { GalaxyMediaAttachment } from "@/lib/galaxyai/media";
 import {
   buildNativeUploadInstruction,
@@ -18,11 +19,14 @@ export function getLinkedInCompanyPageName() {
 }
 
 export function getLinkedInOrganizationId() {
-  return (
-    process.env.ZAPIER_LINKEDIN_ORGANIZATION_ID?.trim() ||
-    process.env.LINKEDIN_COMPANY_PAGE_ID?.trim() ||
-    null
-  );
+  return normalizeLinkedInOrganizationId(
+    process.env.ZAPIER_LINKEDIN_COMPANY_ID?.trim() ||
+      process.env.ZAPIER_MCP_LINKEDIN_COMPANY_ID?.trim() ||
+      process.env.ZAPIER_LINKEDIN_ORGANIZATION_ID?.trim() ||
+      process.env.ZAPIER_MCP_LINKEDIN_ORGANIZATION_ID?.trim() ||
+      process.env.LINKEDIN_COMPANY_PAGE_ID?.trim() ||
+      "",
+  ) || null;
 }
 
 export function getLinkedInMcpToolName() {
@@ -40,16 +44,22 @@ export function buildLinkedInMcpInput({
   campaignId,
   assetTitle,
   content,
+  pageName: pageNameOverride,
+  organizationId: organizationIdOverride,
   mediaAttachments = [],
 }: {
   assetId: string;
   campaignId: string | null;
   assetTitle: string | null;
   content: string;
+  pageName?: string | null;
+  organizationId?: string | null;
   mediaAttachments?: GalaxyMediaAttachment[];
 }) {
-  const pageName = getLinkedInCompanyPageName();
-  const organizationId = getLinkedInOrganizationId();
+  const pageName = pageNameOverride?.trim() || getLinkedInCompanyPageName();
+  const organizationId = normalizeLinkedInOrganizationId(
+    organizationIdOverride?.trim() || getLinkedInOrganizationId() || "",
+  ) || null;
   const primaryImage = getPrimaryImage(mediaAttachments);
   const primaryVideo = getPrimaryVideo(mediaAttachments);
 
@@ -99,7 +109,11 @@ export function buildLinkedInMcpInput({
       .filter(Boolean)
       .join("\n\n"),
     params: {
-      company_id: organizationId ?? pageName,
+      company_id: organizationId,
+      organization_id: organizationId,
+      linkedin_company_id: organizationId,
+      linkedin_page_name: pageName,
+      company_name: pageName,
       comment: content,
       image: primaryImage?.url ?? null,
       image_type: primaryImage ? "post_media" : null,

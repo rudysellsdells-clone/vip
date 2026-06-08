@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isLikelyLinkedInOrganizationId } from "@/lib/accounts/account-publishing-settings";
 import { createClient } from "@/lib/supabase/server";
 import { toJsonValue } from "@/lib/utils/json";
 import { getZapierToolArgs, getZapierToolName } from "@/lib/zapier/action-registry";
@@ -40,6 +41,18 @@ function validateZapierToolArgs(toolName: string, toolArgs: Record<string, unkno
 
   if (Object.keys(toolArgs.params).length === 0) {
     return "Zapier MCP params object is empty. The field values must be sent as structured params, not only as instructions.";
+  }
+
+  const app = String(toolArgs.app ?? "").toLowerCase();
+  const action = String(toolArgs.action ?? "").toLowerCase();
+
+  if (app.includes("linkedin") || action.includes("company_update")) {
+    const params = toolArgs.params;
+    const companyId = isRecord(params) ? params.company_id : null;
+
+    if (!isLikelyLinkedInOrganizationId(companyId)) {
+      return "LinkedIn company_id must be the actual organization ID or urn:li:organization:<id>. VIP will not execute this tool run with a page name because Zapier may publish to the wrong LinkedIn page.";
+    }
   }
 
   return "";

@@ -1,3 +1,4 @@
+import { normalizeLinkedInOrganizationId, publishingSettingsFromAsset } from "@/lib/accounts/account-publishing-settings";
 export type PublishingAsset = Record<string, any>;
 
 export type ZapierMcpAssetConfig = {
@@ -107,6 +108,23 @@ export function zapierMcpConfigForAsset(asset: PublishingAsset): ZapierMcpAssetC
   }
 
   if (assetType === "linkedin_post") {
+    const settings = publishingSettingsFromAsset(asset);
+    const pageName = firstValue(
+      stringValue(settings?.linkedin_page_name),
+      env("ZAPIER_LINKEDIN_PAGE_NAME"),
+      env("LINKEDIN_COMPANY_PAGE_NAME")
+    );
+    const organizationId = normalizeLinkedInOrganizationId(
+      firstValue(
+        stringValue(settings?.linkedin_company_id),
+        env("ZAPIER_LINKEDIN_COMPANY_ID"),
+        env("ZAPIER_MCP_LINKEDIN_COMPANY_ID"),
+        env("ZAPIER_LINKEDIN_ORGANIZATION_ID"),
+        env("ZAPIER_MCP_LINKEDIN_ORGANIZATION_ID"),
+        env("LINKEDIN_COMPANY_PAGE_ID")
+      )
+    );
+
     return {
       app: firstValue(env("ZAPIER_MCP_LINKEDIN_POST_APP"), env("ZAPIER_MCP_DEFAULT_APP"), "LinkedIn"),
       action: firstValue(
@@ -120,8 +138,8 @@ export function zapierMcpConfigForAsset(asset: PublishingAsset): ZapierMcpAssetC
         : env("ZAPIER_LINKEDIN_ACTION_KEY")
           ? "linkedin_action_key"
           : "default_create_company_update",
-      pageId: null,
-      pageName: env("ZAPIER_LINKEDIN_PAGE_NAME") || null,
+      pageId: organizationId || null,
+      pageName: pageName || null,
     };
   }
 
@@ -245,12 +263,23 @@ function buildFacebookParams(asset: PublishingAsset, config: ZapierMcpAssetConfi
 function buildLinkedInParams(asset: PublishingAsset, config: ZapierMcpAssetConfig) {
   const content = String(asset.content ?? "");
   const socialImage = socialImageForAsset(asset);
-  const pageName = firstValue(config.pageName, env("ZAPIER_LINKEDIN_PAGE_NAME")) || null;
-  const companyId = firstValue(
-    env("ZAPIER_LINKEDIN_COMPANY_ID"),
-    env("ZAPIER_LINKEDIN_ORGANIZATION_ID"),
-    env("LINKEDIN_COMPANY_PAGE_ID"),
-    pageName
+  const settings = publishingSettingsFromAsset(asset);
+  const pageName = firstValue(
+    config.pageName,
+    stringValue(settings?.linkedin_page_name),
+    env("ZAPIER_LINKEDIN_PAGE_NAME"),
+    env("LINKEDIN_COMPANY_PAGE_NAME")
+  ) || null;
+  const companyId = normalizeLinkedInOrganizationId(
+    firstValue(
+      config.pageId,
+      stringValue(settings?.linkedin_company_id),
+      env("ZAPIER_LINKEDIN_COMPANY_ID"),
+      env("ZAPIER_MCP_LINKEDIN_COMPANY_ID"),
+      env("ZAPIER_LINKEDIN_ORGANIZATION_ID"),
+      env("ZAPIER_MCP_LINKEDIN_ORGANIZATION_ID"),
+      env("LINKEDIN_COMPANY_PAGE_ID")
+    )
   );
 
   return {
@@ -264,9 +293,13 @@ function buildLinkedInParams(asset: PublishingAsset, config: ZapierMcpAssetConfi
     comment: content,
 
     linkedin_page_name: pageName,
+    linkedin_company_name: pageName,
+    company_name: pageName,
     company_id: companyId || null,
-    company: companyId || pageName,
+    company: companyId || null,
     organization_id: companyId || null,
+    linkedin_company_id: companyId || null,
+    linkedin_organization_id: companyId || null,
 
     has_generated_image: socialImage.ready,
     hosted_image_url: socialImage.url,
@@ -343,6 +376,20 @@ export function buildPublishingInstructions(asset: PublishingAsset) {
 
   if (normalizedAssetType === "facebook_post") {
     return buildFacebookInstructions(config);
+  }
+
+  if (normalizedAssetType === "linkedin_post") {
+    return [
+      "Publish this exact approved content as a LinkedIn company page update.",
+      "Use the structured params object as the source of truth.",
+      "Do not publish to a personal profile.",
+      config.pageName ? `Target page label: ${config.pageName}.` : "Target page label is missing.",
+      config.pageId
+        ? `Use LinkedIn organization/company ID from params.company_id: ${config.pageId}.`
+        : "LinkedIn organization/company ID is missing. Do not choose a default company page.",
+      "If params.company_id is missing, stop and return an error instead of selecting another LinkedIn page.",
+      "Return the created LinkedIn share id, URL, status, author organization, and a concise confirmation message.",
+    ].join(" ");
   }
 
   return [

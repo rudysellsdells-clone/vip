@@ -63,7 +63,7 @@ export function AccountPublishingSettingsForm({
     <form onSubmit={onSubmit} className="space-y-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="LinkedIn Page Name" name="linkedinPageName" defaultValue={settings?.linkedin_page_name} />
-        <Field label="LinkedIn Company ID" name="linkedinCompanyId" defaultValue={settings?.linkedin_company_id} />
+        <Field label="LinkedIn Organization ID" name="linkedinCompanyId" defaultValue={settings?.linkedin_company_id} placeholder="Example: 12345678 or urn:li:organization:12345678" />
         <Field label="Facebook Page Name" name="facebookPageName" defaultValue={settings?.facebook_page_name} />
         <Field label="Facebook Page ID" name="facebookPageId" defaultValue={settings?.facebook_page_id} />
         <Field label="Primary booking / CTA URL" name="primaryBookingUrl" defaultValue={settings?.primary_booking_url} placeholder="https://example.com/contact" />
@@ -83,7 +83,7 @@ export function AccountPublishingSettingsForm({
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-slate-500">
-          These settings let VIP keep publishing destinations and creative execution separate by account.
+          These settings let VIP keep publishing destinations and creative execution separate by account. LinkedIn requires the actual organization ID, not just the page name.
         </p>
         <button
           type="submit"
