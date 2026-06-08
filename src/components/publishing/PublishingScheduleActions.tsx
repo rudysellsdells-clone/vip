@@ -46,26 +46,26 @@ export function PublishingScheduleActions({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function sendToZapier() {
+  async function publishViaZapierMcp() {
     setSending(true);
     setMessage(null);
     setError(null);
 
     try {
-      const response = await fetch(`/api/publishing/assets/${assetId}/send-to-zapier`, {
+      const response = await fetch(`/api/publishing/assets/${assetId}/execute-zapier-mcp`, {
         method: "POST",
       });
 
       const payload = await readResponse(response);
 
       if (!response.ok) {
-        throw new Error(readableError(payload, "Unable to send to Zapier."));
+        throw new Error(readableError(payload, "Unable to publish via ZapierMCP."));
       }
 
-      setMessage("Sent to Zapier. This item should leave the publishing schedule after refresh.");
+      setMessage("Published via ZapierMCP. This item should leave the publishing schedule after refresh.");
       router.refresh();
     } catch (err) {
-      setError(readableError(err, "Unable to send to Zapier."));
+      setError(readableError(err, "Unable to publish via ZapierMCP."));
     } finally {
       setSending(false);
     }
@@ -112,11 +112,11 @@ export function PublishingScheduleActions({
 
         <button
           type="button"
-          onClick={sendToZapier}
+          onClick={publishViaZapierMcp}
           disabled={sending}
           className={formStyles.secondaryButton}
         >
-          {sending ? "Sending..." : "Send to Zapier"}
+          {sending ? "Publishing..." : "Publish via ZapierMCP"}
         </button>
 
         <button
