@@ -73,40 +73,67 @@ function hasFollowUpOrPreview(value: unknown) {
   );
 }
 
-function looksLikeError(value: unknown) {
-  if (!value) return false;
+function explicitErrorMessage(value: unknown): string | null {
+  if (!value) return null;
 
   if (typeof value === "string") {
-    const text = value.toLowerCase();
+    const text = value.trim();
+    const lower = text.toLowerCase();
 
-    return (
-      text.includes('"error"') ||
-      text.includes("error from app") ||
-      text.includes("terminated") ||
-      text.includes("failed") ||
-      text.includes("not found") ||
-      text.includes("not configured") ||
-      text.includes("is missing") ||
-      text.includes("required field") ||
-      text.includes("invalid input") ||
-      text.includes("unable to") ||
-      text.includes("cannot ")
-    );
+    if (
+      lower.startsWith("mcp error") ||
+      lower.startsWith("zapier mcp request failed") ||
+      lower.startsWith("error from app") ||
+      lower.includes("input validation error") ||
+      lower.includes("invalid arguments for tool")
+    ) {
+      return text;
+    }
+
+    const parsed = parseJsonMaybe(text);
+
+    if (parsed) {
+      return explicitErrorMessage(parsed);
+    }
+
+    return null;
   }
 
-  if (typeof value === "object") {
-    const objectValue = value as Record<string, any>;
+  if (typeof value !== "object") return null;
 
-    if (objectValue.error || objectValue.isError === true) return true;
-    if (objectValue.result?.isError === true) return true;
-    if (objectValue.parsedText?.error || objectValue.parsedText?.isError === true) return true;
-    if (objectValue.raw?.error || objectValue.raw?.isError === true) return true;
-    if (objectValue.raw?.result?.isError === true) return true;
+  const objectValue = value as Record<string, any>;
 
-    return looksLikeError(valueToText(value));
+  if (objectValue.isError === true || objectValue.result?.isError === true) {
+    return valueToText(objectValue.error ?? objectValue.message ?? value);
   }
 
-  return false;
+  if (objectValue.error) {
+    return valueToText(objectValue.error);
+  }
+
+  if (objectValue.errorDetails?.message) {
+    return valueToText(objectValue.errorDetails.message);
+  }
+
+  if (objectValue.raw?.error) {
+    return valueToText(objectValue.raw.error);
+  }
+
+  if (objectValue.raw?.isError === true || objectValue.raw?.result?.isError === true) {
+    return valueToText(objectValue.raw);
+  }
+
+  if (objectValue.parsedText) {
+    const parsedTextError = explicitErrorMessage(objectValue.parsedText);
+    if (parsedTextError) return parsedTextError;
+  }
+
+  if (typeof objectValue.text === "string") {
+    const textError = explicitErrorMessage(objectValue.text);
+    if (textError) return textError;
+  }
+
+  return null;
 }
 
 function hasCreatedObjectEvidence(value: unknown) {
@@ -118,7 +145,13 @@ function hasCreatedObjectEvidence(value: unknown) {
     if (objectValue.id || objectValue.post_id || objectValue.postId) return true;
     if (objectValue.record_id || objectValue.recordId) return true;
     if (objectValue.url || objectValue.link || objectValue.permalink) return true;
-    if (objectValue.status && !String(objectValue.status).toLowerCase().includes("error")) return true;
+
+    const status = String(objectValue.status ?? objectValue.lifecycleState ?? "").toLowerCase();
+
+    if (["published", "completed", "success", "succeeded", "created"].includes(status)) {
+      return true;
+    }
+
     if (objectValue.success === true || objectValue.ok === true) return true;
 
     if (typeof objectValue.text === "string") {
@@ -134,14 +167,14 @@ function hasSuccessTextEvidence(value: unknown) {
   const text = valueToText(value).toLowerCase();
 
   return (
-    text.includes("created") ||
-    text.includes("posted") ||
-    text.includes("published") ||
-    text.includes("success") ||
-    text.includes("successfully") ||
-    text.includes("record id") ||
-    text.includes("record_id") ||
+    text.includes('"status":"published"') ||
+    text.includes('"lifecycleState":"PUBLISHED"'.toLowerCase()) ||
+    text.includes("record created and published successfully") ||
     text.includes("record created successfully") ||
+    text.includes("created and published successfully") ||
+    text.includes("published successfully") ||
+    text.includes("posted successfully") ||
+    text.includes("record_id") ||
     text.includes("post id")
   );
 }
@@ -156,13 +189,15 @@ export function assertSuccessfulMcpResult(
     throw new Error("ZapierMCP did not return a valid result object.");
   }
 
-  if (looksLikeError(result)) {
-    throw new Error(`ZapierMCP returned an error-like response: ${valueToText(result).slice(0, 1000)}`);
+  const explicitError = explicitErrorMessage(result);
+
+  if (explicitError) {
+    throw new Error(`ZapierMCP returned an error response: ${explicitError.slice(0, 1000)}`);
   }
 
   const hasSuccessEvidence = hasCreatedObjectEvidence(result) || hasSuccessTextEvidence(result);
 
-  if (requireSuccessEvidence && hasSuccessEvidence) {
+  if (hasSuccessEvidence) {
     return true;
   }
 
@@ -170,7 +205,7 @@ export function assertSuccessfulMcpResult(
     throw new Error(`ZapierMCP asked for more information instead of confirming execution: ${valueToText(result).slice(0, 1000)}`);
   }
 
-  if (requireSuccessEvidence && !hasSuccessEvidence) {
+  if (requireSuccessEvidence) {
     throw new Error(
       `ZapierMCP response did not include clear create/publish confirmation, so VIP will not mark this asset published: ${valueToText(result).slice(0, 1000)}`
     );
