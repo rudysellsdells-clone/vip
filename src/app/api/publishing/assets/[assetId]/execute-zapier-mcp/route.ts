@@ -226,6 +226,8 @@ export async function POST(_request: Request, context: RouteContext) {
           app: config.app,
           action: config.action,
           params,
+          accountPublishingSettingsResolution:
+            assetForPublishing.account_publishing_settings_resolution ?? null,
         },
       },
       { status: 400 },
@@ -256,6 +258,8 @@ export async function POST(_request: Request, context: RouteContext) {
         assetType: asset.asset_type,
         app: config.app,
         action: config.action,
+        accountPublishingSettingsResolution:
+          assetForPublishing.account_publishing_settings_resolution ?? null,
       },
     });
 
@@ -313,6 +317,8 @@ export async function POST(_request: Request, context: RouteContext) {
         assetType: sentAsset.asset_type,
         app: config.app,
         action: config.action,
+        accountPublishingSettingsResolution:
+          assetForPublishing.account_publishing_settings_resolution ?? null,
         mcpResult: result.parsedText ?? result.text ?? null,
         mcpRequestArguments: result.requestArguments ?? null,
       },
@@ -353,6 +359,8 @@ export async function POST(_request: Request, context: RouteContext) {
         assetType: asset.asset_type,
         app: config.app,
         action: config.action,
+        accountPublishingSettingsResolution:
+          assetForPublishing.account_publishing_settings_resolution ?? null,
         error: message,
       },
     });
@@ -418,6 +426,10 @@ export async function GET(_request: Request, context: RouteContext) {
     app: config.app || null,
     action: config.action || null,
     params,
+    accountPublishingSettingsResolution:
+      assetForPublishing.account_publishing_settings_resolution ?? null,
+    accountPublishingSettingsFound:
+      Boolean(assetForPublishing.account_publishing_settings),
     linkedinDestinationLocked: isLinkedInPostAsset(assetForPublishing.asset_type)
       ? isLikelyLinkedInOrganizationId(String(paramsRecord.company_id ?? ""))
       : null,
