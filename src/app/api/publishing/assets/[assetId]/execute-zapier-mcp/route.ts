@@ -26,6 +26,78 @@ function isAlreadySentOrPublished(asset: Record<string, any>) {
   );
 }
 
+function publishingChannelForAsset(assetType: unknown) {
+  const normalized = String(assetType ?? "").toLowerCase();
+
+  if (normalized === "linkedin_post") return "linkedin";
+  if (normalized === "facebook_post") return "facebook";
+  if (normalized === "email") return "gmail";
+  if (normalized === "blog_post") return "wordpress";
+  if (normalized === "galaxyai_prompt" || normalized === "galaxyai_image_prompt") return "galaxyai";
+
+  return "manual";
+}
+
+function publishingDestinationForAsset(assetType: unknown) {
+  const normalized = String(assetType ?? "").toLowerCase();
+
+  if (normalized === "linkedin_post") return "LinkedIn Company Page";
+  if (normalized === "facebook_post") return "Facebook Page";
+  if (normalized === "email") return "Gmail";
+  if (normalized === "blog_post") return "WordPress";
+
+  return "ZapierMCP";
+}
+
+async function createPublishingExecutionRun({
+  supabase,
+  userId,
+  asset,
+  config,
+  params,
+  instructions,
+}: {
+  supabase: any;
+  userId: string;
+  asset: Record<string, any>;
+  config: { app: string; action: string; source: string };
+  params: Record<string, unknown>;
+  instructions: string;
+}) {
+  const channel = publishingChannelForAsset(asset.asset_type);
+
+  const { data, error } = await supabase
+    .from("publishing_execution_runs")
+    .insert({
+      user_id: userId,
+      asset_id: asset.id,
+      provider: "zapier_mcp",
+      channel,
+      action_key: config.action,
+      status: "sent_to_provider",
+      destination: publishingDestinationForAsset(asset.asset_type),
+      instructions,
+      params,
+      metadata: {
+        assetType: asset.asset_type,
+        assetTitle: asset.title,
+        app: config.app,
+        action: config.action,
+        configSource: config.source,
+        directZapierMcpRoute: true,
+        startedAt: new Date().toISOString(),
+      },
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Unable to create publishing execution audit run.");
+  }
+
+  return data as Record<string, any>;
+}
+
 export async function POST(_request: Request, context: RouteContext) {
   const { assetId } = await context.params;
   const supabase = untypedSupabase(await createClient());
@@ -96,8 +168,19 @@ export async function POST(_request: Request, context: RouteContext) {
   }
 
   const params = buildPublishingOutputParams(asset);
+  const instructions = buildPublishingInstructions(asset);
+  let publishingRun: Record<string, any> | null = null;
 
   try {
+    publishingRun = await createPublishingExecutionRun({
+      supabase,
+      userId: user.id,
+      asset,
+      config,
+      params,
+      instructions,
+    });
+
     await supabase.from("activity_log").insert({
       user_id: user.id,
       activity_type: "asset_zapier_mcp_send_started",
@@ -105,6 +188,7 @@ export async function POST(_request: Request, context: RouteContext) {
       description: asset.title,
       metadata: {
         assetId,
+        runId: publishingRun.id,
         assetType: asset.asset_type,
         app: config.app,
         action: config.action,
@@ -114,7 +198,7 @@ export async function POST(_request: Request, context: RouteContext) {
     const result = await executeZapierMcpWriteAction({
       app: config.app,
       action: config.action,
-      instructions: buildPublishingInstructions(asset),
+      instructions,
       params,
       output:
         "Return the created record id, url if available, status, and a concise message.",
@@ -122,13 +206,36 @@ export async function POST(_request: Request, context: RouteContext) {
 
     assertSuccessfulMcpResult(result, { requireSuccessEvidence: true });
 
+    const resultReference =
+      result.text?.slice(0, 500) ??
+      JSON.stringify(result.parsedText ?? {}).slice(0, 500);
+
+    const { data: completedRun, error: completedRunError } = await supabase
+      .from("publishing_execution_runs")
+      .update({
+        status: "completed",
+        provider_result: result,
+        error: null,
+        metadata: {
+          ...(publishingRun?.metadata ?? {}),
+          completedAt: new Date().toISOString(),
+          mcpRequestArguments: result.requestArguments ?? null,
+        },
+      })
+      .eq("id", publishingRun.id)
+      .eq("user_id", user.id)
+      .select("*")
+      .single();
+
+    if (completedRunError) {
+      throw new Error(completedRunError.message);
+    }
+
     const sentAsset = await markAssetSentToZapier({
       supabase,
       userId: user.id,
       assetId,
-      reference:
-        result.text?.slice(0, 500) ??
-        JSON.stringify(result.parsedText ?? {}).slice(0, 500),
+      reference: resultReference,
     });
 
     await supabase.from("activity_log").insert({
@@ -138,6 +245,7 @@ export async function POST(_request: Request, context: RouteContext) {
       description: sentAsset.title,
       metadata: {
         assetId,
+        runId: completedRun?.id ?? publishingRun?.id ?? null,
         assetType: sentAsset.asset_type,
         app: config.app,
         action: config.action,
@@ -149,9 +257,27 @@ export async function POST(_request: Request, context: RouteContext) {
     return NextResponse.json({
       ok: true,
       asset: sentAsset,
+      run: completedRun,
       mcp: result,
     });
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    if (publishingRun?.id) {
+      await supabase
+        .from("publishing_execution_runs")
+        .update({
+          status: "failed",
+          error: message,
+          metadata: {
+            ...(publishingRun.metadata ?? {}),
+            failedAt: new Date().toISOString(),
+          },
+        })
+        .eq("id", publishingRun.id)
+        .eq("user_id", user.id);
+    }
+
     await supabase.from("activity_log").insert({
       user_id: user.id,
       activity_type: "asset_zapier_mcp_send_failed",
@@ -159,19 +285,18 @@ export async function POST(_request: Request, context: RouteContext) {
       description: asset.title,
       metadata: {
         assetId,
+        runId: publishingRun?.id ?? null,
         assetType: asset.asset_type,
         app: config.app,
         action: config.action,
-        error: error instanceof Error ? error.message : String(error),
+        error: message,
       },
     });
 
     return NextResponse.json(
       {
         error:
-          error instanceof Error
-            ? error.message
-            : "Unable to execute ZapierMCP action.",
+          message || "Unable to execute ZapierMCP action.",
         payloadPreview: {
           app: config.app,
           action: config.action,

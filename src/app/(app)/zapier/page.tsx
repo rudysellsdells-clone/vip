@@ -20,16 +20,24 @@ export default async function ZapierPage() {
 
   if (!user) redirect("/login");
 
-  const [toolRunsResult, policiesResult] = await Promise.all([
+  const [toolRunsResult, publishingRunsResult, policiesResult] = await Promise.all([
     supabase.from("tool_runs").select("*").eq("user_id", user.id).eq("provider", "zapier_mcp").order("created_at", { ascending: false }).limit(100),
+    supabase.from("publishing_execution_runs").select("*").eq("user_id", user.id).eq("provider", "zapier_mcp").order("created_at", { ascending: false }).limit(100),
     supabase.from("zapier_action_policies").select("*").eq("user_id", user.id).eq("active", true).order("created_at", { ascending: false }).limit(100),
   ]);
 
   const runs = (toolRunsResult.data ?? []) as Array<Record<string, any>>;
+  const publishingRuns = (publishingRunsResult.data ?? []) as Array<Record<string, any>>;
   const policies = (policiesResult.data ?? []) as Array<Record<string, any>>;
-  const waiting = runs.filter((run) => ["planned", "waiting_approval"].includes(run.status)).length;
-  const completed = runs.filter((run) => run.status === "completed").length;
-  const failed = runs.filter((run) => run.status === "failed").length;
+  const waiting =
+    runs.filter((run) => ["planned", "waiting_approval"].includes(run.status)).length +
+    publishingRuns.filter((run) => ["prepared", "sent_to_provider"].includes(run.status)).length;
+  const completed =
+    runs.filter((run) => run.status === "completed").length +
+    publishingRuns.filter((run) => run.status === "completed").length;
+  const failed =
+    runs.filter((run) => run.status === "failed").length +
+    publishingRuns.filter((run) => run.status === "failed").length;
 
   return (
     <WebsitePage>
@@ -37,12 +45,12 @@ export default async function ZapierPage() {
         eyebrow="Zapier MCP"
         title="Prepare and audit business actions."
         description="Track Zapier MCP actions for Gmail drafts, Facebook publishing, and other approved business workflows."
-        primaryAction={{ label: "Approved Assets", href: "/approvals" }}
+        primaryAction={{ label: "Publishing Schedule", href: "/publishing-schedule" }}
         secondaryAction={{ label: "Actions", href: "/actions" }}
       />
 
       <section className={websiteStyles.metricsGrid}>
-        <WebsiteMetric label="Zapier Runs" value={runs.length} description="Tracked Zapier MCP tool runs." dot="blue" />
+        <WebsiteMetric label="Zapier Runs" value={runs.length + publishingRuns.length} description="Canonical publishing executions plus legacy tool runs." dot="blue" />
         <WebsiteMetric label="Waiting" value={waiting} description="Prepared or waiting for approval." dot="gold" />
         <WebsiteMetric label="Completed" value={completed} description="Successfully completed actions." dot="green" />
         <WebsiteMetric label="Failed" value={failed} description="Actions needing attention." dot={failed ? "red" : "blue"} />
@@ -71,9 +79,39 @@ export default async function ZapierPage() {
         </WebsiteSection>
 
         <WebsiteSection
-          eyebrow="Runs"
-          title="Recent Zapier actions"
-          description="Monitor prepared, completed, and failed Zapier MCP runs."
+          eyebrow="Canonical Runs"
+          title="Recent ZapierMCP publishing executions"
+          description="These are the current publishing execution records for LinkedIn, Facebook, Gmail, WordPress, and other ZapierMCP-backed actions."
+        >
+          {publishingRuns.length ? (
+            <div className={websiteStyles.cardGrid}>
+              {publishingRuns.map((run) => (
+                <article key={run.id} className={websiteStyles.card}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className={websiteStyles.cardTitle}>{run.destination || run.channel || "ZapierMCP execution"}</h3>
+                    <WebsiteBadge status={run.status} />
+                  </div>
+                  <p className={websiteStyles.cardMeta}>
+                    {run.channel} • {run.action_key} • Created {formatDate(run.created_at)}
+                  </p>
+                  {run.error ? <p className={websiteStyles.cardText}><strong>Error:</strong> {run.error}</p> : null}
+                  {run.asset_id ? (
+                    <div className={websiteStyles.actionRow}>
+                      <a href={`/assets/${run.asset_id}`} className={websiteStyles.link}>Open asset →</a>
+                    </div>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className={websiteStyles.empty}>No canonical ZapierMCP publishing executions yet.</div>
+          )}
+        </WebsiteSection>
+
+        <WebsiteSection
+          eyebrow="Legacy Runs"
+          title="Legacy Zapier tool runs"
+          description="Legacy tool runs remain visible for audit and compatibility, but new social publishing should use canonical publishing executions."
         >
           {runs.length ? (
             <div className={websiteStyles.cardGrid}>
@@ -91,7 +129,7 @@ export default async function ZapierPage() {
               ))}
             </div>
           ) : (
-            <div className={websiteStyles.empty}>No Zapier runs yet.</div>
+            <div className={websiteStyles.empty}>No legacy Zapier tool runs yet.</div>
           )}
         </WebsiteSection>
       </section>
