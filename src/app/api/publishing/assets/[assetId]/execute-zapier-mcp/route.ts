@@ -215,7 +215,8 @@ export async function POST(_request: Request, context: RouteContext) {
   }
 
   const params = buildPublishingOutputParams(assetForPublishing);
-  const destinationError = validateLinkedInDestination({ asset: assetForPublishing, params });
+  const paramsRecord = params as Record<string, unknown>;
+  const destinationError = validateLinkedInDestination({ asset: assetForPublishing, params: paramsRecord });
 
   if (destinationError) {
     return NextResponse.json(
@@ -240,7 +241,7 @@ export async function POST(_request: Request, context: RouteContext) {
       userId: user.id,
       asset: assetForPublishing,
       config,
-      params,
+      params: paramsRecord,
       instructions,
     });
 
@@ -262,7 +263,7 @@ export async function POST(_request: Request, context: RouteContext) {
       app: config.app,
       action: config.action,
       instructions,
-      params,
+      params: paramsRecord,
       output:
         "Return the created record id, url if available, status, and a concise message.",
     });
@@ -401,6 +402,7 @@ export async function GET(_request: Request, context: RouteContext) {
   });
   const config = zapierMcpConfigForAsset(assetForPublishing);
   const params = buildPublishingOutputParams(assetForPublishing);
+  const paramsRecord = params as Record<string, unknown>;
 
   return NextResponse.json({
     ok: true,
@@ -417,7 +419,7 @@ export async function GET(_request: Request, context: RouteContext) {
     action: config.action || null,
     params,
     linkedinDestinationLocked: isLinkedInPostAsset(assetForPublishing.asset_type)
-      ? isLikelyLinkedInOrganizationId(params.company_id)
+      ? isLikelyLinkedInOrganizationId(String(paramsRecord.company_id ?? ""))
       : null,
     instructions: buildPublishingInstructions(assetForPublishing),
   });
