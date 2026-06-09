@@ -254,6 +254,10 @@ export async function GET(_request: Request, context: RouteContext) {
   const config = zapierMcpConfigForAsset(assetForPublishing);
   const params = buildPublishingOutputParams(assetForPublishing);
   const paramsRecord = params as Record<string, unknown>;
+  const destinationError = validatePublishingDestination({
+    asset: assetForPublishing,
+    params: paramsRecord,
+  });
 
   return NextResponse.json({
     ok: true,
@@ -269,8 +273,9 @@ export async function GET(_request: Request, context: RouteContext) {
     accountPublishingSettingsFound:
       Boolean(assetForPublishing.account_publishing_settings),
     linkedinDestinationLocked: isLinkedInPostAsset(assetForPublishing.asset_type)
-      ? isLikelyLinkedInOrganizationId(String(paramsRecord.company_id ?? ""))
+      ? !destinationError
       : null,
+    linkedinDestinationError: destinationError || null,
     instructions: buildPublishingInstructions(assetForPublishing),
   });
 }
