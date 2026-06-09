@@ -1,3 +1,6 @@
+import { isLikelyLinkedInOrganizationId } from "@/lib/accounts/account-publishing-settings";
+import { isApprovedForPublishing } from "@/lib/publishing/output-payload";
+
 export type PublishingAssetRecord = Record<string, any>;
 export type PublishingRunRecord = Record<string, any>;
 
@@ -19,6 +22,85 @@ export function isAlreadySentOrPublished(asset: PublishingAssetRecord) {
     String(asset.scheduling_status ?? "") === "published" ||
     String(asset.scheduling_status ?? "") === "sent_to_zapier"
   );
+}
+
+export function publishingAssetState(asset: PublishingAssetRecord) {
+  return {
+    status: asset.status ?? null,
+    scheduling_status: asset.scheduling_status ?? null,
+    published_at: asset.published_at ?? null,
+    published_via: asset.published_via ?? null,
+    published_reference: asset.published_reference ?? null,
+    archived_at: asset.archived_at ?? null,
+    is_active_version: asset.is_active_version ?? null,
+    superseded_by_asset_id: asset.superseded_by_asset_id ?? null,
+  };
+}
+
+export function publishingPreflightForAsset(asset: PublishingAssetRecord) {
+  if (isAlreadySentOrPublished(asset)) {
+    return {
+      ok: false,
+      status: 409,
+      error:
+        "This asset is already marked as sent/published. Reset the asset before retesting to prevent duplicate publishing.",
+      assetState: publishingAssetState(asset),
+    };
+  }
+
+  if (!isApprovedForPublishing(asset)) {
+    return {
+      ok: false,
+      status: 409,
+      error:
+        "Only approved, active, latest-version assets can be sent through ZapierMCP.",
+      assetState: publishingAssetState(asset),
+    };
+  }
+
+  return {
+    ok: true,
+    status: 200,
+    error: "",
+    assetState: publishingAssetState(asset),
+  };
+}
+
+export function isLinkedInPostAsset(assetType: unknown) {
+  return String(assetType ?? "").toLowerCase() === "linkedin_post";
+}
+
+export function validatePublishingDestination({
+  asset,
+  params,
+}: {
+  asset: PublishingAssetRecord;
+  params: Record<string, unknown>;
+}) {
+  if (!isLinkedInPostAsset(asset.asset_type)) {
+    return "";
+  }
+
+  const companyId = String(params.company_id ?? "").trim();
+  const pageName = String(params.linkedin_page_name ?? params.company_name ?? "").trim();
+
+  if (!companyId) {
+    return [
+      "LinkedIn destination is not locked. VIP needs the real LinkedIn organization/company ID before publishing.",
+      pageName ? `The page label is ${pageName}, but that is not enough for params.company_id.` : "The LinkedIn page label is also missing.",
+      "Add the actual LinkedIn organization ID in the account Publishing settings, then retry.",
+    ].join(" ");
+  }
+
+  if (!isLikelyLinkedInOrganizationId(companyId)) {
+    return [
+      `LinkedIn company_id looks like a page name instead of an organization ID: ${companyId}.`,
+      "Do not publish because Zapier may fall back to the wrong connected LinkedIn page.",
+      "Use a numeric organization ID or urn:li:organization:<id> in the account Publishing settings.",
+    ].join(" ");
+  }
+
+  return "";
 }
 
 export function publishingChannelForAsset(assetType: unknown) {

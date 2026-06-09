@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { markAssetSentToZapier } from "@/lib/assets/asset-lifecycle";
-import {
-  attachAccountPublishingSettingsToAsset,
-  isLikelyLinkedInOrganizationId,
-} from "@/lib/accounts/account-publishing-settings";
+import { attachAccountPublishingSettingsToAsset } from "@/lib/accounts/account-publishing-settings";
 import { executeZapierMcpWriteAction } from "@/lib/mcp/mcp-write-clients";
 import { assertSuccessfulMcpResult } from "@/lib/publishing/mcp-result-guard";
 import {
@@ -11,7 +8,11 @@ import {
   createPublishingExecutionRun,
   failPublishingExecutionRun,
   isAlreadySentOrPublished,
+  isLinkedInPostAsset,
+  publishingAssetState,
   publishingExecutionReferenceFromMcpResult,
+  publishingPreflightForAsset,
+  validatePublishingDestination,
 } from "@/lib/publishing/publishing-execution-service";
 import {
   buildPublishingInstructions,
@@ -26,43 +27,6 @@ import { untypedSupabase } from "@/lib/supabase/untyped";
 type RouteContext = {
   params: Promise<{ assetId: string }>;
 };
-
-function isLinkedInPostAsset(assetType: unknown) {
-  return String(assetType ?? "").toLowerCase() === "linkedin_post";
-}
-
-function validateLinkedInDestination({
-  asset,
-  params,
-}: {
-  asset: Record<string, any>;
-  params: Record<string, unknown>;
-}) {
-  if (!isLinkedInPostAsset(asset.asset_type)) {
-    return "";
-  }
-
-  const companyId = String(params.company_id ?? "").trim();
-  const pageName = String(params.linkedin_page_name ?? params.company_name ?? "").trim();
-
-  if (!companyId) {
-    return [
-      "LinkedIn destination is not locked. VIP needs the real LinkedIn organization/company ID before publishing.",
-      pageName ? `The page label is ${pageName}, but that is not enough for params.company_id.` : "The LinkedIn page label is also missing.",
-      "Add the actual LinkedIn organization ID in the account Publishing settings, then retry.",
-    ].join(" ");
-  }
-
-  if (!isLikelyLinkedInOrganizationId(companyId)) {
-    return [
-      `LinkedIn company_id looks like a page name instead of an organization ID: ${companyId}.`,
-      "Do not publish because Zapier may fall back to the wrong connected LinkedIn page.",
-      "Use a numeric organization ID or urn:li:organization:<id> in the account Publishing settings.",
-    ].join(" ");
-  }
-
-  return "";
-}
 
 export async function POST(_request: Request, context: RouteContext) {
   const { assetId } = await context.params;
@@ -93,36 +57,15 @@ export async function POST(_request: Request, context: RouteContext) {
     asset,
   });
 
-  if (isAlreadySentOrPublished(assetForPublishing)) {
-    return NextResponse.json(
-      {
-        error:
-          "This asset is already marked as sent/published. Reset the asset before retesting to prevent duplicate publishing.",
-        assetState: {
-          status: asset.status,
-          scheduling_status: asset.scheduling_status,
-          published_at: asset.published_at,
-          published_via: asset.published_via,
-          published_reference: asset.published_reference,
-        },
-      },
-      { status: 409 }
-    );
-  }
+  const preflight = publishingPreflightForAsset(assetForPublishing);
 
-  if (!isApprovedForPublishing(assetForPublishing)) {
+  if (!preflight.ok) {
     return NextResponse.json(
       {
-        error:
-          "Only approved, active, latest-version assets can be sent through ZapierMCP.",
-        assetState: {
-          status: assetForPublishing.status,
-          archived_at: assetForPublishing.archived_at,
-          is_active_version: assetForPublishing.is_active_version,
-          superseded_by_asset_id: assetForPublishing.superseded_by_asset_id,
-        },
+        error: preflight.error,
+        assetState: preflight.assetState,
       },
-      { status: 409 }
+      { status: preflight.status }
     );
   }
 
@@ -140,7 +83,7 @@ export async function POST(_request: Request, context: RouteContext) {
 
   const params = buildPublishingOutputParams(assetForPublishing);
   const paramsRecord = params as Record<string, unknown>;
-  const destinationError = validateLinkedInDestination({ asset: assetForPublishing, params: paramsRecord });
+  const destinationError = validatePublishingDestination({ asset: assetForPublishing, params: paramsRecord });
 
   if (destinationError) {
     return NextResponse.json(
@@ -317,12 +260,7 @@ export async function GET(_request: Request, context: RouteContext) {
     assetId,
     alreadySentOrPublished: isAlreadySentOrPublished(assetForPublishing),
     approvedForPublishing: isApprovedForPublishing(assetForPublishing),
-    assetState: {
-      status: assetForPublishing.status,
-      scheduling_status: assetForPublishing.scheduling_status,
-      published_at: assetForPublishing.published_at,
-      published_via: assetForPublishing.published_via,
-    },
+    assetState: publishingAssetState(assetForPublishing),
     app: config.app || null,
     action: config.action || null,
     params,
