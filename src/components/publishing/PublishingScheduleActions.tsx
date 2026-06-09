@@ -62,7 +62,7 @@ export function PublishingScheduleActions({
         throw new Error(readableError(payload, "Unable to publish via ZapierMCP."));
       }
 
-      setMessage("Published via ZapierMCP. This item should leave the publishing schedule after refresh.");
+      setMessage("ZapierMCP execution completed. Social posts should publish; email assets should create a Gmail draft.");
       router.refresh();
     } catch (err) {
       setError(readableError(err, "Unable to publish via ZapierMCP."));
@@ -108,6 +108,10 @@ export function PublishingScheduleActions({
       <div className={websiteStyles.actionRow}>
         <a href={`/assets/${assetId}/view`} className={websiteStyles.link}>
           Open →
+        </a>
+
+        <a href={`/publishing-ready?asset=${assetId}`} className={websiteStyles.link}>
+          Review payload →
         </a>
 
         <button

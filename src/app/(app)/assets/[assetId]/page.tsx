@@ -2,8 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AssetTitleLink } from "@/components/assets/AssetTitleLink";
 import { AssetReviewActions } from "@/components/approvals/AssetReviewActions";
-import { PrepareLinkedInPostButton } from "@/components/assets/PrepareLinkedInPostButton";
 import { RunGalaxyAiAssetButton } from "@/components/galaxyai/RunGalaxyAiAssetButton";
+import { ExecuteApprovedAssetButton } from "@/components/publishing/ExecuteApprovedAssetButton";
 import { RequestRevisionButton } from "@/components/assets/RequestRevisionButton";
 import {
   WebsiteBadge,
@@ -14,7 +14,6 @@ import {
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
 import { createClient } from "@/lib/supabase/server";
-import { isLinkedInAsset } from "@/lib/zapier/linkedin";
 
 type PageProps = {
   params: Promise<{
@@ -30,6 +29,17 @@ function formatDate(value: string | null) {
     day: "numeric",
     year: "numeric",
   }).format(new Date(value));
+}
+
+function isCanonicalZapierMcpAsset(assetType: unknown) {
+  return ["linkedin_post", "facebook_post", "email"].includes(String(assetType ?? ""));
+}
+
+function zapierMcpExecutionLabel(assetType: unknown) {
+  if (String(assetType ?? "") === "facebook_post") return "Facebook execution";
+  if (String(assetType ?? "") === "linkedin_post") return "LinkedIn execution";
+  if (String(assetType ?? "") === "email") return "Gmail draft execution";
+  return "ZapierMCP execution";
 }
 
 export default async function AssetDetailPage({ params }: PageProps) {
@@ -91,8 +101,8 @@ export default async function AssetDetailPage({ params }: PageProps) {
   const revisions = (childRevisions ?? []) as Array<Record<string, any>>;
   const approvalRows = (approvals ?? []) as Array<Record<string, any>>;
   const canRevise = asset.status !== "published" && asset.status !== "sent";
-  const canPrepareLinkedIn =
-    asset.status === "approved" && isLinkedInAsset(asset.asset_type, asset.title);
+  const canExecuteZapierMcp =
+    asset.status === "approved" && isCanonicalZapierMcpAsset(asset.asset_type);
   const canRunGalaxyAi =
     asset.status === "approved" &&
     ["galaxyai_prompt", "galaxyai_image_prompt"].includes(String(asset.asset_type));
@@ -168,8 +178,11 @@ export default async function AssetDetailPage({ params }: PageProps) {
           <div className={websiteStyles.cardActions}>
             <AssetReviewActions assetId={asset.id} />
 
-            {canPrepareLinkedIn ? (
-              <PrepareLinkedInPostButton assetId={asset.id} />
+            {canExecuteZapierMcp ? (
+              <ExecuteApprovedAssetButton
+                assetId={asset.id}
+                assetType={asset.asset_type}
+              />
             ) : null}
 
             {canRunGalaxyAi ? (
@@ -219,11 +232,11 @@ export default async function AssetDetailPage({ params }: PageProps) {
             </article>
           ) : null}
 
-          {canPrepareLinkedIn ? (
+          {canExecuteZapierMcp ? (
             <article className={websiteStyles.card} style={{ marginTop: 16 }}>
-              <h3 className={websiteStyles.cardTitle}>LinkedIn execution</h3>
+              <h3 className={websiteStyles.cardTitle}>{zapierMcpExecutionLabel(asset.asset_type)}</h3>
               <p className={websiteStyles.cardText}>
-                This approved LinkedIn asset can be prepared as a Zapier MCP action for the configured LinkedIn company page.
+                This approved social asset can be published through the canonical ZapierMCP route. Facebook and LinkedIn should use this same controlled execution path.
               </p>
             </article>
           ) : null}

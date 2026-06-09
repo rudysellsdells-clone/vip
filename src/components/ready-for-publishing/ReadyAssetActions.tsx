@@ -7,7 +7,7 @@ import formStyles from "@/components/forms/VipForm.module.css";
 import { websiteStyles } from "@/components/website-ui/WebsitePage";
 
 function canUsePublishingReady(assetType: string) {
-  return assetType === "linkedin_post" || assetType === "facebook_post";
+  return ["linkedin_post", "facebook_post", "email"].includes(assetType);
 }
 
 export function ReadyAssetActions({
@@ -75,7 +75,7 @@ export function ReadyAssetActions({
 
         {status === "approved" && canUsePublishingReady(assetType) ? (
           <Link href={`/publishing-ready?asset=${assetId}`} className={websiteStyles.link}>
-            Publish via ZapierMCP →
+            Publish / Draft via ZapierMCP →
           </Link>
         ) : null}
 

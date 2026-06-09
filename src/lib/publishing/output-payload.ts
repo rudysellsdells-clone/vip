@@ -315,6 +315,35 @@ function buildLinkedInParams(asset: PublishingAsset, config: ZapierMcpAssetConfi
   };
 }
 
+function buildEmailParams(asset: PublishingAsset) {
+  const subject = String(asset.title ?? "VIP email draft").trim() || "VIP email draft";
+  const content = String(asset.content ?? "").trim();
+
+  return {
+    asset_id: String(asset.id ?? ""),
+    asset_type: "email",
+    campaign_id: asset.campaign_id ?? null,
+    source: "vip",
+
+    // Gmail draft actions vary by Zapier account/action version, so VIP sends
+    // the common field aliases as structured params instead of relying on instructions.
+    to: "",
+    recipient: "",
+    recipient_email: "",
+    subject,
+    body: content,
+    body_plain: content,
+    email_body: content,
+    message: content,
+    content,
+
+    draft_only: true,
+    create_draft_only: true,
+    send: false,
+    scheduled_publish_at: asset.scheduled_publish_at ?? null,
+  };
+}
+
 function buildGenericParams(asset: PublishingAsset) {
   return {
     asset_id: String(asset.id ?? ""),
@@ -341,6 +370,10 @@ export function buildPublishingOutputParams(asset: PublishingAsset) {
 
   if (assetType === "linkedin_post") {
     return buildLinkedInParams(asset, config);
+  }
+
+  if (assetType === "email") {
+    return buildEmailParams(asset);
   }
 
   return buildGenericParams(asset);
@@ -392,6 +425,18 @@ export function buildPublishingInstructions(asset: PublishingAsset) {
     ].join(" ");
   }
 
+  if (normalizedAssetType === "email") {
+    return [
+      "Create a Gmail draft for this approved VIP email asset.",
+      "Use the structured params object as the source of truth.",
+      "Create a draft only. Do not send the email.",
+      "Use params.subject as the Gmail draft subject.",
+      "Use params.body, params.email_body, or params.content as the Gmail draft body.",
+      "Leave the recipient blank unless the configured Zapier action requires one.",
+      "Return the Gmail draft id, URL if available, status, and a concise confirmation message.",
+    ].join(" ");
+  }
+
   return [
     `Send this approved VIP ${assetType} to the configured Zapier destination.`,
     "Use the params object as the source of truth.",
@@ -418,6 +463,14 @@ export function missingZapierMcpConfigMessage(asset: PublishingAsset) {
       "ZapierMCP is not configured for facebook_post.",
       "You already have Facebook page variables, but no Facebook action key variable was found.",
       "Add ZAPIER_FACEBOOK_MCP_TOOL_NAME or ZAPIER_MCP_FACEBOOK_POST_ACTION in Vercel.",
+    ].join(" ");
+  }
+
+  if (assetType === "email") {
+    return [
+      "ZapierMCP is not configured for email/Gmail draft assets.",
+      "Add ZAPIER_MCP_EMAIL_APP=Gmail and ZAPIER_MCP_EMAIL_ACTION=create_draft,",
+      "or set the Gmail action key your Zapier MCP server exposes.",
     ].join(" ");
   }
 

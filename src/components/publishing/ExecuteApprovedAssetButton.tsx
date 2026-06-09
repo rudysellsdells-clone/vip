@@ -5,11 +5,13 @@ import { useState } from "react";
 import formStyles from "@/components/forms/VipForm.module.css";
 
 function needsRecipient(assetType: string) {
-  return assetType === "email";
+  // The canonical Gmail flow creates a draft and can leave the recipient blank.
+  // A recipient-aware draft/send flow can be added later without using legacy tool_runs.
+  return false;
 }
 
 function usesCanonicalZapierMcp(assetType: string) {
-  return assetType === "linkedin_post" || assetType === "facebook_post";
+  return ["linkedin_post", "facebook_post", "email"].includes(assetType);
 }
 
 function buttonLabel(assetType: string) {
@@ -19,7 +21,7 @@ function buttonLabel(assetType: string) {
     case "facebook_post":
       return "Publish Facebook via ZapierMCP";
     case "email":
-      return "Create Gmail Draft";
+      return "Create Gmail Draft via ZapierMCP";
     case "video_script":
     case "galaxyai_prompt":
       return "Prepare GalaxyAI";
@@ -35,6 +37,10 @@ function buttonLabel(assetType: string) {
 function confirmText(assetType: string) {
   if (assetType === "linkedin_post" || assetType === "facebook_post") {
     return "Publish this approved social post through the canonical ZapierMCP route now?";
+  }
+
+  if (assetType === "email") {
+    return "Create a Gmail draft for this approved email through the canonical ZapierMCP route now? This will create a draft only and will not send the email.";
   }
 
   if (assetType === "blog_post") {
@@ -114,7 +120,11 @@ export function ExecuteApprovedAssetButton({
       } else if (result.preparedOnly) {
         setMessage("Asset prepared for the next provider step.");
       } else if (usesCanonicalZapierMcp(assetType)) {
-        setMessage("Published through ZapierMCP. Check the execution details and destination channel.");
+        setMessage(
+          assetType === "email"
+            ? "Gmail draft request completed through ZapierMCP. Check Gmail drafts and the execution details."
+            : "Published through ZapierMCP. Check the execution details and destination channel."
+        );
       } else if (assetType === "blog_post") {
         setMessage("WordPress draft request completed.");
       } else {
