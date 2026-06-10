@@ -1,17 +1,14 @@
 import { NextResponse } from "next/server";
-import { markAssetSentToZapier } from "@/lib/assets/asset-lifecycle";
 import { attachAccountPublishingSettingsToAsset } from "@/lib/accounts/account-publishing-settings";
 import { executeZapierMcpWriteAction } from "@/lib/mcp/mcp-write-clients";
-import { assertSuccessfulMcpResult } from "@/lib/publishing/mcp-result-guard";
 import {
-  completePublishingExecutionRun,
-  createPublishingExecutionRun,
-  failPublishingExecutionRun,
+  completeZapierMcpPublishingExecution,
+  failZapierMcpPublishingExecution,
   isAlreadySentOrPublished,
   isLinkedInPostAsset,
   publishingAssetState,
-  publishingExecutionReferenceFromMcpResult,
   publishingPreflightForAsset,
+  startZapierMcpPublishingExecution,
   validatePublishingDestination,
 } from "@/lib/publishing/publishing-execution-service";
 import {
@@ -105,29 +102,14 @@ export async function POST(_request: Request, context: RouteContext) {
   let publishingRun: Record<string, any> | null = null;
 
   try {
-    publishingRun = await createPublishingExecutionRun({
+    publishingRun = await startZapierMcpPublishingExecution({
       supabase,
       userId: user.id,
       asset: assetForPublishing,
+      assetId,
       config,
       params: paramsRecord,
       instructions,
-    });
-
-    await supabase.from("activity_log").insert({
-      user_id: user.id,
-      activity_type: "asset_zapier_mcp_send_started",
-      title: "ZapierMCP send started",
-      description: assetForPublishing.title,
-      metadata: {
-        assetId,
-        runId: publishingRun.id,
-        assetType: asset.asset_type,
-        app: config.app,
-        action: config.action,
-        accountPublishingSettingsResolution:
-          assetForPublishing.account_publishing_settings_resolution ?? null,
-      },
     });
 
     const result = await executeZapierMcpWriteAction({
@@ -139,40 +121,14 @@ export async function POST(_request: Request, context: RouteContext) {
         "Return the created record id, url if available, status, and a concise message.",
     });
 
-    assertSuccessfulMcpResult(result, { requireSuccessEvidence: true });
-
-    const resultReference = publishingExecutionReferenceFromMcpResult(result);
-
-    const completedRun = await completePublishingExecutionRun({
-      supabase,
-      userId: user.id,
-      run: publishingRun,
-      providerResult: result,
-    });
-
-    const sentAsset = await markAssetSentToZapier({
+    const { sentAsset, completedRun } = await completeZapierMcpPublishingExecution({
       supabase,
       userId: user.id,
       assetId,
-      reference: resultReference,
-    });
-
-    await supabase.from("activity_log").insert({
-      user_id: user.id,
-      activity_type: "asset_sent_to_zapier_mcp",
-      title: "Asset sent to ZapierMCP",
-      description: sentAsset.title,
-      metadata: {
-        assetId,
-        runId: completedRun?.id ?? publishingRun?.id ?? null,
-        assetType: sentAsset.asset_type,
-        app: config.app,
-        action: config.action,
-        accountPublishingSettingsResolution:
-          assetForPublishing.account_publishing_settings_resolution ?? null,
-        mcpResult: result.parsedText ?? result.text ?? null,
-        mcpRequestArguments: result.requestArguments ?? null,
-      },
+      asset: assetForPublishing,
+      config,
+      run: publishingRun,
+      providerResult: result,
     });
 
     return NextResponse.json({
@@ -184,28 +140,14 @@ export async function POST(_request: Request, context: RouteContext) {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
-    await failPublishingExecutionRun({
+    await failZapierMcpPublishingExecution({
       supabase,
       userId: user.id,
+      assetId,
+      asset: assetForPublishing,
+      config,
       run: publishingRun,
       errorMessage: message,
-    });
-
-    await supabase.from("activity_log").insert({
-      user_id: user.id,
-      activity_type: "asset_zapier_mcp_send_failed",
-      title: "ZapierMCP send failed",
-      description: asset.title,
-      metadata: {
-        assetId,
-        runId: publishingRun?.id ?? null,
-        assetType: asset.asset_type,
-        app: config.app,
-        action: config.action,
-        accountPublishingSettingsResolution:
-          assetForPublishing.account_publishing_settings_resolution ?? null,
-        error: message,
-      },
     });
 
     return NextResponse.json(

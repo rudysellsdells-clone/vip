@@ -1,4 +1,6 @@
+import { markAssetSentToZapier } from "@/lib/assets/asset-lifecycle";
 import { isLikelyLinkedInOrganizationId } from "@/lib/accounts/account-publishing-settings";
+import { assertSuccessfulMcpResult } from "@/lib/publishing/mcp-result-guard";
 import { isApprovedForPublishing } from "@/lib/publishing/output-payload";
 
 export type PublishingAssetRecord = Record<string, any>;
@@ -275,3 +277,180 @@ export async function failPublishingExecutionRun({
 
   return (data ?? null) as PublishingRunRecord | null;
 }
+
+async function insertPublishingActivity({
+  supabase,
+  userId,
+  activityType,
+  title,
+  description,
+  metadata,
+}: {
+  supabase: SupabaseLike;
+  userId: string;
+  activityType: string;
+  title: string;
+  description?: string | null;
+  metadata: Record<string, unknown>;
+}) {
+  await supabase.from("activity_log").insert({
+    user_id: userId,
+    activity_type: activityType,
+    title,
+    description,
+    metadata,
+  });
+}
+
+export async function startZapierMcpPublishingExecution({
+  supabase,
+  userId,
+  asset,
+  assetId,
+  config,
+  params,
+  instructions,
+}: {
+  supabase: SupabaseLike;
+  userId: string;
+  asset: PublishingAssetRecord;
+  assetId: string;
+  config: PublishingExecutionConfig;
+  params: Record<string, unknown>;
+  instructions: string;
+}) {
+  const publishingRun = await createPublishingExecutionRun({
+    supabase,
+    userId,
+    asset,
+    config,
+    params,
+    instructions,
+  });
+
+  await insertPublishingActivity({
+    supabase,
+    userId,
+    activityType: "asset_zapier_mcp_send_started",
+    title: "ZapierMCP send started",
+    description: asset.title,
+    metadata: {
+      assetId,
+      runId: publishingRun.id,
+      assetType: asset.asset_type,
+      app: config.app,
+      action: config.action,
+      accountPublishingSettingsResolution:
+        asset.account_publishing_settings_resolution ?? null,
+    },
+  });
+
+  return publishingRun;
+}
+
+export async function completeZapierMcpPublishingExecution({
+  supabase,
+  userId,
+  assetId,
+  asset,
+  config,
+  run,
+  providerResult,
+}: {
+  supabase: SupabaseLike;
+  userId: string;
+  assetId: string;
+  asset: PublishingAssetRecord;
+  config: PublishingExecutionConfig;
+  run: PublishingRunRecord | null;
+  providerResult: Record<string, any>;
+}) {
+  assertSuccessfulMcpResult(providerResult, { requireSuccessEvidence: true });
+
+  const resultReference = publishingExecutionReferenceFromMcpResult(providerResult);
+
+  const completedRun = await completePublishingExecutionRun({
+    supabase,
+    userId,
+    run,
+    providerResult,
+  });
+
+  const sentAsset = await markAssetSentToZapier({
+    supabase,
+    userId,
+    assetId,
+    reference: resultReference,
+  });
+
+  await insertPublishingActivity({
+    supabase,
+    userId,
+    activityType: "asset_sent_to_zapier_mcp",
+    title: "Asset sent to ZapierMCP",
+    description: sentAsset.title,
+    metadata: {
+      assetId,
+      runId: completedRun?.id ?? run?.id ?? null,
+      assetType: sentAsset.asset_type,
+      app: config.app,
+      action: config.action,
+      accountPublishingSettingsResolution:
+        asset.account_publishing_settings_resolution ?? null,
+      mcpResult: providerResult.parsedText ?? providerResult.text ?? null,
+      mcpRequestArguments: providerResult.requestArguments ?? null,
+    },
+  });
+
+  return {
+    sentAsset,
+    completedRun,
+    resultReference,
+  };
+}
+
+export async function failZapierMcpPublishingExecution({
+  supabase,
+  userId,
+  assetId,
+  asset,
+  config,
+  run,
+  errorMessage,
+}: {
+  supabase: SupabaseLike;
+  userId: string;
+  assetId: string;
+  asset: PublishingAssetRecord;
+  config: PublishingExecutionConfig;
+  run: PublishingRunRecord | null;
+  errorMessage: string;
+}) {
+  const failedRun = await failPublishingExecutionRun({
+    supabase,
+    userId,
+    run,
+    errorMessage,
+  });
+
+  await insertPublishingActivity({
+    supabase,
+    userId,
+    activityType: "asset_zapier_mcp_send_failed",
+    title: "ZapierMCP send failed",
+    description: asset.title,
+    metadata: {
+      assetId,
+      runId: run?.id ?? null,
+      assetType: asset.asset_type,
+      app: config.app,
+      action: config.action,
+      accountPublishingSettingsResolution:
+        asset.account_publishing_settings_resolution ?? null,
+      error: errorMessage,
+    },
+  });
+
+  return failedRun;
+}
+
