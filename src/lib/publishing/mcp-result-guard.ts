@@ -8,34 +8,6 @@ function valueToText(value: unknown) {
   }
 }
 
-function walk(value: unknown): unknown[] {
-  const seen = new Set<unknown>();
-  const out: unknown[] = [];
-
-  function visit(item: unknown) {
-    if (!item || typeof item !== "object") {
-      out.push(item);
-      return;
-    }
-
-    if (seen.has(item)) return;
-    seen.add(item);
-    out.push(item);
-
-    if (Array.isArray(item)) {
-      for (const child of item) visit(child);
-      return;
-    }
-
-    for (const child of Object.values(item as Record<string, unknown>)) {
-      visit(child);
-    }
-  }
-
-  visit(value);
-  return out;
-}
-
 function parseJsonMaybe(value: unknown) {
   if (typeof value !== "string") return null;
 
@@ -46,31 +18,28 @@ function parseJsonMaybe(value: unknown) {
   }
 }
 
-function hasFollowUpOrPreview(value: unknown) {
-  for (const item of walk(value)) {
-    if (!item || typeof item !== "object") continue;
+function isRecord(value: unknown): value is Record<string, any> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
 
-    const objectValue = item as Record<string, any>;
+function stringOrNull(value: unknown) {
+  if (typeof value !== "string") return null;
 
-    if (objectValue.followUpQuestion) return true;
-    if (objectValue.isPreview === true) return true;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
 
-    if (typeof objectValue.text === "string") {
-      const parsedText = parseJsonMaybe(objectValue.text);
-      if (parsedText && hasFollowUpOrPreview(parsedText)) return true;
-    }
-  }
+function valueStringOrNull(value: unknown) {
+  if (value === null || value === undefined) return null;
 
-  const text = valueToText(value).toLowerCase();
+  const text = String(value).trim();
+  return text ? text : null;
+}
 
-  return (
-    text.includes("followupquestion") ||
-    text.includes("follow-up question") ||
-    text.includes("could you please provide") ||
-    text.includes("i need the actual content") ||
-    text.includes("need the actual content") ||
-    text.includes("ispreview")
-  );
+function successStatus(value: unknown) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+
+  return ["published", "completed", "success", "succeeded", "created"].includes(normalized);
 }
 
 function explicitErrorMessage(value: unknown): string | null {
@@ -99,84 +68,217 @@ function explicitErrorMessage(value: unknown): string | null {
     return null;
   }
 
-  if (typeof value !== "object") return null;
+  if (!isRecord(value)) return null;
 
-  const objectValue = value as Record<string, any>;
-
-  if (objectValue.isError === true || objectValue.result?.isError === true) {
-    return valueToText(objectValue.error ?? objectValue.message ?? value);
+  if (value.isError === true || value.result?.isError === true) {
+    return valueToText(value.error ?? value.message ?? value);
   }
 
-  if (objectValue.error) {
-    return valueToText(objectValue.error);
+  if (value.error) {
+    return valueToText(value.error);
   }
 
-  if (objectValue.errorDetails?.message) {
-    return valueToText(objectValue.errorDetails.message);
+  if (value.errorDetails?.message) {
+    return valueToText(value.errorDetails.message);
   }
 
-  if (objectValue.raw?.error) {
-    return valueToText(objectValue.raw.error);
+  if (value.raw?.error) {
+    return valueToText(value.raw.error);
   }
 
-  if (objectValue.raw?.isError === true || objectValue.raw?.result?.isError === true) {
-    return valueToText(objectValue.raw);
+  if (value.raw?.isError === true || value.raw?.result?.isError === true) {
+    return valueToText(value.raw);
   }
 
-  if (objectValue.parsedText) {
-    const parsedTextError = explicitErrorMessage(objectValue.parsedText);
+  if (value.parsedText) {
+    const parsedTextError = explicitErrorMessage(value.parsedText);
     if (parsedTextError) return parsedTextError;
   }
 
-  if (typeof objectValue.text === "string") {
-    const textError = explicitErrorMessage(objectValue.text);
+  if (typeof value.text === "string") {
+    const textError = explicitErrorMessage(value.text);
     if (textError) return textError;
+  }
+
+  const content = value.raw?.result?.content ?? value.result?.content ?? value.content;
+
+  if (Array.isArray(content)) {
+    for (const item of content) {
+      if (!isRecord(item) || typeof item.text !== "string") continue;
+
+      const itemError = explicitErrorMessage(item.text);
+      if (itemError) return itemError;
+    }
   }
 
   return null;
 }
 
-function hasCreatedObjectEvidence(value: unknown) {
-  for (const item of walk(value)) {
-    if (!item || typeof item !== "object") continue;
+function hasFollowUpOrPreview(value: unknown) {
+  const candidates = providerPayloadCandidates(value);
 
-    const objectValue = item as Record<string, any>;
+  for (const candidate of candidates) {
+    if (!isRecord(candidate)) continue;
 
-    if (objectValue.id || objectValue.post_id || objectValue.postId) return true;
-    if (objectValue.record_id || objectValue.recordId) return true;
-    if (objectValue.url || objectValue.link || objectValue.permalink) return true;
-
-    const status = String(objectValue.status ?? objectValue.lifecycleState ?? "").toLowerCase();
-
-    if (["published", "completed", "success", "succeeded", "created"].includes(status)) {
-      return true;
-    }
-
-    if (objectValue.success === true || objectValue.ok === true) return true;
-
-    if (typeof objectValue.text === "string") {
-      const parsedText = parseJsonMaybe(objectValue.text);
-      if (parsedText && hasCreatedObjectEvidence(parsedText)) return true;
-    }
+    if (candidate.followUpQuestion) return true;
+    if (candidate.isPreview === true) return true;
   }
 
-  return false;
-}
-
-function hasSuccessTextEvidence(value: unknown) {
   const text = valueToText(value).toLowerCase();
 
   return (
-    text.includes('"status":"published"') ||
-    text.includes('"lifecycleState":"PUBLISHED"'.toLowerCase()) ||
-    text.includes("record created and published successfully") ||
-    text.includes("record created successfully") ||
-    text.includes("created and published successfully") ||
-    text.includes("published successfully") ||
-    text.includes("posted successfully") ||
-    text.includes("record_id") ||
-    text.includes("post id")
+    text.includes("followupquestion") ||
+    text.includes("follow-up question") ||
+    text.includes("could you please provide") ||
+    text.includes("i need the actual content") ||
+    text.includes("need the actual content") ||
+    text.includes("ispreview")
   );
+}
+
+function contentTextPayloads(value: unknown) {
+  const out: unknown[] = [];
+
+  function addFromContent(content: unknown) {
+    if (!Array.isArray(content)) return;
+
+    for (const item of content) {
+      if (!isRecord(item) || typeof item.text !== "string") continue;
+
+      out.push(item.text);
+
+      const parsed = parseJsonMaybe(item.text);
+      if (parsed) out.push(parsed);
+    }
+  }
+
+  if (isRecord(value)) {
+    addFromContent(value.content);
+    addFromContent(value.result?.content);
+    addFromContent(value.raw?.result?.content);
+  }
+
+  return out;
+}
+
+function providerPayloadCandidates(value: unknown) {
+  const candidates: unknown[] = [];
+
+  if (!value) return candidates;
+
+  candidates.push(value);
+
+  if (isRecord(value)) {
+    if (value.parsedText) candidates.push(value.parsedText);
+
+    const parsedText = parseJsonMaybe(value.text);
+    if (parsedText) candidates.push(parsedText);
+
+    if (value.raw?.result) candidates.push(value.raw.result);
+    if (value.raw?.result?.structuredContent) {
+      candidates.push(value.raw.result.structuredContent);
+    }
+
+    if (value.result) candidates.push(value.result);
+    if (value.results) candidates.push({ results: value.results });
+
+    candidates.push(...contentTextPayloads(value));
+  }
+
+  return candidates;
+}
+
+export type McpProviderSuccessEvidence = {
+  ok: boolean;
+  recordId: string | null;
+  url: string | null;
+  status: string | null;
+  message: string | null;
+  executionId: string | null;
+  source: string | null;
+};
+
+function emptyEvidence(): McpProviderSuccessEvidence {
+  return {
+    ok: false,
+    recordId: null,
+    url: null,
+    status: null,
+    message: null,
+    executionId: null,
+    source: null,
+  };
+}
+
+function evidenceFromCandidate(candidate: unknown): McpProviderSuccessEvidence | null {
+  if (!isRecord(candidate)) return null;
+
+  const resultObject = isRecord(candidate.results)
+    ? candidate.results
+    : isRecord(candidate.result)
+      ? candidate.result
+      : candidate;
+
+  // Do not treat VIP's own request payload as provider success evidence.
+  // It can contain asset_id, campaign_id, text, company_id, urls in post copy, etc.
+  if (
+    resultObject === candidate &&
+    (candidate.requestArguments || candidate.params || candidate.mcpRequestArguments)
+  ) {
+    return null;
+  }
+
+  const recordId =
+    valueStringOrNull(resultObject.record_id) ??
+    valueStringOrNull(resultObject.recordId) ??
+    valueStringOrNull(resultObject.post_id) ??
+    valueStringOrNull(resultObject.postId) ??
+    valueStringOrNull(resultObject.share_id) ??
+    valueStringOrNull(resultObject.id);
+
+  const url =
+    stringOrNull(resultObject.url) ??
+    stringOrNull(resultObject.link) ??
+    stringOrNull(resultObject.permalink) ??
+    stringOrNull(resultObject.permalink_url);
+
+  const status = valueStringOrNull(
+    resultObject.status ?? resultObject.lifecycleState ?? candidate.status ?? candidate.lifecycleState
+  );
+
+  const message = stringOrNull(resultObject.message) ?? stringOrNull(candidate.message);
+  const executionId = valueStringOrNull(candidate.execution?.id ?? candidate.executionId);
+
+  const hasProviderRecord = Boolean(recordId || url);
+  const hasPublishedStatus = successStatus(status);
+
+  if (!hasProviderRecord && !hasPublishedStatus) {
+    return null;
+  }
+
+  // A bare execution id proves Zapier may have run, but it does not prove the provider created a post/draft.
+  // A provider record/url or published/created status must be present.
+  return {
+    ok: true,
+    recordId,
+    url,
+    status,
+    message,
+    executionId,
+    source: candidate.results ? "results" : "provider_result",
+  };
+}
+
+export function getMcpProviderSuccessEvidence(result: unknown): McpProviderSuccessEvidence {
+  for (const candidate of providerPayloadCandidates(result)) {
+    const evidence = evidenceFromCandidate(candidate);
+
+    if (evidence?.ok) {
+      return evidence;
+    }
+  }
+
+  return emptyEvidence();
 }
 
 export function assertSuccessfulMcpResult(
@@ -195,21 +297,27 @@ export function assertSuccessfulMcpResult(
     throw new Error(`ZapierMCP returned an error response: ${explicitError.slice(0, 1000)}`);
   }
 
-  const hasSuccessEvidence = hasCreatedObjectEvidence(result) || hasSuccessTextEvidence(result);
+  const providerEvidence = getMcpProviderSuccessEvidence(result);
 
-  if (hasSuccessEvidence) {
-    return true;
+  if (providerEvidence.ok) {
+    return providerEvidence;
   }
 
   if (hasFollowUpOrPreview(result)) {
-    throw new Error(`ZapierMCP asked for more information instead of confirming execution: ${valueToText(result).slice(0, 1000)}`);
+    throw new Error(
+      `ZapierMCP asked for more information instead of confirming execution: ${valueToText(result).slice(0, 1000)}`
+    );
   }
 
   if (requireSuccessEvidence) {
     throw new Error(
-      `ZapierMCP response did not include clear create/publish confirmation, so VIP will not mark this asset published: ${valueToText(result).slice(0, 1000)}`
+      [
+        "ZapierMCP did not return remote provider success evidence.",
+        "VIP may have built valid request arguments, but it will not mark the asset published unless the MCP response contains provider proof such as results.record_id, results.url, or status PUBLISHED/CREATED.",
+        `Response preview: ${valueToText(result).slice(0, 1000)}`,
+      ].join(" ")
     );
   }
 
-  return true;
+  return providerEvidence;
 }

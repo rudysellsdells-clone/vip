@@ -1,6 +1,9 @@
 import { markAssetSentToZapier } from "@/lib/assets/asset-lifecycle";
 import { isLikelyLinkedInOrganizationId } from "@/lib/accounts/account-publishing-settings";
-import { assertSuccessfulMcpResult } from "@/lib/publishing/mcp-result-guard";
+import {
+  assertSuccessfulMcpResult,
+  getMcpProviderSuccessEvidence,
+} from "@/lib/publishing/mcp-result-guard";
 import { isApprovedForPublishing } from "@/lib/publishing/output-payload";
 
 export type PublishingAssetRecord = Record<string, any>;
@@ -129,7 +132,11 @@ export function publishingDestinationForAsset(assetType: unknown) {
 }
 
 export function publishingExecutionReferenceFromMcpResult(result: Record<string, any>) {
+  const evidence = getMcpProviderSuccessEvidence(result);
+
   return (
+    evidence.url ??
+    evidence.recordId ??
     result.text?.slice(0, 500) ??
     JSON.stringify(result.parsedText ?? {}).slice(0, 500)
   );
@@ -217,6 +224,8 @@ export async function completePublishingExecutionRun({
     throw new Error("Publishing execution run was not created before completion.");
   }
 
+  const providerEvidence = getMcpProviderSuccessEvidence(providerResult);
+
   const { data, error } = await supabase
     .from("publishing_execution_runs")
     .update({
@@ -226,6 +235,7 @@ export async function completePublishingExecutionRun({
       metadata: {
         ...(run?.metadata ?? {}),
         completedAt: new Date().toISOString(),
+        mcpProviderEvidence: providerEvidence.ok ? providerEvidence : null,
         mcpRequestArguments: providerResult.requestArguments ?? null,
       },
     })
@@ -365,9 +375,14 @@ export async function completeZapierMcpPublishingExecution({
   run: PublishingRunRecord | null;
   providerResult: Record<string, any>;
 }) {
-  assertSuccessfulMcpResult(providerResult, { requireSuccessEvidence: true });
+  const providerEvidence = assertSuccessfulMcpResult(providerResult, {
+    requireSuccessEvidence: true,
+  });
 
-  const resultReference = publishingExecutionReferenceFromMcpResult(providerResult);
+  const resultReference =
+    providerEvidence.url ??
+    providerEvidence.recordId ??
+    publishingExecutionReferenceFromMcpResult(providerResult);
 
   const completedRun = await completePublishingExecutionRun({
     supabase,
@@ -398,6 +413,7 @@ export async function completeZapierMcpPublishingExecution({
       accountPublishingSettingsResolution:
         asset.account_publishing_settings_resolution ?? null,
       mcpResult: providerResult.parsedText ?? providerResult.text ?? null,
+      mcpProviderEvidence: providerEvidence.ok ? providerEvidence : null,
       mcpRequestArguments: providerResult.requestArguments ?? null,
     },
   });
