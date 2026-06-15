@@ -42,6 +42,13 @@ function successStatus(value: unknown) {
   return ["published", "completed", "success", "succeeded", "created"].includes(normalized);
 }
 
+function numericProviderChildren(value: Record<string, any>) {
+  return Object.entries(value)
+    .filter(([key]) => /^\d+$/.test(key))
+    .map(([, child]) => child)
+    .filter((child) => Boolean(child) && typeof child === "object");
+}
+
 function explicitErrorMessage(value: unknown): string | null {
   if (!value) return null;
 
@@ -114,28 +121,6 @@ function explicitErrorMessage(value: unknown): string | null {
   return null;
 }
 
-function hasFollowUpOrPreview(value: unknown) {
-  const candidates = providerPayloadCandidates(value);
-
-  for (const candidate of candidates) {
-    if (!isRecord(candidate)) continue;
-
-    if (candidate.followUpQuestion) return true;
-    if (candidate.isPreview === true) return true;
-  }
-
-  const text = valueToText(value).toLowerCase();
-
-  return (
-    text.includes("followupquestion") ||
-    text.includes("follow-up question") ||
-    text.includes("could you please provide") ||
-    text.includes("i need the actual content") ||
-    text.includes("need the actual content") ||
-    text.includes("ispreview")
-  );
-}
-
 function contentTextPayloads(value: unknown) {
   const out: unknown[] = [];
 
@@ -168,6 +153,10 @@ function providerPayloadCandidates(value: unknown) {
 
   candidates.push(value);
 
+  if (Array.isArray(value)) {
+    candidates.push(...value);
+  }
+
   if (isRecord(value)) {
     if (value.parsedText) candidates.push(value.parsedText);
 
@@ -182,10 +171,33 @@ function providerPayloadCandidates(value: unknown) {
     if (value.result) candidates.push(value.result);
     if (value.results) candidates.push({ results: value.results });
 
+    candidates.push(...numericProviderChildren(value));
     candidates.push(...contentTextPayloads(value));
   }
 
   return candidates;
+}
+
+function hasFollowUpOrPreview(value: unknown) {
+  const candidates = providerPayloadCandidates(value);
+
+  for (const candidate of candidates) {
+    if (!isRecord(candidate)) continue;
+
+    if (candidate.followUpQuestion) return true;
+    if (candidate.isPreview === true) return true;
+  }
+
+  const text = valueToText(value).toLowerCase();
+
+  return (
+    text.includes("followupquestion") ||
+    text.includes("follow-up question") ||
+    text.includes("could you please provide") ||
+    text.includes("i need the actual content") ||
+    text.includes("need the actual content") ||
+    text.includes("ispreview")
+  );
 }
 
 export type McpProviderSuccessEvidence = {
@@ -211,7 +223,32 @@ function emptyEvidence(): McpProviderSuccessEvidence {
 }
 
 function evidenceFromCandidate(candidate: unknown): McpProviderSuccessEvidence | null {
+  if (Array.isArray(candidate)) {
+    for (const item of candidate) {
+      const evidence = evidenceFromCandidate(item);
+      if (evidence?.ok) return evidence;
+    }
+
+    return null;
+  }
+
   if (!isRecord(candidate)) return null;
+
+  // Do not treat VIP's own request payload as provider success evidence.
+  // It can contain asset_id, campaign_id, company_id, urls in post copy, etc.
+  if (candidate.requestArguments || candidate.params || candidate.mcpRequestArguments) {
+    return null;
+  }
+
+  for (const child of numericProviderChildren(candidate)) {
+    const childEvidence = evidenceFromCandidate(child);
+    if (childEvidence?.ok) {
+      return {
+        ...childEvidence,
+        source: childEvidence.source ?? "numeric_provider_result",
+      };
+    }
+  }
 
   const resultObject = isRecord(candidate.results)
     ? candidate.results
@@ -219,13 +256,14 @@ function evidenceFromCandidate(candidate: unknown): McpProviderSuccessEvidence |
       ? candidate.result
       : candidate;
 
-  // Do not treat VIP's own request payload as provider success evidence.
-  // It can contain asset_id, campaign_id, text, company_id, urls in post copy, etc.
-  if (
-    resultObject === candidate &&
-    (candidate.requestArguments || candidate.params || candidate.mcpRequestArguments)
-  ) {
-    return null;
+  for (const child of numericProviderChildren(resultObject)) {
+    const childEvidence = evidenceFromCandidate(child);
+    if (childEvidence?.ok) {
+      return {
+        ...childEvidence,
+        source: childEvidence.source ?? "numeric_provider_result",
+      };
+    }
   }
 
   const recordId =
@@ -234,6 +272,7 @@ function evidenceFromCandidate(candidate: unknown): McpProviderSuccessEvidence |
     valueStringOrNull(resultObject.post_id) ??
     valueStringOrNull(resultObject.postId) ??
     valueStringOrNull(resultObject.share_id) ??
+    valueStringOrNull(resultObject.shareId) ??
     valueStringOrNull(resultObject.id);
 
   const url =
@@ -256,8 +295,6 @@ function evidenceFromCandidate(candidate: unknown): McpProviderSuccessEvidence |
     return null;
   }
 
-  // A bare execution id proves Zapier may have run, but it does not prove the provider created a post/draft.
-  // A provider record/url or published/created status must be present.
   return {
     ok: true,
     recordId,
@@ -313,7 +350,7 @@ export function assertSuccessfulMcpResult(
     throw new Error(
       [
         "ZapierMCP did not return remote provider success evidence.",
-        "VIP may have built valid request arguments, but it will not mark the asset published unless the MCP response contains provider proof such as results.record_id, results.url, or status PUBLISHED/CREATED.",
+        "VIP may have built valid request arguments, but it will not mark the asset published unless the MCP response contains provider proof such as a LinkedIn share id, URL, or PUBLISHED lifecycle state.",
         `Response preview: ${valueToText(result).slice(0, 1000)}`,
       ].join(" ")
     );

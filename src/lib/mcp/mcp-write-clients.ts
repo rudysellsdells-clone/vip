@@ -196,45 +196,6 @@ function throwIfMcpToolError(json: any, toolText: string | null) {
   }
 }
 
-function executionInstructionEnvelope({
-  app,
-  action,
-  instructions,
-}: {
-  app: string;
-  action: string;
-  instructions: string;
-}) {
-  return [
-    "EXECUTE THE ZAPIER WRITE ACTION NOW.",
-    "This is an execution request, not a preview, simulation, field-mapping review, or confirmation request.",
-    `Call the connected app action now: app=${app}, action=${action}.`,
-    "Use the structured params object exactly as provided. Do not replace params with a summary of the request.",
-    "Do not ask a follow-up question when the required params are present.",
-    "If the connected app/API refuses execution, return an explicit error object instead of asking for confirmation.",
-    "After the action executes, return the real provider response only.",
-    "",
-    "Original approved publishing instruction:",
-    instructions,
-  ].join("\n");
-}
-
-function executionOutputEnvelope(output: unknown) {
-  const requestedOutput = String(output ?? "").trim();
-
-  return [
-    "Return JSON only after the write action executes.",
-    "Do not return followUpQuestion.",
-    "Do not return a field-mapping confirmation.",
-    "Do not simulate a provider response.",
-    "Use this shape when successful: {\"results\":{\"record_id\":\"...\",\"url\":\"...\",\"status\":\"PUBLISHED\",\"message\":\"...\"}}.",
-    "If the action cannot execute, use this shape: {\"error\":\"...\",\"status\":\"failed\"}.",
-    requestedOutput ? `Additional requested output: ${requestedOutput}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
 function buildZapierWriteArguments({
   app,
   action,
@@ -246,20 +207,16 @@ function buildZapierWriteArguments({
 }: ZapierWriteActionArgs) {
   const safeParams = cleanRecord(asRecord(params));
   const safeApp = requiredString(app, "app");
-  const safeAction = requiredString(action, "action");
-  const safeInstructions = requiredString(instructions, "instructions");
 
   return {
     selected_api: requiredString(selected_api ?? selectedApi ?? selectedApiForApp(safeApp), "selected_api"),
     app: safeApp,
-    action: safeAction,
-    instructions: executionInstructionEnvelope({
-      app: safeApp,
-      action: safeAction,
-      instructions: safeInstructions,
-    }),
+    action: requiredString(action, "action"),
+    instructions: requiredString(instructions, "instructions"),
     params: safeParams,
-    output: executionOutputEnvelope(output),
+    output:
+      String(output ?? "").trim() ||
+      "Return the created record ID, URL if available, and any status or error details.",
   };
 }
 
