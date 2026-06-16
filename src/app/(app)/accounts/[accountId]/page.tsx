@@ -182,13 +182,13 @@ export default async function AccountDetailPage({
         title="Account setup"
         description="Each section below handles one part of the workspace. Use the quick links to jump directly to the area you need."
       >
-        <div className="grid gap-6 xl:grid-cols-[280px_1fr]">
+        <div className={accountStyles.accountSetupGrid}>
           <aside className="xl:sticky xl:top-28 xl:self-start">
-            <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="px-3 text-xs font-black uppercase tracking-[0.18em] text-slate-400">
+            <div className={accountStyles.accountMenuCard}>
+              <p className={accountStyles.accountMenuEyebrow}>
                 Account Menu
               </p>
-              <nav className="mt-3 grid gap-2 text-sm font-semibold">
+              <nav className={accountStyles.accountMenuNav}>
                 {[
                   ["Overview", "#overview"],
                   ["Brand Profile", "#brand-profile"],
@@ -200,13 +200,13 @@ export default async function AccountDetailPage({
                   <a
                     key={href}
                     href={href}
-                    className="rounded-2xl px-3 py-2.5 text-slate-700 transition hover:bg-slate-50 hover:text-blue-700"
+                    className={accountStyles.accountMenuLink}
                   >
                     {label}
                   </a>
                 ))}
               </nav>
-              <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
+              <div className={accountStyles.accountWorkspaceBox}>
                 <p className="font-semibold text-slate-900">Active workspace</p>
                 <p className="mt-1">{account.name}</p>
                 <p className="mt-2 text-xs uppercase tracking-[0.14em] text-slate-400">Slug</p>
@@ -215,8 +215,8 @@ export default async function AccountDetailPage({
             </div>
           </aside>
 
-          <div className="space-y-6">
-            <section id="overview" className="scroll-mt-28 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+          <div className={accountStyles.accountContentStack}>
+            <section id="overview" className={`scroll-mt-28 ${accountStyles.accountSectionCard}`}>
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-700">Overview</p>
@@ -228,7 +228,7 @@ export default async function AccountDetailPage({
                 <WebsiteBadge status={account.status} />
               </div>
 
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <div className={accountStyles.infoGrid}>
                 <InfoTile label="Website" value={compactValue(account.website_url)} />
                 <InfoTile label="Primary CTA" value={compactValue(account.primary_cta)} />
                 <InfoTile label="Created" value={formatDate(account.created_at)} />
@@ -236,7 +236,7 @@ export default async function AccountDetailPage({
               </div>
             </section>
 
-            <section id="brand-profile" className="scroll-mt-28 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+            <section id="brand-profile" className={`scroll-mt-28 ${accountStyles.accountSectionCard}`}>
               <SectionHeading
                 eyebrow="Brand Profile"
                 title="Account-specific brand memory"
@@ -251,7 +251,7 @@ export default async function AccountDetailPage({
               </div>
             </section>
 
-            <section id="strategy" className="scroll-mt-28 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+            <section id="strategy" className={`scroll-mt-28 ${accountStyles.accountSectionCard}`}>
               <SectionHeading
                 eyebrow="Strategy"
                 title="Services, offers, and audiences"
@@ -268,7 +268,7 @@ export default async function AccountDetailPage({
               </div>
             </section>
 
-            <section id="publishing" className="scroll-mt-28 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+            <section id="publishing" className={`scroll-mt-28 ${accountStyles.accountSectionCard}`}>
               <SectionHeading
                 eyebrow="Publishing"
                 title="Account publishing settings"
@@ -283,7 +283,7 @@ export default async function AccountDetailPage({
               </div>
             </section>
 
-            <section id="team" className="scroll-mt-28 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+            <section id="team" className={`scroll-mt-28 ${accountStyles.accountSectionCard}`}>
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <SectionHeading
                   eyebrow="Team"
@@ -357,7 +357,7 @@ export default async function AccountDetailPage({
               </div>
             </section>
 
-            <section id="danger-zone" className="scroll-mt-28 rounded-3xl border border-red-200 bg-red-50/60 p-6 shadow-sm md:p-8">
+            <section id="danger-zone" className={`scroll-mt-28 ${accountStyles.accountDangerCard}`}>
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <p className="text-xs font-black uppercase tracking-[0.18em] text-red-700">Danger Zone</p>
@@ -379,7 +379,7 @@ export default async function AccountDetailPage({
 
 function InfoTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+    <div className={accountStyles.infoTile}>
       <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">{label}</p>
       <p className="mt-2 break-words text-sm font-semibold text-slate-900">{value}</p>
     </div>
