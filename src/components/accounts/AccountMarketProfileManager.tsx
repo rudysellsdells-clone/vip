@@ -64,7 +64,7 @@ export function AccountMarketProfileManager({
 }) {
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl border border-blue-100 bg-blue-50/60 p-5 text-sm leading-6 text-blue-950">
+      <div className="rounded-3xl border border-blue-100 bg-blue-50/60 p-6 text-sm leading-6 text-blue-950">
         <p className="font-bold">Why this matters</p>
         <p className="mt-1">
           These fields tell VIP what this account actually sells, who they sell to, and which offers should drive campaigns. This keeps a service business from generating marketing-agency content by mistake.
@@ -409,7 +409,7 @@ function StrategyPanel({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-7">
       <div className="mb-5">
         <h3 className="text-xl font-black text-slate-950">{title}</h3>
         <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{description}</p>
