@@ -6,9 +6,10 @@ import {
   accountButtonRowClass,
   accountFormCardClass,
   accountFormGridClass,
+  accountFieldLabelClass,
   accountInputClass,
-  accountLabelClass,
   accountTextareaClass,
+  accountWideFieldLabelClass,
 } from "@/components/accounts/accountFormClasses";
 
 type BrandProfile = {
@@ -80,17 +81,16 @@ export function AccountBrandProfileForm({
         <Field label="Website" name="websiteUrl" defaultValue={profile?.website_url} placeholder="https://example.com" />
         <Field label="Primary CTA" name="primaryCta" defaultValue={profile?.primary_cta} placeholder="Schedule a consultation" />
         <Field label="Phone" name="phone" defaultValue={profile?.phone} />
+        <TextArea label="Target audience" name="targetAudience" defaultValue={profile?.target_audience} />
+        <TextArea label="Tone of voice" name="tone" defaultValue={profile?.tone} placeholder="Practical, credible, professional, helpful..." />
+        <TextArea label="Service areas" name="serviceAreas" defaultValue={profile?.service_areas} />
+        <TextArea label="Core offers" name="coreOffers" defaultValue={profile?.core_offers} />
+        <TextArea label="Approved hashtags" name="approvedHashtags" defaultValue={profile?.approved_hashtags} placeholder="#LocalSEO #LeadGeneration" />
+        <TextArea label="Notes" name="notes" defaultValue={profile?.notes} wide />
       </div>
 
-      <TextArea label="Target audience" name="targetAudience" defaultValue={profile?.target_audience} />
-      <TextArea label="Tone of voice" name="tone" defaultValue={profile?.tone} placeholder="Practical, credible, professional, helpful..." />
-      <TextArea label="Service areas" name="serviceAreas" defaultValue={profile?.service_areas} />
-      <TextArea label="Core offers" name="coreOffers" defaultValue={profile?.core_offers} />
-      <TextArea label="Approved hashtags" name="approvedHashtags" defaultValue={profile?.approved_hashtags} placeholder="#LocalSEO #LeadGeneration" />
-      <TextArea label="Notes" name="notes" defaultValue={profile?.notes} />
-
       <div className={accountButtonRowClass}>
-        <p className="text-xs text-slate-500">
+        <p className="max-w-3xl text-xs text-slate-500">
           VIP will use this as the account-level memory for campaign generation, content tone, and creative direction as Phase 3 continues.
         </p>
         <button
@@ -101,7 +101,6 @@ export function AccountBrandProfileForm({
           {isPending ? "Saving..." : "Save Brand Profile"}
         </button>
       </div>
-
       {message ? (
         <p className={tone === "error" ? "text-sm font-semibold text-red-700" : "text-sm font-semibold text-emerald-700"}>
           {message}
@@ -123,7 +122,7 @@ function Field({
   placeholder?: string;
 }) {
   return (
-    <label className={accountLabelClass}>
+    <label className={accountFieldLabelClass}>
       {label}
       <input
         name={name}
@@ -134,20 +133,21 @@ function Field({
     </label>
   );
 }
-
 function TextArea({
   label,
   name,
   defaultValue,
   placeholder,
+  wide = false,
 }: {
   label: string;
   name: string;
   defaultValue?: string | null;
   placeholder?: string;
+  wide?: boolean;
 }) {
   return (
-    <label className={accountLabelClass}>
+    <label className={wide ? accountWideFieldLabelClass : accountFieldLabelClass}>
       {label}
       <textarea
         name={name}

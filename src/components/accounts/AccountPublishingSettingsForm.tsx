@@ -6,9 +6,10 @@ import {
   accountButtonRowClass,
   accountFormCardClass,
   accountFormGridClass,
+  accountFieldLabelClass,
   accountInputClass,
-  accountLabelClass,
   accountTextareaClass,
+  accountWideFieldLabelClass,
 } from "@/components/accounts/accountFormClasses";
 
 type PublishingSettings = {
@@ -76,21 +77,21 @@ export function AccountPublishingSettingsForm({
         <Field label="Facebook Page ID" name="facebookPageId" defaultValue={settings?.facebook_page_id} />
         <Field label="Primary booking / CTA URL" name="primaryBookingUrl" defaultValue={settings?.primary_booking_url} placeholder="https://example.com/contact" />
         <Field label="Default hashtags" name="defaultHashtags" defaultValue={settings?.default_hashtags} placeholder="#LocalSEO #LeadGeneration" />
+
+        <label className={accountWideFieldLabelClass}>
+          GalaxyAI creative style
+          <textarea
+            name="galaxyAiStyle"
+            defaultValue={settings?.galaxyai_style ?? ""}
+            rows={4}
+            placeholder="Clean, polished short-form social video. Business-focused visuals. No exaggerated claims."
+            className={accountTextareaClass}
+          />
+        </label>
       </div>
 
-      <label className={accountLabelClass}>
-        GalaxyAI creative style
-        <textarea
-          name="galaxyAiStyle"
-          defaultValue={settings?.galaxyai_style ?? ""}
-          rows={4}
-          placeholder="Clean, polished short-form social video. Business-focused visuals. No exaggerated claims."
-          className={accountTextareaClass}
-        />
-      </label>
-
       <div className={accountButtonRowClass}>
-        <p className="text-xs text-slate-500">
+        <p className="max-w-3xl text-xs text-slate-500">
           These settings let VIP keep publishing destinations and creative execution separate by account. LinkedIn requires the actual organization ID, not just the page name.
         </p>
         <button
@@ -101,7 +102,6 @@ export function AccountPublishingSettingsForm({
           {isPending ? "Saving..." : "Save Publishing Settings"}
         </button>
       </div>
-
       {message ? (
         <p className={tone === "error" ? "text-sm font-semibold text-red-700" : "text-sm font-semibold text-emerald-700"}>
           {message}
@@ -123,7 +123,7 @@ function Field({
   placeholder?: string;
 }) {
   return (
-    <label className={accountLabelClass}>
+    <label className={accountFieldLabelClass}>
       {label}
       <input
         name={name}

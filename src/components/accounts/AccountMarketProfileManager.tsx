@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import {
   accountButtonRowClass,
   accountFormGridClass,
+  accountFieldLabelClass,
   accountInputClass,
-  accountLabelClass,
   accountSoftFormCardClass,
   accountTextareaClass,
+  accountWideFieldLabelClass,
 } from "@/components/accounts/accountFormClasses";
 
 type ServiceLine = {
@@ -243,7 +244,7 @@ function OfferForm({
       <h4 className="text-sm font-black uppercase tracking-[0.16em] text-slate-500">Add offer</h4>
       <div className={accountFormGridClass}>
         <Field label="Offer name" name="name" required placeholder="Spring maintenance plan" />
-        <label className={accountLabelClass}>
+        <label className={accountFieldLabelClass}>
           Service line
           <select name="serviceLineId" className={accountInputClass}>
             <option value="">No service line selected</option>
@@ -252,22 +253,23 @@ function OfferForm({
             ))}
           </select>
         </label>
-        <label className={accountLabelClass}>
+        <label className={accountFieldLabelClass}>
           Offer type
           <select name="offerType" defaultValue="project" className={accountInputClass}>
             {offerTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
           </select>
         </label>
         <Field label="Primary CTA" name="primaryCta" placeholder="Schedule service" />
+        <TextArea label="Description" name="description" placeholder="What the offer includes." />
+        <TextArea label="Outcome" name="outcome" placeholder="What result the customer should expect." />
+        <TextArea label="Price notes" name="priceNotes" placeholder="Optional pricing, package, or qualification notes." />
+        <TextArea
+          label="Target audiences"
+          name="targetBuyerSegments"
+          placeholder={audiences.length ? audiences.map((audience) => audience.name).join("\n") : "One audience per line"}
+          wide
+        />
       </div>
-      <TextArea label="Description" name="description" placeholder="What the offer includes." />
-      <TextArea label="Outcome" name="outcome" placeholder="What result the customer should expect." />
-      <TextArea label="Price notes" name="priceNotes" placeholder="Optional pricing, package, or qualification notes." />
-      <TextArea
-        label="Target audiences"
-        name="targetBuyerSegments"
-        placeholder={audiences.length ? audiences.map((audience) => audience.name).join("\n") : "One audience per line"}
-      />
       <FormFooter isPending={isPending} submitLabel="Add Offer" message={message} error={error} />
     </form>
   );
@@ -457,13 +459,13 @@ function Field({
   placeholder?: string;
 }) {
   return (
-    <label className={accountLabelClass}>
+    <label className={accountFieldLabelClass}>
       {label}
       <input
         name={name}
         required={required}
         placeholder={placeholder}
-        className={accountTextareaClass}
+        className={accountInputClass}
       />
     </label>
   );
@@ -473,13 +475,15 @@ function TextArea({
   label,
   name,
   placeholder,
+  wide = false,
 }: {
   label: string;
   name: string;
   placeholder?: string;
+  wide?: boolean;
 }) {
   return (
-    <label className={`${accountLabelClass} md:col-span-2`}>
+    <label className={wide ? accountWideFieldLabelClass : accountFieldLabelClass}>
       {label}
       <textarea
         name={name}

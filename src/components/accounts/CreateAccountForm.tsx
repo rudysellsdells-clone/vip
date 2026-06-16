@@ -4,11 +4,11 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   accountButtonRowClass,
+  accountFieldClass,
   accountFormCardClass,
   accountFormGridClass,
   accountInputClass,
   accountLabelClass,
-  accountWideFieldClass,
 } from "@/components/accounts/accountFormClasses";
 
 type FormState = {
@@ -60,21 +60,21 @@ export function CreateAccountForm() {
 
   return (
     <form onSubmit={onSubmit} className={accountFormCardClass}>
-      <div className={accountWideFieldClass}>
-        <label className={accountLabelClass} htmlFor="account-name">
-          Account / client name
-        </label>
-        <input
-          id="account-name"
-          name="name"
-          required
-          placeholder="Example: ABC Roofing"
-          className={accountInputClass}
-        />
-      </div>
-
       <div className={accountFormGridClass}>
-        <div>
+        <div className={accountFieldClass}>
+          <label className={accountLabelClass} htmlFor="account-name">
+            Account / client name
+          </label>
+          <input
+            id="account-name"
+            name="name"
+            required
+            placeholder="Example: ABC Roofing"
+            className={accountInputClass}
+          />
+        </div>
+
+        <div className={accountFieldClass}>
           <label className={accountLabelClass} htmlFor="owner-name">
             Account owner name
           </label>
@@ -86,7 +86,7 @@ export function CreateAccountForm() {
           />
         </div>
 
-        <div>
+        <div className={accountFieldClass}>
           <label className={accountLabelClass} htmlFor="owner-email">
             Account owner email
           </label>
@@ -99,10 +99,8 @@ export function CreateAccountForm() {
             className={accountInputClass}
           />
         </div>
-      </div>
 
-      <div className={accountFormGridClass}>
-        <div>
+        <div className={accountFieldClass}>
           <label className={accountLabelClass} htmlFor="website-url">
             Website
           </label>
@@ -114,7 +112,7 @@ export function CreateAccountForm() {
           />
         </div>
 
-        <div>
+        <div className={accountFieldClass}>
           <label className={accountLabelClass} htmlFor="primary-cta">
             Primary CTA
           </label>
@@ -128,7 +126,7 @@ export function CreateAccountForm() {
       </div>
 
       <div className={accountButtonRowClass}>
-        <p className="text-xs text-slate-500">
+        <p className="max-w-3xl text-xs text-slate-500">
           VIP will create a separate account workspace and add you as the managing owner. If the owner email is different, VIP records a pending owner invite.
         </p>
         <button

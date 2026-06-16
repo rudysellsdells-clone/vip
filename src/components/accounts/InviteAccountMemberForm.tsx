@@ -52,7 +52,7 @@ export function InviteAccountMemberForm({ accountId }: { accountId: string }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="mt-4 grid max-w-4xl gap-x-4 gap-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[minmax(220px,320px)_minmax(180px,280px)_180px_auto] md:items-end">
+    <form onSubmit={onSubmit} className="mt-4 grid max-w-5xl gap-x-5 gap-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[minmax(240px,340px)_minmax(200px,300px)_180px_auto] md:items-end">
       <div>
         <label className={accountCompactLabelClass} htmlFor={`member-email-${accountId}`}>
           Email
