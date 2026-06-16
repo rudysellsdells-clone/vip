@@ -27,6 +27,10 @@ export default async function AuthenticatedAppLayout({
       accounts={accountContext.accounts}
       activeAccountId={accountContext.activeAccountId}
       activeAccountName={accountContext.activeAccountName}
+      activeAccountRole={accountContext.activeAccountRole}
+      canManageActiveAccount={accountContext.canManageActiveAccount}
+      platformRole={accountContext.platformRole}
+      isMaster={accountContext.isMaster}
     >
       {children}
     </AppShell>

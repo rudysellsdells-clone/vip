@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { productConfig } from "@/lib/config/product";
 import { AccountSwitcher } from "@/components/accounts/AccountSwitcher";
 import type { AccountContextAccount } from "@/lib/accounts/account-context";
@@ -12,180 +12,240 @@ type NavItem = {
   label: string;
   href: string;
   description?: string;
+  masterOnly?: boolean;
+  requiresAccount?: boolean;
+  manageAccountOnly?: boolean;
 };
 
 type NavGroup = {
   label: string;
   items: NavItem[];
+  masterOnly?: boolean;
+  requiresAccount?: boolean;
 };
 
-const navGroups: NavGroup[] = [
-  {
-    label: "Home",
-    items: [
-      {
-        label: "Dashboard",
-        href: "/dashboard",
-        description: "Overview, status, and next actions.",
-      },
-      {
-        label: "Phase Two",
-        href: "/phase-two",
-        description: "Growth system hub and core workflows.",
-      },
-      {
-        label: "Reporting",
-        href: "/phase-two-reporting",
-        description: "Proof of work and campaign progress.",
-      },
-    ],
-  },
-  {
-    label: "Plan",
-    items: [
-      {
-        label: "Campaigns",
-        href: "/campaigns",
-        description: "Create and manage campaign asset packs.",
-      },
-      {
-        label: "Content Calendar",
-        href: "/content-calendar",
-        description: "Monthly strategy, weekly campaigns, and planned assets.",
-      },
-      {
-        label: "Monthly Calendar",
-        href: "/content-calendar/monthly",
-        description: "Month view of planned and generated content.",
-      },
-      {
-        label: "Publishing Schedule",
-        href: "/publishing-schedule",
-        description: "Assign publish dates and times.",
-      },
-    ],
-  },
-  {
-    label: "Review",
-    items: [
-      {
-        label: "Approvals",
-        href: "/approvals",
-        description: "Review, revise, and approve assets.",
-      },
-      {
-        label: "Quality Automation",
-        href: "/quality-automation",
-        description: "Apply quality gates to reviewed assets.",
-      },
-      {
-        label: "Ready Queue",
-        href: "/ready-for-publishing",
-        description: "Assets that passed quality gates.",
-      },
-      {
-        label: "Archive",
-        href: "/archive",
-        description: "Review archived campaigns and assets.",
-      },
-    ],
-  },
-  {
-    label: "Publish",
-    items: [
-      {
-        label: "Publishing Ready",
-        href: "/publishing-ready",
-        description: "Execute approved assets and track runs.",
-      },
-      {
-        label: "Actions",
-        href: "/actions",
-        description: "Execute approved external actions.",
-      },
-      {
-        label: "Zapier",
-        href: "/zapier",
-        description: "Review Zapier MCP setup and action status.",
-      },
-      {
-        label: "GalaxyAI",
-        href: "/galaxyai",
-        description: "Manage creative media generation workflows.",
-      },
-    ],
-  },
-  {
-    label: "Create",
-    items: [
-      {
-        label: "Authority Content",
-        href: "/authority-content",
-        description: "Create blogs, white papers, and authority assets.",
-      },
-      {
-        label: "Repurposing",
-        href: "/content-repurposing",
-        description: "Turn source assets into channel-ready content.",
-      },
-      {
-        label: "Content Quality",
-        href: "/content-quality",
-        description: "Score brand fit, clarity, CTA strength, and SEO readiness.",
-      },
-      {
-        label: "What-If Stories",
-        href: "/what-if-stories",
-        description: "Create personalized prospect growth scenarios.",
-      },
-    ],
-  },
-  {
-    label: "Grow",
-    items: [
-      {
-        label: "Prospects",
-        href: "/prospects",
-        description: "Track target companies and contacts.",
-      },
-      {
-        label: "Opportunities",
-        href: "/opportunities",
-        description: "Manage revenue pipeline opportunities.",
-      },
-      {
-        label: "Link Builder",
-        href: "/link-builder",
-        description: "Find, prepare, and verify directory backlinks.",
-      },
-    ],
-  },
-  {
-    label: "Workspace",
-    items: [
-      {
-        label: "Accounts",
-        href: "/accounts",
-        description: "Create client accounts, owners, seats, and access.",
-      },
-      {
-        label: "Brand Voice",
-        href: "/brand-voice",
-        description: "Control voice, tone, and brand rules.",
-      },
-      {
-        label: "Knowledge",
-        href: "/knowledge",
-        description: "Manage reusable business knowledge.",
-      },
-      {
-        label: "Settings",
-        href: "/settings",
-        description: "Manage setup, thresholds, and product configuration.",
-      },
-    ],
-  },
-];
+type NavContext = {
+  activeAccountId: string | null;
+  canManageActiveAccount: boolean;
+  isMaster: boolean;
+};
+
+function activeAccountWorkspaceHref(activeAccountId: string | null) {
+  return activeAccountId ? `/accounts/${activeAccountId}` : "/accounts";
+}
+
+function buildNavGroups({
+  activeAccountId,
+  canManageActiveAccount,
+  isMaster,
+}: NavContext): NavGroup[] {
+  const activeAccountHref = activeAccountWorkspaceHref(activeAccountId);
+
+  const groups: NavGroup[] = [
+    {
+      label: "Home",
+      items: [
+        {
+          label: "Dashboard",
+          href: "/dashboard",
+          description: "Overview, status, and next actions.",
+        },
+        {
+          label: "Reporting",
+          href: "/phase-two-reporting",
+          description: "Proof of work and campaign progress.",
+          masterOnly: true,
+        },
+        {
+          label: "Phase Two",
+          href: "/phase-two",
+          description: "Growth system hub and core workflows.",
+          masterOnly: true,
+        },
+      ],
+    },
+    {
+      label: "Plan",
+      requiresAccount: true,
+      items: [
+        {
+          label: "Campaigns",
+          href: "/campaigns",
+          description: "Create and manage campaign asset packs.",
+          requiresAccount: true,
+        },
+        {
+          label: "Content Calendar",
+          href: "/content-calendar",
+          description: "Monthly strategy, weekly campaigns, and planned assets.",
+          requiresAccount: true,
+        },
+        {
+          label: "Monthly Calendar",
+          href: "/content-calendar/monthly",
+          description: "Month view of planned and generated content.",
+          requiresAccount: true,
+        },
+      ],
+    },
+    {
+      label: "Create",
+      requiresAccount: true,
+      items: [
+        {
+          label: "Authority Content",
+          href: "/authority-content",
+          description: "Create blogs, white papers, and authority assets.",
+          requiresAccount: true,
+        },
+        {
+          label: "Repurposing",
+          href: "/content-repurposing",
+          description: "Turn source assets into channel-ready content.",
+          requiresAccount: true,
+        },
+        {
+          label: "What-If Stories",
+          href: "/what-if-stories",
+          description: "Create personalized prospect growth scenarios.",
+          masterOnly: true,
+        },
+      ],
+    },
+    {
+      label: "Review",
+      requiresAccount: true,
+      items: [
+        {
+          label: "Approvals",
+          href: "/approvals",
+          description: "Review, revise, and approve assets.",
+          requiresAccount: true,
+        },
+        {
+          label: "Quality Review",
+          href: "/quality-automation",
+          description: "Apply quality gates to reviewed assets.",
+          requiresAccount: true,
+        },
+        {
+          label: "Archive",
+          href: "/archive",
+          description: "Review archived campaigns and assets.",
+          requiresAccount: true,
+        },
+      ],
+    },
+    {
+      label: "Publish",
+      requiresAccount: true,
+      items: [
+        {
+          label: "Publish Center",
+          href: "/publishing-schedule",
+          description: "Approved content ready to schedule, send, or publish.",
+          requiresAccount: true,
+        },
+        {
+          label: "Published Content",
+          href: "/published",
+          description: "Review published and completed assets.",
+          requiresAccount: true,
+        },
+        {
+          label: "Action History",
+          href: "/actions",
+          description: "Execution history and troubleshooting.",
+          requiresAccount: true,
+        },
+        {
+          label: "Integrations",
+          href: "/zapier",
+          description: "Zapier MCP setup, diagnostics, and provider status.",
+          masterOnly: true,
+        },
+        {
+          label: "GalaxyAI",
+          href: "/galaxyai",
+          description: "Manage creative media generation workflows.",
+          masterOnly: true,
+        },
+      ],
+    },
+    {
+      label: "Grow",
+      masterOnly: true,
+      items: [
+        {
+          label: "Prospects",
+          href: "/prospects",
+          description: "Track target companies and contacts.",
+        },
+        {
+          label: "Opportunities",
+          href: "/opportunities",
+          description: "Manage revenue pipeline opportunities.",
+        },
+        {
+          label: "Link Builder",
+          href: "/link-builder",
+          description: "Find, prepare, and verify directory backlinks.",
+        },
+      ],
+    },
+    {
+      label: "Workspace",
+      items: [
+        {
+          label: isMaster ? "All Accounts" : "Account Workspace",
+          href: isMaster ? "/accounts" : activeAccountHref,
+          description: isMaster
+            ? "Create client accounts, owners, seats, and access."
+            : "Manage this account's profile, strategy, team, and publishing settings.",
+          requiresAccount: !isMaster,
+        },
+        {
+          label: "Brand Voice",
+          href: "/brand-voice",
+          description: "Control global voice, tone, and brand rules.",
+          masterOnly: true,
+        },
+        {
+          label: "Knowledge",
+          href: "/knowledge",
+          description: "Manage reusable business knowledge.",
+          masterOnly: true,
+        },
+        {
+          label: "Settings",
+          href: "/settings",
+          description: "Manage setup, thresholds, and product configuration.",
+          masterOnly: true,
+        },
+      ],
+    },
+  ];
+
+  return groups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => shouldShowItem(item, { activeAccountId, canManageActiveAccount, isMaster })),
+    }))
+    .filter((group) => group.items.length > 0 && shouldShowGroup(group, { activeAccountId, canManageActiveAccount, isMaster }));
+}
+
+function shouldShowGroup(group: NavGroup, context: NavContext) {
+  if (group.masterOnly && !context.isMaster) return false;
+  if (group.requiresAccount && !context.activeAccountId) return false;
+  return true;
+}
+
+function shouldShowItem(item: NavItem, context: NavContext) {
+  if (item.masterOnly && !context.isMaster) return false;
+  if (item.requiresAccount && !context.activeAccountId) return false;
+  if (item.manageAccountOnly && !context.isMaster && !context.canManageActiveAccount) return false;
+  return true;
+}
 
 function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -212,14 +272,27 @@ export function SidebarNav({
   accounts,
   activeAccountId,
   activeAccountName,
+  activeAccountRole,
+  canManageActiveAccount,
+  platformRole,
+  isMaster,
 }: {
   userEmail: string;
   accounts: AccountContextAccount[];
   activeAccountId: string | null;
   activeAccountName: string | null;
+  activeAccountRole: string | null;
+  canManageActiveAccount: boolean;
+  platformRole: string;
+  isMaster: boolean;
 }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const navGroups = useMemo(
+    () => buildNavGroups({ activeAccountId, canManageActiveAccount, isMaster }),
+    [activeAccountId, canManageActiveAccount, isMaster],
+  );
+  const roleLabel = isMaster ? "MASTER" : activeAccountRole ? activeAccountRole.replaceAll("_", " ") : platformRole;
 
   return (
     <header className={styles.header}>
@@ -287,6 +360,7 @@ export function SidebarNav({
             {activeAccountName ? (
               <span className={styles.accountContext}>{activeAccountName}</span>
             ) : null}
+            {roleLabel ? <span className={styles.accountContext}>{roleLabel}</span> : null}
           </div>
 
           <button

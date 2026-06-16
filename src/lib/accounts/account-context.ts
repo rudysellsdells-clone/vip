@@ -16,13 +16,39 @@ export type AccountContext = {
   activeAccountId: string | null;
   activeAccountName: string | null;
   activeAccountSlug: string | null;
+  activeAccountRole: string | null;
+  canManageActiveAccount: boolean;
+  platformRole: string;
+  isMaster: boolean;
 };
 
 type SupabaseLike = {
   from: (table: string) => any;
 };
 
-function normalizeAccountRows(rows: unknown[], ownedAccountIds: Set<string>) {
+const MASTER_PLATFORM_ROLES = new Set([
+  "master",
+  "owner",
+  "admin",
+  "platform_owner",
+  "platform_admin",
+]);
+
+const MANAGE_ACCOUNT_ROLES = new Set(["master", "owner", "admin"]);
+
+function normalizeRole(value: unknown) {
+  return String(value ?? "user").trim().toLowerCase();
+}
+
+export function isMasterPlatformRole(value: unknown) {
+  return MASTER_PLATFORM_ROLES.has(normalizeRole(value));
+}
+
+export function canManageAccountRole(value: unknown) {
+  return MANAGE_ACCOUNT_ROLES.has(normalizeRole(value));
+}
+
+function normalizeAccountRows(rows: unknown[], ownedAccountIds: Set<string>, forcedRole?: string) {
   return rows
     .map((row) => {
       const account = row as Record<string, any>;
@@ -30,13 +56,51 @@ function normalizeAccountRows(rows: unknown[], ownedAccountIds: Set<string>) {
         id: String(account.id),
         name: String(account.name ?? "Untitled Account"),
         slug: String(account.slug ?? ""),
-        role: ownedAccountIds.has(String(account.id)) ? "owner" : String(account.role ?? "member"),
+        role: forcedRole ?? (ownedAccountIds.has(String(account.id)) ? "owner" : String(account.role ?? "member")),
         status: String(account.status ?? "active"),
         websiteUrl: account.website_url ? String(account.website_url) : null,
         primaryCta: account.primary_cta ? String(account.primary_cta) : null,
       };
     })
     .filter((account) => account.status !== "archived");
+}
+
+function preferredAccountIdFromProfile(profile: Record<string, any> | null) {
+  return (
+    (profile?.last_active_account_id as string | null | undefined) ??
+    (profile?.default_account_id as string | null | undefined) ??
+    null
+  );
+}
+
+function buildContextResponse({
+  accounts,
+  profile,
+  platformRole,
+  isMaster,
+}: {
+  accounts: AccountContextAccount[];
+  profile: Record<string, any> | null;
+  platformRole: string;
+  isMaster: boolean;
+}): AccountContext {
+  const preferredAccountId = preferredAccountIdFromProfile(profile);
+  const activeAccount =
+    accounts.find((account) => account.id === preferredAccountId) ??
+    accounts[0] ??
+    null;
+  const activeAccountRole = activeAccount?.role ?? null;
+
+  return {
+    accounts,
+    activeAccountId: activeAccount?.id ?? null,
+    activeAccountName: activeAccount?.name ?? null,
+    activeAccountSlug: activeAccount?.slug ?? null,
+    activeAccountRole,
+    canManageActiveAccount: isMaster || canManageAccountRole(activeAccountRole),
+    platformRole,
+    isMaster,
+  };
 }
 
 export async function getUserAccountContext({
@@ -46,12 +110,30 @@ export async function getUserAccountContext({
   supabase: SupabaseLike;
   userId: string;
 }): Promise<AccountContext> {
-  const [{ data: profile }, { data: ownedAccounts }, { data: memberships }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("id,default_account_id,last_active_account_id")
-      .eq("id", userId)
-      .maybeSingle(),
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id,default_account_id,last_active_account_id,platform_role")
+    .eq("id", userId)
+    .maybeSingle();
+
+  const profileRow = profile as Record<string, any> | null;
+  const platformRole = normalizeRole(profileRow?.platform_role);
+  const isMaster = isMasterPlatformRole(platformRole);
+
+  if (isMaster) {
+    const { data: allAccounts } = await supabase
+      .from("accounts")
+      .select("id,name,slug,status,website_url,primary_cta,owner_user_id")
+      .neq("status", "archived")
+      .order("created_at", { ascending: true });
+
+    const accounts = normalizeAccountRows((allAccounts ?? []) as Record<string, any>[], new Set(), "master")
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    return buildContextResponse({ accounts, profile: profileRow, platformRole, isMaster });
+  }
+
+  const [{ data: ownedAccounts }, { data: memberships }] = await Promise.all([
     supabase
       .from("accounts")
       .select("id,name,slug,status,website_url,primary_cta,owner_user_id")
@@ -89,23 +171,8 @@ export async function getUserAccountContext({
   });
 
   const accounts = Array.from(accountMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-  const profileRow = profile as Record<string, any> | null;
-  const preferredAccountId =
-    (profileRow?.last_active_account_id as string | null | undefined) ??
-    (profileRow?.default_account_id as string | null | undefined) ??
-    null;
 
-  const activeAccount =
-    accounts.find((account) => account.id === preferredAccountId) ??
-    accounts[0] ??
-    null;
-
-  return {
-    accounts,
-    activeAccountId: activeAccount?.id ?? null,
-    activeAccountName: activeAccount?.name ?? null,
-    activeAccountSlug: activeAccount?.slug ?? null,
-  };
+  return buildContextResponse({ accounts, profile: profileRow, platformRole, isMaster });
 }
 
 export async function setActiveAccountForUser({
