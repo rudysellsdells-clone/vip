@@ -9,6 +9,7 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
+import accountStyles from "@/components/accounts/AccountForms.module.css";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -86,6 +87,7 @@ export default async function AccountPage() {
 
   return (
     <WebsitePage>
+      <div className={accountStyles.accountPage}>
       <WebsiteHero
         eyebrow="Account"
         title="Manage your VIP account and seats."
@@ -206,6 +208,7 @@ export default async function AccountPage() {
           <div className={websiteStyles.empty}>No seats added yet.</div>
         )}
       </WebsiteSection>
+      </div>
     </WebsitePage>
   );
 }

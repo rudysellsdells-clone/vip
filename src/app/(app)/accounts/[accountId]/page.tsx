@@ -14,6 +14,7 @@ import { AccountMarketProfileManager } from "@/components/accounts/AccountMarket
 import { ArchiveAccountButton } from "@/components/accounts/ArchiveAccountButton";
 import { InviteAccountMemberForm } from "@/components/accounts/InviteAccountMemberForm";
 import { RemoveAccountMemberButton } from "@/components/accounts/RemoveAccountMemberButton";
+import accountStyles from "@/components/accounts/AccountForms.module.css";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -159,6 +160,7 @@ export default async function AccountDetailPage({
 
   return (
     <WebsitePage>
+      <div className={accountStyles.accountPage}>
       <WebsiteHero
         eyebrow="Account Workspace"
         title={account.name}
@@ -370,6 +372,7 @@ export default async function AccountDetailPage({
           </div>
         </div>
       </WebsiteSection>
+      </div>
     </WebsitePage>
   );
 }

@@ -1,0 +1,178 @@
+/* Accounts-only layout polish.
+   This avoids relying on Tailwind breakpoint utilities for the core form grid. */
+
+.accountPage {
+  padding-left: clamp(10px, 1.6vw, 28px);
+}
+
+.formCard,
+.softFormCard {
+  max-width: 1120px;
+  border: 1px solid #e2e8f0;
+  border-radius: 24px;
+  background: #ffffff;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.055);
+  padding: 34px;
+}
+
+.softFormCard {
+  margin-top: 22px;
+  background: rgba(248, 250, 252, 0.84);
+  border-style: dashed;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(260px, 500px));
+  column-gap: 32px;
+  row-gap: 22px;
+  align-items: start;
+}
+
+.field,
+.wideField {
+  min-width: 0;
+  display: block;
+}
+
+.field {
+  max-width: 500px;
+}
+
+.wideField {
+  grid-column: 1 / -1;
+  max-width: 820px;
+}
+
+.label {
+  display: block;
+  margin-bottom: 5px;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.input,
+.textarea,
+.select {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 16px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 500;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+
+.input,
+.select {
+  min-height: 46px;
+  padding: 0 14px;
+}
+
+.textarea {
+  min-height: 112px;
+  padding: 12px 14px;
+  resize: vertical;
+}
+
+.input:focus,
+.textarea:focus,
+.select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.13);
+  background: #fbfdff;
+}
+
+.buttonRow {
+  max-width: 1040px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 24px;
+}
+
+.helperText {
+  max-width: 720px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.compactMemberForm {
+  max-width: 1040px;
+  display: grid;
+  grid-template-columns: minmax(240px, 340px) minmax(200px, 300px) 180px auto;
+  column-gap: 20px;
+  row-gap: 16px;
+  align-items: end;
+  margin-top: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #f8fafc;
+  padding: 22px;
+}
+
+.compactMessage {
+  grid-column: 1 / -1;
+}
+
+.strategyPanel {
+  border: 1px solid #e2e8f0;
+  border-radius: 24px;
+  background: #ffffff;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.045);
+  padding: 30px;
+}
+
+.strategyIntro {
+  border: 1px solid #bfdbfe;
+  border-radius: 24px;
+  background: rgba(239, 246, 255, 0.72);
+  color: #172554;
+  font-size: 14px;
+  line-height: 1.65;
+  padding: 24px;
+}
+
+@media (max-width: 980px) {
+  .accountPage {
+    padding-left: 0;
+  }
+
+  .formGrid,
+  .compactMemberForm {
+    grid-template-columns: 1fr;
+  }
+
+  .wideField {
+    grid-column: auto;
+    max-width: 100%;
+  }
+
+  .field {
+    max-width: 100%;
+  }
+
+  .buttonRow {
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 640px) {
+  .formCard,
+  .softFormCard,
+  .strategyPanel,
+  .strategyIntro {
+    padding: 22px;
+  }
+
+  .compactMemberForm {
+    padding: 18px;
+  }
+}

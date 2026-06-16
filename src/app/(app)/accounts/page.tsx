@@ -11,6 +11,7 @@ import {
 import { CreateAccountForm } from "@/components/accounts/CreateAccountForm";
 import { InviteAccountMemberForm } from "@/components/accounts/InviteAccountMemberForm";
 import { ArchiveAccountButton } from "@/components/accounts/ArchiveAccountButton";
+import accountStyles from "@/components/accounts/AccountForms.module.css";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -105,6 +106,7 @@ export default async function AccountsPage() {
 
   return (
     <WebsitePage>
+      <div className={accountStyles.accountPage}>
       <WebsiteHero
         eyebrow="Phase 3B · Accounts"
         title="Manage client accounts and workspace access."
@@ -280,6 +282,7 @@ export default async function AccountsPage() {
           )}
         </div>
       </WebsiteSection>
+      </div>
     </WebsitePage>
   );
 }

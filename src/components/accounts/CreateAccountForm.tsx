@@ -2,14 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  accountButtonRowClass,
-  accountFieldClass,
-  accountFormCardClass,
-  accountFormGridClass,
-  accountInputClass,
-  accountLabelClass,
-} from "@/components/accounts/accountFormClasses";
+import accountStyles from "@/components/accounts/AccountForms.module.css";
 
 type FormState = {
   message: string;
@@ -59,74 +52,64 @@ export function CreateAccountForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className={accountFormCardClass}>
-      <div className={accountFormGridClass}>
-        <div className={accountFieldClass}>
-          <label className={accountLabelClass} htmlFor="account-name">
-            Account / client name
-          </label>
+    <form onSubmit={onSubmit} className={accountStyles.formCard}>
+      <div className={accountStyles.formGrid}>
+        <label className={accountStyles.field} htmlFor="account-name">
+          <span className={accountStyles.label}>Account / client name</span>
           <input
             id="account-name"
             name="name"
             required
             placeholder="Example: ABC Roofing"
-            className={accountInputClass}
+            className={accountStyles.input}
           />
-        </div>
+        </label>
 
-        <div className={accountFieldClass}>
-          <label className={accountLabelClass} htmlFor="owner-name">
-            Account owner name
-          </label>
+        <label className={accountStyles.field} htmlFor="owner-name">
+          <span className={accountStyles.label}>Account owner name</span>
           <input
             id="owner-name"
             name="ownerName"
             placeholder="Client owner or primary contact"
-            className={accountInputClass}
+            className={accountStyles.input}
           />
-        </div>
+        </label>
 
-        <div className={accountFieldClass}>
-          <label className={accountLabelClass} htmlFor="owner-email">
-            Account owner email
-          </label>
+        <label className={accountStyles.field} htmlFor="owner-email">
+          <span className={accountStyles.label}>Account owner email</span>
           <input
             id="owner-email"
             name="ownerEmail"
             type="email"
             required
             placeholder="owner@example.com"
-            className={accountInputClass}
+            className={accountStyles.input}
           />
-        </div>
+        </label>
 
-        <div className={accountFieldClass}>
-          <label className={accountLabelClass} htmlFor="website-url">
-            Website
-          </label>
+        <label className={accountStyles.field} htmlFor="website-url">
+          <span className={accountStyles.label}>Website</span>
           <input
             id="website-url"
             name="websiteUrl"
             placeholder="https://example.com"
-            className={accountInputClass}
+            className={accountStyles.input}
           />
-        </div>
+        </label>
 
-        <div className={accountFieldClass}>
-          <label className={accountLabelClass} htmlFor="primary-cta">
-            Primary CTA
-          </label>
+        <label className={accountStyles.field} htmlFor="primary-cta">
+          <span className={accountStyles.label}>Primary CTA</span>
           <input
             id="primary-cta"
             name="primaryCta"
             placeholder="Schedule a consultation"
-            className={accountInputClass}
+            className={accountStyles.input}
           />
-        </div>
+        </label>
       </div>
 
-      <div className={accountButtonRowClass}>
-        <p className="max-w-3xl text-xs text-slate-500">
+      <div className={accountStyles.buttonRow}>
+        <p className={accountStyles.helperText}>
           VIP will create a separate account workspace and add you as the managing owner. If the owner email is different, VIP records a pending owner invite.
         </p>
         <button

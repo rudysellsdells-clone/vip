@@ -2,15 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  accountButtonRowClass,
-  accountFormCardClass,
-  accountFormGridClass,
-  accountFieldLabelClass,
-  accountInputClass,
-  accountTextareaClass,
-  accountWideFieldLabelClass,
-} from "@/components/accounts/accountFormClasses";
+import accountStyles from "@/components/accounts/AccountForms.module.css";
 
 type BrandProfile = {
   company_name?: string | null;
@@ -75,8 +67,8 @@ export function AccountBrandProfileForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className={accountFormCardClass}>
-      <div className={accountFormGridClass}>
+    <form onSubmit={onSubmit} className={accountStyles.formCard}>
+      <div className={accountStyles.formGrid}>
         <Field label="Company / brand name" name="companyName" defaultValue={profile?.company_name} />
         <Field label="Website" name="websiteUrl" defaultValue={profile?.website_url} placeholder="https://example.com" />
         <Field label="Primary CTA" name="primaryCta" defaultValue={profile?.primary_cta} placeholder="Schedule a consultation" />
@@ -89,8 +81,8 @@ export function AccountBrandProfileForm({
         <TextArea label="Notes" name="notes" defaultValue={profile?.notes} wide />
       </div>
 
-      <div className={accountButtonRowClass}>
-        <p className="max-w-3xl text-xs text-slate-500">
+      <div className={accountStyles.buttonRow}>
+        <p className={accountStyles.helperText}>
           VIP will use this as the account-level memory for campaign generation, content tone, and creative direction as Phase 3 continues.
         </p>
         <button
@@ -101,6 +93,7 @@ export function AccountBrandProfileForm({
           {isPending ? "Saving..." : "Save Brand Profile"}
         </button>
       </div>
+
       {message ? (
         <p className={tone === "error" ? "text-sm font-semibold text-red-700" : "text-sm font-semibold text-emerald-700"}>
           {message}
@@ -122,17 +115,18 @@ function Field({
   placeholder?: string;
 }) {
   return (
-    <label className={accountFieldLabelClass}>
-      {label}
+    <label className={accountStyles.field}>
+      <span className={accountStyles.label}>{label}</span>
       <input
         name={name}
         defaultValue={defaultValue ?? ""}
         placeholder={placeholder}
-        className={accountInputClass}
+        className={accountStyles.input}
       />
     </label>
   );
 }
+
 function TextArea({
   label,
   name,
@@ -147,14 +141,14 @@ function TextArea({
   wide?: boolean;
 }) {
   return (
-    <label className={wide ? accountWideFieldLabelClass : accountFieldLabelClass}>
-      {label}
+    <label className={wide ? accountStyles.wideField : accountStyles.field}>
+      <span className={accountStyles.label}>{label}</span>
       <textarea
         name={name}
         defaultValue={defaultValue ?? ""}
         placeholder={placeholder}
         rows={3}
-        className={accountTextareaClass}
+        className={accountStyles.textarea}
       />
     </label>
   );

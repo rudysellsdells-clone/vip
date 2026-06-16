@@ -2,15 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  accountButtonRowClass,
-  accountFormCardClass,
-  accountFormGridClass,
-  accountFieldLabelClass,
-  accountInputClass,
-  accountTextareaClass,
-  accountWideFieldLabelClass,
-} from "@/components/accounts/accountFormClasses";
+import accountStyles from "@/components/accounts/AccountForms.module.css";
 
 type PublishingSettings = {
   linkedin_page_name?: string | null;
@@ -69,8 +61,8 @@ export function AccountPublishingSettingsForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className={accountFormCardClass}>
-      <div className={accountFormGridClass}>
+    <form onSubmit={onSubmit} className={accountStyles.formCard}>
+      <div className={accountStyles.formGrid}>
         <Field label="LinkedIn Page Name" name="linkedinPageName" defaultValue={settings?.linkedin_page_name} />
         <Field label="LinkedIn Organization ID" name="linkedinCompanyId" defaultValue={settings?.linkedin_company_id} placeholder="Example: 12345678 or urn:li:organization:12345678" />
         <Field label="Facebook Page Name" name="facebookPageName" defaultValue={settings?.facebook_page_name} />
@@ -78,20 +70,20 @@ export function AccountPublishingSettingsForm({
         <Field label="Primary booking / CTA URL" name="primaryBookingUrl" defaultValue={settings?.primary_booking_url} placeholder="https://example.com/contact" />
         <Field label="Default hashtags" name="defaultHashtags" defaultValue={settings?.default_hashtags} placeholder="#LocalSEO #LeadGeneration" />
 
-        <label className={accountWideFieldLabelClass}>
-          GalaxyAI creative style
+        <label className={accountStyles.wideField}>
+          <span className={accountStyles.label}>GalaxyAI creative style</span>
           <textarea
             name="galaxyAiStyle"
             defaultValue={settings?.galaxyai_style ?? ""}
             rows={4}
             placeholder="Clean, polished short-form social video. Business-focused visuals. No exaggerated claims."
-            className={accountTextareaClass}
+            className={accountStyles.textarea}
           />
         </label>
       </div>
 
-      <div className={accountButtonRowClass}>
-        <p className="max-w-3xl text-xs text-slate-500">
+      <div className={accountStyles.buttonRow}>
+        <p className={accountStyles.helperText}>
           These settings let VIP keep publishing destinations and creative execution separate by account. LinkedIn requires the actual organization ID, not just the page name.
         </p>
         <button
@@ -102,6 +94,7 @@ export function AccountPublishingSettingsForm({
           {isPending ? "Saving..." : "Save Publishing Settings"}
         </button>
       </div>
+
       {message ? (
         <p className={tone === "error" ? "text-sm font-semibold text-red-700" : "text-sm font-semibold text-emerald-700"}>
           {message}
@@ -123,13 +116,13 @@ function Field({
   placeholder?: string;
 }) {
   return (
-    <label className={accountFieldLabelClass}>
-      {label}
+    <label className={accountStyles.field}>
+      <span className={accountStyles.label}>{label}</span>
       <input
         name={name}
         defaultValue={defaultValue ?? ""}
         placeholder={placeholder}
-        className={accountInputClass}
+        className={accountStyles.input}
       />
     </label>
   );

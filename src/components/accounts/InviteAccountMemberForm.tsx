@@ -2,10 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  accountCompactInputClass,
-  accountCompactLabelClass,
-} from "@/components/accounts/accountFormClasses";
+import accountStyles from "@/components/accounts/AccountForms.module.css";
 
 const roles = [
   { value: "admin", label: "Admin" },
@@ -52,40 +49,34 @@ export function InviteAccountMemberForm({ accountId }: { accountId: string }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="mt-4 grid max-w-5xl gap-x-5 gap-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[minmax(240px,340px)_minmax(200px,300px)_180px_auto] md:items-end">
-      <div>
-        <label className={accountCompactLabelClass} htmlFor={`member-email-${accountId}`}>
-          Email
-        </label>
+    <form onSubmit={onSubmit} className={accountStyles.compactMemberForm}>
+      <label className={accountStyles.field} htmlFor={`member-email-${accountId}`}>
+        <span className={accountStyles.label}>Email</span>
         <input
           id={`member-email-${accountId}`}
           name="email"
           type="email"
           required
           placeholder="teammate@example.com"
-          className={accountCompactInputClass}
+          className={accountStyles.input}
         />
-      </div>
-      <div>
-        <label className={accountCompactLabelClass} htmlFor={`member-name-${accountId}`}>
-          Name
-        </label>
+      </label>
+      <label className={accountStyles.field} htmlFor={`member-name-${accountId}`}>
+        <span className={accountStyles.label}>Name</span>
         <input
           id={`member-name-${accountId}`}
           name="fullName"
           placeholder="Optional"
-          className={accountCompactInputClass}
+          className={accountStyles.input}
         />
-      </div>
-      <div>
-        <label className={accountCompactLabelClass} htmlFor={`member-role-${accountId}`}>
-          Role
-        </label>
+      </label>
+      <label className={accountStyles.field} htmlFor={`member-role-${accountId}`}>
+        <span className={accountStyles.label}>Role</span>
         <select
           id={`member-role-${accountId}`}
           name="role"
           defaultValue="reviewer"
-          className={accountCompactInputClass}
+          className={accountStyles.select}
         >
           {roles.map((role) => (
             <option key={role.value} value={role.value}>
@@ -93,7 +84,7 @@ export function InviteAccountMemberForm({ accountId }: { accountId: string }) {
             </option>
           ))}
         </select>
-      </div>
+      </label>
       <button
         type="submit"
         disabled={isPending}
@@ -101,8 +92,8 @@ export function InviteAccountMemberForm({ accountId }: { accountId: string }) {
       >
         {isPending ? "Adding..." : "Add"}
       </button>
-      {message ? <p className="md:col-span-4 text-sm font-medium text-emerald-700">{message}</p> : null}
-      {error ? <p className="md:col-span-4 text-sm font-medium text-red-700">{error}</p> : null}
+      {message ? <p className={`${accountStyles.compactMessage} text-sm font-medium text-emerald-700`}>{message}</p> : null}
+      {error ? <p className={`${accountStyles.compactMessage} text-sm font-medium text-red-700`}>{error}</p> : null}
     </form>
   );
 }

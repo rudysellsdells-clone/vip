@@ -2,15 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  accountButtonRowClass,
-  accountFormGridClass,
-  accountFieldLabelClass,
-  accountInputClass,
-  accountSoftFormCardClass,
-  accountTextareaClass,
-  accountWideFieldLabelClass,
-} from "@/components/accounts/accountFormClasses";
+import accountStyles from "@/components/accounts/AccountForms.module.css";
 
 type ServiceLine = {
   id: string;
@@ -64,7 +56,7 @@ export function AccountMarketProfileManager({
 }) {
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl border border-blue-100 bg-blue-50/60 p-6 text-sm leading-6 text-blue-950">
+      <div className={accountStyles.strategyIntro}>
         <p className="font-bold">Why this matters</p>
         <p className="mt-1">
           These fields tell VIP what this account actually sells, who they sell to, and which offers should drive campaigns. This keeps a service business from generating marketing-agency content by mistake.
@@ -240,22 +232,22 @@ function OfferForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className={accountSoftFormCardClass}>
+    <form onSubmit={onSubmit} className={accountStyles.softFormCard}>
       <h4 className="text-sm font-black uppercase tracking-[0.16em] text-slate-500">Add offer</h4>
-      <div className={accountFormGridClass}>
+      <div className={accountStyles.formGrid}>
         <Field label="Offer name" name="name" required placeholder="Spring maintenance plan" />
-        <label className={accountFieldLabelClass}>
-          Service line
-          <select name="serviceLineId" className={accountInputClass}>
+        <label className={accountStyles.field}>
+          <span className={accountStyles.label}>Service line</span>
+          <select name="serviceLineId" className={accountStyles.input}>
             <option value="">No service line selected</option>
             {serviceLines.map((serviceLine) => (
               <option key={serviceLine.id} value={serviceLine.id}>{serviceLine.name}</option>
             ))}
           </select>
         </label>
-        <label className={accountFieldLabelClass}>
-          Offer type
-          <select name="offerType" defaultValue="project" className={accountInputClass}>
+        <label className={accountStyles.field}>
+          <span className={accountStyles.label}>Offer type</span>
+          <select name="offerType" defaultValue="project" className={accountStyles.input}>
             {offerTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
           </select>
         </label>
@@ -330,9 +322,9 @@ function MarketForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className={accountSoftFormCardClass}>
+    <form onSubmit={onSubmit} className={accountStyles.softFormCard}>
       <h4 className="text-sm font-black uppercase tracking-[0.16em] text-slate-500">{title}</h4>
-      <div className={accountFormGridClass}>
+      <div className={accountStyles.formGrid}>
         {fields.map((field) =>
           field.kind === "textarea" ? (
             <TextArea key={field.name} label={field.label} name={field.name} placeholder={field.placeholder} />
@@ -409,7 +401,7 @@ function StrategyPanel({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-7">
+    <div className={accountStyles.strategyPanel}>
       <div className="mb-5">
         <h3 className="text-xl font-black text-slate-950">{title}</h3>
         <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{description}</p>
@@ -459,13 +451,13 @@ function Field({
   placeholder?: string;
 }) {
   return (
-    <label className={accountFieldLabelClass}>
-      {label}
+    <label className={accountStyles.field}>
+      <span className={accountStyles.label}>{label}</span>
       <input
         name={name}
         required={required}
         placeholder={placeholder}
-        className={accountInputClass}
+        className={accountStyles.input}
       />
     </label>
   );
@@ -483,13 +475,13 @@ function TextArea({
   wide?: boolean;
 }) {
   return (
-    <label className={wide ? accountWideFieldLabelClass : accountFieldLabelClass}>
-      {label}
+    <label className={wide ? accountStyles.wideField : accountStyles.field}>
+      <span className={accountStyles.label}>{label}</span>
       <textarea
         name={name}
         rows={3}
         placeholder={placeholder}
-        className={accountTextareaClass}
+        className={accountStyles.textarea}
       />
     </label>
   );
@@ -507,7 +499,7 @@ function FormFooter({
   error: string;
 }) {
   return (
-    <div className={accountButtonRowClass}>
+    <div className={accountStyles.buttonRow}>
       <div>
         {message ? <p className="text-sm font-semibold text-emerald-700">{message}</p> : null}
         {error ? <p className="text-sm font-semibold text-red-700">{error}</p> : null}
