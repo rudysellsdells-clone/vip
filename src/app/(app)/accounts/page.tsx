@@ -169,7 +169,7 @@ export default async function AccountsPage() {
         title="Accounts you can manage"
         description="Each account can have its own owner, seats, brand profile, campaigns, and publishing setup as Phase 3 continues."
       >
-        <div className="space-y-5">
+        <div className={accountStyles.accountsList}>
           {accounts.length ? (
             accounts.map((account) => {
               const accountMemberships = membershipsByAccount[account.id] ?? [];
@@ -177,8 +177,8 @@ export default async function AccountsPage() {
               const pendingMembers = accountMemberships.filter((membership) => membership.status === "pending").length;
 
               return (
-                <article key={account.id} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <article key={account.id} className={accountStyles.accountManageCard}>
+                  <div className={accountStyles.accountManageHeaderGrid}>
                     <div>
                       <div className="flex flex-wrap items-center gap-3">
                         <h3 className="text-xl font-semibold text-slate-950">
@@ -191,7 +191,7 @@ export default async function AccountsPage() {
                       <p className="mt-2 text-sm text-slate-600">
                         Slug: <span className="font-mono text-slate-800">{account.slug}</span>
                       </p>
-                      <div className="mt-3 grid gap-2 text-sm text-slate-600 md:grid-cols-2">
+                      <div className={accountStyles.accountManageDetailsGrid}>
                         <p>
                           <span className="font-semibold text-slate-800">Website:</span>{" "}
                           {account.website_url || "Not set"}
@@ -211,14 +211,14 @@ export default async function AccountsPage() {
                       </div>
                     </div>
 
-                    <div className="space-y-3 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    <div className={accountStyles.accountManageActionPanel}>
                       <div>
                         <p className="font-semibold text-slate-900">Phase 3B foundation</p>
                         <p className="mt-1 max-w-sm">
                           The account exists now. Next, campaign and asset screens can be scoped to this workspace through an account switcher.
                         </p>
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className={accountStyles.accountManageActions}>
                         <Link
                           href={`/accounts/${account.id}`}
                           className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:text-blue-700"
@@ -232,7 +232,7 @@ export default async function AccountsPage() {
                     </div>
                   </div>
 
-                  <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200">
+                  <div className={accountStyles.accountMemberTableWrap}>
                     <table className="w-full text-left text-sm">
                       <thead className="bg-slate-50 text-xs uppercase tracking-[0.14em] text-slate-500">
                         <tr>
