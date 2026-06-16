@@ -2,6 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import {
+  accountButtonRowClass,
+  accountFormGridClass,
+  accountInputClass,
+  accountLabelClass,
+  accountSoftFormCardClass,
+  accountTextareaClass,
+} from "@/components/accounts/accountFormClasses";
 
 type ServiceLine = {
   id: string;
@@ -231,22 +239,22 @@ function OfferForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="mt-5 space-y-4 rounded-3xl border border-dashed border-slate-200 bg-slate-50/80 p-5">
+    <form onSubmit={onSubmit} className={accountSoftFormCardClass}>
       <h4 className="text-sm font-black uppercase tracking-[0.16em] text-slate-500">Add offer</h4>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className={accountFormGridClass}>
         <Field label="Offer name" name="name" required placeholder="Spring maintenance plan" />
-        <label className="block text-sm font-semibold text-slate-800">
+        <label className={accountLabelClass}>
           Service line
-          <select name="serviceLineId" className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+          <select name="serviceLineId" className={accountInputClass}>
             <option value="">No service line selected</option>
             {serviceLines.map((serviceLine) => (
               <option key={serviceLine.id} value={serviceLine.id}>{serviceLine.name}</option>
             ))}
           </select>
         </label>
-        <label className="block text-sm font-semibold text-slate-800">
+        <label className={accountLabelClass}>
           Offer type
-          <select name="offerType" defaultValue="project" className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+          <select name="offerType" defaultValue="project" className={accountInputClass}>
             {offerTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
           </select>
         </label>
@@ -320,9 +328,9 @@ function MarketForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="mt-5 space-y-4 rounded-3xl border border-dashed border-slate-200 bg-slate-50/80 p-5">
+    <form onSubmit={onSubmit} className={accountSoftFormCardClass}>
       <h4 className="text-sm font-black uppercase tracking-[0.16em] text-slate-500">{title}</h4>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className={accountFormGridClass}>
         {fields.map((field) =>
           field.kind === "textarea" ? (
             <TextArea key={field.name} label={field.label} name={field.name} placeholder={field.placeholder} />
@@ -449,13 +457,13 @@ function Field({
   placeholder?: string;
 }) {
   return (
-    <label className="block text-sm font-semibold text-slate-800">
+    <label className={accountLabelClass}>
       {label}
       <input
         name={name}
         required={required}
         placeholder={placeholder}
-        className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+        className={accountTextareaClass}
       />
     </label>
   );
@@ -471,13 +479,13 @@ function TextArea({
   placeholder?: string;
 }) {
   return (
-    <label className="block text-sm font-semibold text-slate-800 md:col-span-2">
+    <label className={`${accountLabelClass} md:col-span-2`}>
       {label}
       <textarea
         name={name}
         rows={3}
         placeholder={placeholder}
-        className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+        className={accountTextareaClass}
       />
     </label>
   );
@@ -495,7 +503,7 @@ function FormFooter({
   error: string;
 }) {
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className={accountButtonRowClass}>
       <div>
         {message ? <p className="text-sm font-semibold text-emerald-700">{message}</p> : null}
         {error ? <p className="text-sm font-semibold text-red-700">{error}</p> : null}

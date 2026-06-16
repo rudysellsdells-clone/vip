@@ -2,6 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import {
+  accountCompactInputClass,
+  accountCompactLabelClass,
+} from "@/components/accounts/accountFormClasses";
 
 const roles = [
   { value: "admin", label: "Admin" },
@@ -48,9 +52,9 @@ export function InviteAccountMemberForm({ accountId }: { accountId: string }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="mt-4 grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[1fr_1fr_auto_auto] md:items-end">
+    <form onSubmit={onSubmit} className="mt-4 grid max-w-4xl gap-x-4 gap-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[minmax(220px,320px)_minmax(180px,280px)_180px_auto] md:items-end">
       <div>
-        <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500" htmlFor={`member-email-${accountId}`}>
+        <label className={accountCompactLabelClass} htmlFor={`member-email-${accountId}`}>
           Email
         </label>
         <input
@@ -59,29 +63,29 @@ export function InviteAccountMemberForm({ accountId }: { accountId: string }) {
           type="email"
           required
           placeholder="teammate@example.com"
-          className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+          className={accountCompactInputClass}
         />
       </div>
       <div>
-        <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500" htmlFor={`member-name-${accountId}`}>
+        <label className={accountCompactLabelClass} htmlFor={`member-name-${accountId}`}>
           Name
         </label>
         <input
           id={`member-name-${accountId}`}
           name="fullName"
           placeholder="Optional"
-          className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+          className={accountCompactInputClass}
         />
       </div>
       <div>
-        <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500" htmlFor={`member-role-${accountId}`}>
+        <label className={accountCompactLabelClass} htmlFor={`member-role-${accountId}`}>
           Role
         </label>
         <select
           id={`member-role-${accountId}`}
           name="role"
           defaultValue="reviewer"
-          className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+          className={accountCompactInputClass}
         >
           {roles.map((role) => (
             <option key={role.value} value={role.value}>

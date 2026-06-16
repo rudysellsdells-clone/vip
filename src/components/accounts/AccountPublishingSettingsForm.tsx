@@ -2,6 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import {
+  accountButtonRowClass,
+  accountFormCardClass,
+  accountFormGridClass,
+  accountInputClass,
+  accountLabelClass,
+  accountTextareaClass,
+} from "@/components/accounts/accountFormClasses";
 
 type PublishingSettings = {
   linkedin_page_name?: string | null;
@@ -60,8 +68,8 @@ export function AccountPublishingSettingsForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="grid gap-4 md:grid-cols-2">
+    <form onSubmit={onSubmit} className={accountFormCardClass}>
+      <div className={accountFormGridClass}>
         <Field label="LinkedIn Page Name" name="linkedinPageName" defaultValue={settings?.linkedin_page_name} />
         <Field label="LinkedIn Organization ID" name="linkedinCompanyId" defaultValue={settings?.linkedin_company_id} placeholder="Example: 12345678 or urn:li:organization:12345678" />
         <Field label="Facebook Page Name" name="facebookPageName" defaultValue={settings?.facebook_page_name} />
@@ -70,18 +78,18 @@ export function AccountPublishingSettingsForm({
         <Field label="Default hashtags" name="defaultHashtags" defaultValue={settings?.default_hashtags} placeholder="#LocalSEO #LeadGeneration" />
       </div>
 
-      <label className="block text-sm font-semibold text-slate-800">
+      <label className={accountLabelClass}>
         GalaxyAI creative style
         <textarea
           name="galaxyAiStyle"
           defaultValue={settings?.galaxyai_style ?? ""}
           rows={4}
           placeholder="Clean, polished short-form social video. Business-focused visuals. No exaggerated claims."
-          className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+          className={accountTextareaClass}
         />
       </label>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className={accountButtonRowClass}>
         <p className="text-xs text-slate-500">
           These settings let VIP keep publishing destinations and creative execution separate by account. LinkedIn requires the actual organization ID, not just the page name.
         </p>
@@ -115,13 +123,13 @@ function Field({
   placeholder?: string;
 }) {
   return (
-    <label className="block text-sm font-semibold text-slate-800">
+    <label className={accountLabelClass}>
       {label}
       <input
         name={name}
         defaultValue={defaultValue ?? ""}
         placeholder={placeholder}
-        className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+        className={accountInputClass}
       />
     </label>
   );

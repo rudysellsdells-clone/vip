@@ -2,6 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import {
+  accountButtonRowClass,
+  accountFormCardClass,
+  accountFormGridClass,
+  accountInputClass,
+  accountLabelClass,
+  accountWideFieldClass,
+} from "@/components/accounts/accountFormClasses";
 
 type FormState = {
   message: string;
@@ -51,9 +59,9 @@ export function CreateAccountForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div>
-        <label className="block text-sm font-semibold text-slate-800" htmlFor="account-name">
+    <form onSubmit={onSubmit} className={accountFormCardClass}>
+      <div className={accountWideFieldClass}>
+        <label className={accountLabelClass} htmlFor="account-name">
           Account / client name
         </label>
         <input
@@ -61,25 +69,25 @@ export function CreateAccountForm() {
           name="name"
           required
           placeholder="Example: ABC Roofing"
-          className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+          className={accountInputClass}
         />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className={accountFormGridClass}>
         <div>
-          <label className="block text-sm font-semibold text-slate-800" htmlFor="owner-name">
+          <label className={accountLabelClass} htmlFor="owner-name">
             Account owner name
           </label>
           <input
             id="owner-name"
             name="ownerName"
             placeholder="Client owner or primary contact"
-            className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            className={accountInputClass}
           />
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-slate-800" htmlFor="owner-email">
+          <label className={accountLabelClass} htmlFor="owner-email">
             Account owner email
           </label>
           <input
@@ -88,38 +96,38 @@ export function CreateAccountForm() {
             type="email"
             required
             placeholder="owner@example.com"
-            className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            className={accountInputClass}
           />
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className={accountFormGridClass}>
         <div>
-          <label className="block text-sm font-semibold text-slate-800" htmlFor="website-url">
+          <label className={accountLabelClass} htmlFor="website-url">
             Website
           </label>
           <input
             id="website-url"
             name="websiteUrl"
             placeholder="https://example.com"
-            className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            className={accountInputClass}
           />
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-slate-800" htmlFor="primary-cta">
+          <label className={accountLabelClass} htmlFor="primary-cta">
             Primary CTA
           </label>
           <input
             id="primary-cta"
             name="primaryCta"
             placeholder="Schedule a consultation"
-            className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            className={accountInputClass}
           />
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className={accountButtonRowClass}>
         <p className="text-xs text-slate-500">
           VIP will create a separate account workspace and add you as the managing owner. If the owner email is different, VIP records a pending owner invite.
         </p>

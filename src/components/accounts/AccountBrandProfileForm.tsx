@@ -2,6 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import {
+  accountButtonRowClass,
+  accountFormCardClass,
+  accountFormGridClass,
+  accountInputClass,
+  accountLabelClass,
+  accountTextareaClass,
+} from "@/components/accounts/accountFormClasses";
 
 type BrandProfile = {
   company_name?: string | null;
@@ -66,8 +74,8 @@ export function AccountBrandProfileForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="grid gap-4 md:grid-cols-2">
+    <form onSubmit={onSubmit} className={accountFormCardClass}>
+      <div className={accountFormGridClass}>
         <Field label="Company / brand name" name="companyName" defaultValue={profile?.company_name} />
         <Field label="Website" name="websiteUrl" defaultValue={profile?.website_url} placeholder="https://example.com" />
         <Field label="Primary CTA" name="primaryCta" defaultValue={profile?.primary_cta} placeholder="Schedule a consultation" />
@@ -81,7 +89,7 @@ export function AccountBrandProfileForm({
       <TextArea label="Approved hashtags" name="approvedHashtags" defaultValue={profile?.approved_hashtags} placeholder="#LocalSEO #LeadGeneration" />
       <TextArea label="Notes" name="notes" defaultValue={profile?.notes} />
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className={accountButtonRowClass}>
         <p className="text-xs text-slate-500">
           VIP will use this as the account-level memory for campaign generation, content tone, and creative direction as Phase 3 continues.
         </p>
@@ -115,13 +123,13 @@ function Field({
   placeholder?: string;
 }) {
   return (
-    <label className="block text-sm font-semibold text-slate-800">
+    <label className={accountLabelClass}>
       {label}
       <input
         name={name}
         defaultValue={defaultValue ?? ""}
         placeholder={placeholder}
-        className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+        className={accountInputClass}
       />
     </label>
   );
@@ -139,14 +147,14 @@ function TextArea({
   placeholder?: string;
 }) {
   return (
-    <label className="block text-sm font-semibold text-slate-800">
+    <label className={accountLabelClass}>
       {label}
       <textarea
         name={name}
         defaultValue={defaultValue ?? ""}
         placeholder={placeholder}
         rows={3}
-        className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+        className={accountTextareaClass}
       />
     </label>
   );
