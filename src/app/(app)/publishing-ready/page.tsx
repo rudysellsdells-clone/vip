@@ -7,11 +7,18 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
+import { getAssetAccessForUser } from "@/lib/accounts/asset-access";
+import {
+  loadAccountPublishingSettings,
+  type AccountPublishingSettingsResolution,
+} from "@/lib/accounts/account-publishing-settings";
 import {
   buildPublishingOutputParams,
   isApprovedForPublishing,
+  missingZapierMcpConfigMessage,
   zapierMcpConfigForAsset,
 } from "@/lib/publishing/output-payload";
+import { buildPublishingPreflightReport } from "@/lib/publishing/publishing-preflight";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -71,6 +78,19 @@ function publishingActionLabel(asset: Record<string, any>) {
   return "Publish / send asset";
 }
 
+function publishingResolution(accountId: string | null): AccountPublishingSettingsResolution {
+  return {
+    source: accountId ? "asset.account_id" : "legacy_user_asset",
+    accountId,
+    candidateAccountIds: accountId ? [accountId] : [],
+    found: Boolean(accountId),
+  };
+}
+
+function compactJson(value: unknown) {
+  return JSON.stringify(value, null, 2);
+}
+
 export default async function PublishingReadyPage({ searchParams }: PageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const assetId = firstValue(resolvedSearchParams.asset);
@@ -96,38 +116,54 @@ export default async function PublishingReadyPage({ searchParams }: PageProps) {
     );
   }
 
-  const { data: asset, error } = await supabase
-    .from("generated_assets")
-    .select("*")
-    .eq("id", assetId)
-    .eq("user_id", user.id)
-    .single();
+  const assetAccess = await getAssetAccessForUser({
+    supabase,
+    assetId,
+    userId: user.id,
+  });
 
-  if (error || !asset) {
+  if (!assetAccess.asset || !assetAccess.canView) {
     return (
       <WebsitePage>
         <WebsiteHero
           eyebrow="Publish Center"
           title="Asset not found"
-          description="The selected asset could not be loaded. Return to Publish Center and choose another approved asset."
+          description="The selected asset could not be loaded for your current workspace. Return to Publish Center and choose another approved asset."
           primaryAction={{ label: "Publish Center", href: "/publishing-schedule" }}
         />
       </WebsitePage>
     );
   }
 
+  const accountSettings = await loadAccountPublishingSettings({
+    supabase,
+    accountId: assetAccess.accountId,
+  });
+  const asset = {
+    ...assetAccess.asset,
+    account_publishing_settings: accountSettings,
+    account_publishing_settings_resolution: publishingResolution(assetAccess.accountId),
+  };
+
   const alreadySentOrPublished = isAlreadySentOrPublished(asset);
   const approvedForPublishing = isApprovedForPublishing(asset);
   const config = zapierMcpConfigForAsset(asset);
   const params = buildPublishingOutputParams(asset);
   const actionLabel = publishingActionLabel(asset);
+  const preflight = buildPublishingPreflightReport({
+    asset,
+    config,
+    settings: accountSettings,
+    canManage: assetAccess.canManage,
+  });
+  const canExecuteNow = approvedForPublishing && !alreadySentOrPublished && preflight.ready;
 
   return (
     <WebsitePage>
       <WebsiteHero
         eyebrow="Publish Center"
         title={asset.title ?? "Untitled asset"}
-        description="This is the controlled execution step for an approved asset. VIP sends the structured payload to the configured publishing destination and then records provider evidence."
+        description="This is the safe preflight step for an approved asset. Review the active workspace, destination settings, and exact payload before any live provider execution."
         primaryAction={{ label: "Publish Center", href: "/publishing-schedule" }}
         secondaryAction={{ label: "Action History", href: "/actions" }}
       />
@@ -155,11 +191,15 @@ export default async function PublishingReadyPage({ searchParams }: PageProps) {
             </div>
 
             <p className={websiteStyles.cardMeta} style={{ marginTop: 12 }}>
-              Scheduled: {dateLabel(asset.scheduled_publish_at ?? asset.planned_publish_date)}
+              Workspace ID: {assetAccess.accountId ?? "Legacy user asset"} · Scheduled: {dateLabel(asset.scheduled_publish_at ?? asset.planned_publish_date)}
             </p>
 
             <p className={websiteStyles.cardMeta}>
-              ZapierMCP app: {config.app || "Not configured"} · action: {config.action || "Not configured"}
+              Destination: {preflight.destinationLabel}
+            </p>
+
+            <p className={websiteStyles.cardMeta}>
+              ZapierMCP app: {config.app || "Not configured"} · action: {config.action || "Not configured"} · settings: {preflight.accountSettingsFound ? "workspace settings found" : "missing"}
             </p>
           </article>
         </div>
@@ -178,9 +218,65 @@ export default async function PublishingReadyPage({ searchParams }: PageProps) {
       </WebsiteSection>
 
       <WebsiteSection
+        eyebrow="Preflight"
+        title={preflight.ready ? "Ready for controlled execution" : "Execution blocked until this workspace is ready"}
+        description="H1.4D3A lets you review exactly what VIP would send without needing a second external Zapier, Facebook, LinkedIn, WordPress, or GalaxyAI stack."
+      >
+        <div className={websiteStyles.cardGrid}>
+          <article className={websiteStyles.card}>
+            <h3 className={websiteStyles.cardTitle}>Workspace + destination check</h3>
+            <p className={websiteStyles.cardText}>
+              {preflight.ready
+                ? "The asset, workspace role, ZapierMCP app/action, and account destination settings are present."
+                : "VIP will not show the live execution button until these blockers are resolved."}
+            </p>
+
+            {preflight.blockers.length ? (
+              <ul className={websiteStyles.cardText}>
+                {preflight.blockers.map((blocker) => (
+                  <li key={blocker}>{blocker}</li>
+                ))}
+              </ul>
+            ) : null}
+
+            {preflight.warnings.length ? (
+              <div style={{ marginTop: 12 }}>
+                <p className={websiteStyles.cardMeta}>Warnings / review notes:</p>
+                <ul className={websiteStyles.cardText}>
+                  {preflight.warnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {!config.app || !config.action ? (
+              <p className={websiteStyles.cardMeta}>{missingZapierMcpConfigMessage(asset)}</p>
+            ) : null}
+          </article>
+
+          <article className={websiteStyles.card}>
+            <h3 className={websiteStyles.cardTitle}>Workspace publishing settings</h3>
+            <pre style={{ whiteSpace: "pre-wrap", marginTop: 12, fontSize: 12 }}>
+              {compactJson({
+                account_id: assetAccess.accountId,
+                settings_found: Boolean(accountSettings),
+                linkedin_page_name: accountSettings?.linkedin_page_name ?? null,
+                linkedin_company_id: accountSettings?.linkedin_company_id ?? null,
+                facebook_page_name: accountSettings?.facebook_page_name ?? null,
+                facebook_page_id: accountSettings?.facebook_page_id ?? null,
+                primary_booking_url: accountSettings?.primary_booking_url ?? null,
+                galaxyai_style: accountSettings?.galaxyai_style ?? null,
+              })}
+            </pre>
+          </article>
+        </div>
+      </WebsiteSection>
+
+      <WebsiteSection
         eyebrow="Execute"
         title={actionLabel}
-        description="This sends the structured VIP output payload to the configured publishing action. The button label reflects the content destination, while ZapierMCP remains the execution provider behind the scenes."
+        description="Live execution stays hidden unless preflight confirms this asset belongs to the current workspace and the destination settings are present."
       >
         {alreadySentOrPublished ? (
           <article className={websiteStyles.card}>
@@ -192,13 +288,13 @@ export default async function PublishingReadyPage({ searchParams }: PageProps) {
               Status: {String(asset.status ?? "unknown")} · Scheduling: {String(asset.scheduling_status ?? "unknown")}
             </p>
           </article>
-        ) : approvedForPublishing ? (
+        ) : canExecuteNow ? (
           <article className={websiteStyles.card}>
             <SendAssetToZapierMcpButton assetId={String(asset.id)} label={actionLabel} />
           </article>
         ) : (
           <div className={websiteStyles.empty}>
-            This asset is not ready to send yet. It must be approved, active, and the latest version.
+            This asset is not ready to send yet. It must be approved, active, latest-version, manageable by your role, and pass workspace destination preflight.
           </div>
         )}
       </WebsiteSection>
@@ -206,7 +302,7 @@ export default async function PublishingReadyPage({ searchParams }: PageProps) {
       <WebsiteSection
         eyebrow="Payload"
         title="Payload preview"
-        description="This confirms the structured params object that will be sent to the configured publishing provider."
+        description="This confirms the structured params object VIP would send to the configured publishing provider."
       >
         <details className={websiteStyles.card}>
           <summary className={websiteStyles.cardTitle}>View params</summary>

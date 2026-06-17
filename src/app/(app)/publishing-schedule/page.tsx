@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ExecuteToolRunButton } from "@/components/actions/ExecuteToolRunButton";
 import { WorkingViewControls } from "@/components/calendar/WorkingViewControls";
 import {
   WebsiteBadge,
@@ -21,6 +20,7 @@ import {
   groupPublishingAssetsByDay,
   publishingDateLabel,
 } from "@/lib/calendar/publishing-schedule-view";
+import { getUserAccountContext } from "@/lib/accounts/account-context";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -116,17 +116,6 @@ function isPublishingRelatedToolRun(run: Record<string, unknown>) {
   );
 }
 
-function legacyExecuteLabel(actionName: unknown) {
-  const action = typeof actionName === "string" ? actionName.toLowerCase() : "";
-
-  if (action.includes("wordpress") || action.includes("blog")) return "Publish blog post";
-  if (action.includes("linkedin")) return "Publish to LinkedIn";
-  if (action.includes("facebook")) return "Publish to Facebook";
-  if (action.includes("gmail") || action.includes("email")) return "Create email draft";
-
-  return "Run publishing action";
-}
-
 function legacyActionTitle(run: Record<string, unknown>) {
   return String(run.action_name || run.destination || run.channel || "Publishing action");
 }
@@ -148,19 +137,26 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
     redirect("/login");
   }
 
+  const accountContext = await getUserAccountContext({ supabase, userId: user.id });
+  const activeAccountId = accountContext.activeAccountId;
+
+  if (!activeAccountId) {
+    redirect("/accounts");
+  }
+
   const [assetsResult, toolRunsResult] = await Promise.all([
     applyPublishingScheduleQuery(
       supabase
         .from("generated_assets")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", activeAccountId)
         .order("scheduled_publish_at", { ascending: true, nullsFirst: false })
         .limit(1000),
     ),
     supabase
       .from("tool_runs")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("account_id", activeAccountId)
       .order("created_at", { ascending: false })
       .limit(100),
   ]);
@@ -182,10 +178,24 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
       <WebsiteHero
         eyebrow="Publish Center"
         title="Publish approved content"
-        description="This is the main place to act on approved blogs, social posts, emails, and other publish-ready content. Use Action History only when you need audit details or troubleshooting."
+        description={`This queue is scoped to the active workspace: ${accountContext.activeAccountName ?? "Current workspace"}. Review payloads before any live publishing execution.`}
         primaryAction={{ label: "Action History", href: "/actions" }}
         secondaryAction={{ label: "Review Content", href: "/approvals" }}
       />
+
+      <WebsiteSection
+        eyebrow="Active Workspace"
+        title={accountContext.activeAccountName ?? "Current workspace"}
+        description="H1.4D3A scopes Publish Center by workspace so you can review the destination and payload before anything leaves VIP."
+      >
+        <article className={websiteStyles.card}>
+          <div className="flex flex-wrap gap-2">
+            <span className={websiteStyles.badge}>Workspace ID: {activeAccountId}</span>
+            <span className={websiteStyles.badge}>Role: {accountContext.activeAccountRole ?? "member"}</span>
+            {accountContext.isMaster ? <span className={websiteStyles.badge}>MASTER preview</span> : null}
+          </div>
+        </article>
+      </WebsiteSection>
 
       <section className={websiteStyles.metricsGrid}>
         <WebsiteMetric
@@ -251,7 +261,7 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
               <article className={websiteStyles.card}>
                 <h3 className={websiteStyles.cardTitle}>Legacy publishing actions</h3>
                 <p className={websiteStyles.cardText}>
-                  Some older flows still create executable publishing actions. They are now surfaced here so users do not have to hunt through Action History.
+                  Some older flows still create executable publishing actions. H1.4D3A shows them for review only so no external provider is triggered during preflight testing.
                 </p>
                 <p className={websiteStyles.cardMeta}>{legacyPublishingActions.length} action(s) ready</p>
               </article>
@@ -340,7 +350,7 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
         <WebsiteSection
           eyebrow="Legacy Publish Actions"
           title="Publish actions ready to run"
-          description="These are older ZapierMCP tool-run actions that are still actionable. They are shown here to make publishing easier to find while the workflow is consolidated."
+          description="These are older ZapierMCP tool-run actions. H1.4D3A shows them for review only while the live execution guard is completed in H1.4D3B."
         >
           <div className={websiteStyles.cardGrid}>
             {legacyPublishingActions.map((run) => (
@@ -361,10 +371,7 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
                 ) : null}
 
                 <div className={websiteStyles.actionRow}>
-                  <ExecuteToolRunButton
-                    toolRunId={String(run.id)}
-                    label={legacyExecuteLabel(run.action_name)}
-                  />
+                  <span className={websiteStyles.badge}>Preflight review only</span>
                   <Link href="/actions" className={websiteStyles.link}>
                     View history →
                   </Link>

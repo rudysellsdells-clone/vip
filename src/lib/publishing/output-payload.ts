@@ -92,6 +92,16 @@ export function zapierMcpConfigForAsset(asset: PublishingAsset): ZapierMcpAssetC
   const assetType = String(asset.asset_type ?? "").toLowerCase();
 
   if (assetType === "facebook_post") {
+    const settings = publishingSettingsFromAsset(asset);
+    const pageId = firstValue(
+      stringValue(settings?.facebook_page_id),
+      env("ZAPIER_FACEBOOK_PAGE_ID")
+    );
+    const pageName = firstValue(
+      stringValue(settings?.facebook_page_name),
+      env("ZAPIER_FACEBOOK_PAGE_NAME")
+    );
+
     return {
       app: firstValue(env("ZAPIER_MCP_FACEBOOK_POST_APP"), env("ZAPIER_MCP_DEFAULT_APP"), "Facebook Pages"),
       action: firstValue(env("ZAPIER_MCP_FACEBOOK_POST_ACTION"), env("ZAPIER_FACEBOOK_MCP_TOOL_NAME"), env("ZAPIER_MCP_DEFAULT_ACTION")),
@@ -102,8 +112,8 @@ export function zapierMcpConfigForAsset(asset: PublishingAsset): ZapierMcpAssetC
           : env("ZAPIER_MCP_DEFAULT_ACTION")
             ? "default"
             : "missing_action",
-      pageId: env("ZAPIER_FACEBOOK_PAGE_ID") || null,
-      pageName: env("ZAPIER_FACEBOOK_PAGE_NAME") || null,
+      pageId: pageId || null,
+      pageName: pageName || null,
     };
   }
 
@@ -206,6 +216,7 @@ function buildWordPressParams(asset: PublishingAsset) {
     asset_id: String(asset.id ?? ""),
     asset_type: "blog_post",
     campaign_id: asset.campaign_id ?? null,
+    account_id: asset.account_id ?? null,
     source: "vip",
 
     post_type: wordpressPostType(),
@@ -229,6 +240,7 @@ function buildFacebookParams(asset: PublishingAsset, config: ZapierMcpAssetConfi
     asset_id: String(asset.id ?? ""),
     asset_type: "facebook_post",
     campaign_id: asset.campaign_id ?? null,
+    account_id: asset.account_id ?? null,
     source: "vip",
 
     message: content,
@@ -286,6 +298,7 @@ function buildLinkedInParams(asset: PublishingAsset, config: ZapierMcpAssetConfi
     asset_id: String(asset.id ?? ""),
     asset_type: String(asset.asset_type ?? ""),
     campaign_id: asset.campaign_id ?? null,
+    account_id: asset.account_id ?? null,
 
     text: content,
     content,
@@ -323,6 +336,7 @@ function buildEmailParams(asset: PublishingAsset) {
     asset_id: String(asset.id ?? ""),
     asset_type: "email",
     campaign_id: asset.campaign_id ?? null,
+    account_id: asset.account_id ?? null,
     source: "vip",
 
     // Gmail draft actions vary by Zapier account/action version, so VIP sends
@@ -351,6 +365,7 @@ function buildGenericParams(asset: PublishingAsset) {
     title: String(asset.title ?? ""),
     content: String(asset.content ?? ""),
     campaign_id: asset.campaign_id ?? null,
+    account_id: asset.account_id ?? null,
     scheduled_publish_at: asset.scheduled_publish_at ?? null,
     source: "vip",
   };

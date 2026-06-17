@@ -9,6 +9,7 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
+import { getUserAccountContext } from "@/lib/accounts/account-context";
 import {
   channelForAssetType,
   nextStepForAsset,
@@ -80,6 +81,13 @@ export default async function ReadyForPublishingPage() {
     redirect("/login");
   }
 
+  const accountContext = await getUserAccountContext({ supabase, userId: user.id });
+  const activeAccountId = accountContext.activeAccountId;
+
+  if (!activeAccountId) {
+    redirect("/accounts");
+  }
+
   const { data: decisionsData } = await supabase
     .from("quality_gate_decisions")
     .select("*")
@@ -105,7 +113,7 @@ export default async function ReadyForPublishingPage() {
     ? await supabase
         .from("generated_assets")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", activeAccountId)
         .is("archived_at", null)
         .in("id", assetIds)
         .in("asset_type", PUBLISHABLE_READY_ASSET_TYPES)
@@ -140,10 +148,24 @@ export default async function ReadyForPublishingPage() {
       <WebsiteHero
         eyebrow="Ready for Publishing"
         title="Quality-approved assets waiting for the next move."
-        description="This queue shows active assets that passed your editable quality thresholds. Approve them, route them to Publishing Ready, repurpose them, or open the asset for final review."
+        description={`This queue is scoped to the active workspace: ${accountContext.activeAccountName ?? "Current workspace"}. Approve, route, or review assets only inside this workspace.`}
         primaryAction={{ label: "Approvals", href: "/approvals" }}
-        secondaryAction={{ label: "Publishing Ready", href: "/publishing-ready" }}
+        secondaryAction={{ label: "Publish Center", href: "/publishing-schedule" }}
       />
+
+      <WebsiteSection
+        eyebrow="Active Workspace"
+        title={accountContext.activeAccountName ?? "Current workspace"}
+        description="Only quality-approved assets tied to this workspace are shown here."
+      >
+        <article className={websiteStyles.card}>
+          <div className="flex flex-wrap gap-2">
+            <span className={websiteStyles.badge}>Workspace ID: {activeAccountId}</span>
+            <span className={websiteStyles.badge}>Role: {accountContext.activeAccountRole ?? "member"}</span>
+            {accountContext.isMaster ? <span className={websiteStyles.badge}>MASTER preview</span> : null}
+          </div>
+        </article>
+      </WebsiteSection>
 
       <section className={websiteStyles.metricsGrid}>
         <WebsiteMetric

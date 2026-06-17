@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { ExecuteToolRunButton } from "@/components/actions/ExecuteToolRunButton";
 import {
   WebsiteBadge,
   WebsiteHero,
@@ -8,7 +7,9 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
+import { getUserAccountContext } from "@/lib/accounts/account-context";
 import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
 
 function formatDate(value: string | null) {
   if (!value) return "No date";
@@ -20,27 +21,8 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
-function canExecute(run: Record<string, unknown>) {
-  return (
-    run.provider === "zapier_mcp" &&
-    typeof run.status === "string" &&
-    ["planned", "waiting_approval", "failed"].includes(run.status)
-  );
-}
-
-function getExecuteLabel(actionName: unknown) {
-  const action = typeof actionName === "string" ? actionName.toLowerCase() : "";
-
-  if (action.includes("wordpress") || action.includes("blog")) return "Publish blog post";
-  if (action.includes("linkedin")) return "Publish to LinkedIn";
-  if (action.includes("facebook")) return "Publish to Facebook";
-  if (action.includes("gmail") || action.includes("email")) return "Create email draft";
-
-  return "Run action";
-}
-
 export default async function ActionsPage() {
-  const supabase = await createClient();
+  const supabase = untypedSupabase(await createClient());
 
   const {
     data: { user },
@@ -50,19 +32,38 @@ export default async function ActionsPage() {
     redirect("/login");
   }
 
+  const accountContext = await getUserAccountContext({ supabase, userId: user.id });
+  const activeAccountId = accountContext.activeAccountId;
+
+  if (!activeAccountId) {
+    redirect("/accounts");
+  }
+
+  const { data: accountAssetsData } = await supabase
+    .from("generated_assets")
+    .select("id")
+    .eq("account_id", activeAccountId)
+    .limit(1000);
+
+  const accountAssetIds = ((accountAssetsData ?? []) as Array<Record<string, unknown>>)
+    .map((asset) => String(asset.id ?? ""))
+    .filter(Boolean);
+
   const [toolRunsResult, publishingRunsResult] = await Promise.all([
     supabase
       .from("tool_runs")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("account_id", activeAccountId)
       .order("created_at", { ascending: false })
       .limit(100),
-    supabase
-      .from("publishing_execution_runs")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(100),
+    accountAssetIds.length
+      ? supabase
+          .from("publishing_execution_runs")
+          .select("*")
+          .in("asset_id", accountAssetIds)
+          .order("created_at", { ascending: false })
+          .limit(100)
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   const toolRuns = (toolRunsResult.data ?? []) as Array<Record<string, unknown>>;
@@ -82,10 +83,24 @@ export default async function ActionsPage() {
       <WebsiteHero
         eyebrow="Execution History"
         title="Review publishing and automation history"
-        description="Use this page for audit, troubleshooting, and legacy runnable actions. Day-to-day publishing should start in Publish Center."
+        description={`This audit view is scoped to the active workspace: ${accountContext.activeAccountName ?? "Current workspace"}. Day-to-day publishing should start in Publish Center.`}
         primaryAction={{ label: "Publish Center", href: "/publishing-schedule" }}
         secondaryAction={{ label: "Review Content", href: "/approvals" }}
       />
+
+      <WebsiteSection
+        eyebrow="Active Workspace"
+        title={accountContext.activeAccountName ?? "Current workspace"}
+        description="Only publishing runs and legacy tool runs tied to this workspace are shown here."
+      >
+        <article className={websiteStyles.card}>
+          <div className="flex flex-wrap gap-2">
+            <span className={websiteStyles.badge}>Workspace ID: {activeAccountId}</span>
+            <span className={websiteStyles.badge}>Role: {accountContext.activeAccountRole ?? "member"}</span>
+            {accountContext.isMaster ? <span className={websiteStyles.badge}>MASTER preview</span> : null}
+          </div>
+        </article>
+      </WebsiteSection>
 
       <section className={websiteStyles.metricsGrid}>
         <WebsiteMetric
@@ -170,7 +185,7 @@ export default async function ActionsPage() {
       <WebsiteSection
         eyebrow="Legacy Actions"
         title="Recent legacy tool runs"
-        description="Tool runs are kept for compatibility and historical audit. New social publishing should flow through publishing executions."
+        description="Tool runs are kept for compatibility and historical audit. H1.4D3A shows runnable legacy items for review only; live execution guards come next."
       >
         {toolRuns.length ? (
           <div className={websiteStyles.cardGrid}>
@@ -197,12 +212,9 @@ export default async function ActionsPage() {
                   </p>
                 ) : null}
 
-                {canExecute(run) ? (
+                {String(run.status) === "planned" || String(run.status) === "waiting_approval" || String(run.status) === "failed" ? (
                   <div className={websiteStyles.actionRow}>
-                    <ExecuteToolRunButton
-                      toolRunId={String(run.id)}
-                      label={getExecuteLabel(run.action_name)}
-                    />
+                    <span className={websiteStyles.badge}>Preflight review only</span>
                   </div>
                 ) : null}
               </article>
