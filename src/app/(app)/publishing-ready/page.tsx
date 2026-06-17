@@ -139,8 +139,9 @@ export default async function PublishingReadyPage({ searchParams }: PageProps) {
     supabase,
     accountId: assetAccess.accountId,
   });
-  const asset = {
-    ...assetAccess.asset,
+  const baseAsset = assetAccess.asset as Record<string, any>;
+  const asset: Record<string, any> = {
+    ...baseAsset,
     account_publishing_settings: accountSettings,
     account_publishing_settings_resolution: publishingResolution(assetAccess.accountId),
   };
