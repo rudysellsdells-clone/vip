@@ -22,6 +22,14 @@ export type AccountContext = {
   isMaster: boolean;
 };
 
+export type AccountAccess = {
+  account: AccountContextAccount | null;
+  canView: boolean;
+  canManage: boolean;
+  platformRole: string;
+  isMaster: boolean;
+};
+
 type SupabaseLike = {
   from: (table: string) => any;
 };
@@ -196,4 +204,64 @@ export async function setActiveAccountForUser({
   if (error) {
     throw new Error(error.message);
   }
+}
+
+export async function getAccountAccessForUser({
+  supabase,
+  accountId,
+  userId,
+}: {
+  supabase: SupabaseLike;
+  accountId: string | null | undefined;
+  userId: string;
+}): Promise<AccountAccess> {
+  const safeAccountId = String(accountId ?? "").trim();
+
+  const context = await getUserAccountContext({ supabase, userId });
+
+  if (!safeAccountId) {
+    return {
+      account: null,
+      canView: false,
+      canManage: false,
+      platformRole: context.platformRole,
+      isMaster: context.isMaster,
+    };
+  }
+
+  const account = context.accounts.find((item) => item.id === safeAccountId) ?? null;
+
+  return {
+    account,
+    canView: Boolean(account),
+    canManage: Boolean(account && (context.isMaster || canManageAccountRole(account.role))),
+    platformRole: context.platformRole,
+    isMaster: context.isMaster,
+  };
+}
+
+export async function userCanViewAccount({
+  supabase,
+  accountId,
+  userId,
+}: {
+  supabase: SupabaseLike;
+  accountId: string;
+  userId: string;
+}) {
+  const access = await getAccountAccessForUser({ supabase, accountId, userId });
+  return access.canView;
+}
+
+export async function userCanManageAccount({
+  supabase,
+  accountId,
+  userId,
+}: {
+  supabase: SupabaseLike;
+  accountId: string;
+  userId: string;
+}) {
+  const access = await getAccountAccessForUser({ supabase, accountId, userId });
+  return access.canManage;
 }

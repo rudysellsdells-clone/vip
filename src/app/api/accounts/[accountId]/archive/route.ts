@@ -1,63 +1,7 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
-import { textValue } from "@/lib/accounts/account-utils";
-
-function getAccountWriteClient() {
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return null;
-  }
-
-  return untypedSupabase(createAdminClient());
-}
-
-async function userCanArchiveAccount({
-  supabase,
-  accountId,
-  userId,
-}: {
-  supabase: any;
-  accountId: string;
-  userId: string;
-}) {
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id,platform_role")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (profile?.platform_role === "owner" || profile?.platform_role === "admin") {
-    return true;
-  }
-
-  const { data: account, error: accountError } = await supabase
-    .from("accounts")
-    .select("id,owner_user_id,status")
-    .eq("id", accountId)
-    .maybeSingle();
-
-  if (accountError || !account || account.status === "archived") {
-    return false;
-  }
-
-  if (account.owner_user_id === userId) {
-    return true;
-  }
-
-  const { data: membership } = await supabase
-    .from("account_memberships")
-    .select("id")
-    .eq("account_id", accountId)
-    .eq("user_id", userId)
-    .in("role", ["owner", "admin"])
-    .eq("status", "active")
-    .is("removed_at", null)
-    .limit(1)
-    .maybeSingle();
-
-  return Boolean(membership?.id);
-}
+import { getAccountWriteClient, textValue, userCanManageAccount } from "@/lib/accounts/account-utils";
 
 export async function POST(
   request: Request,
@@ -76,7 +20,7 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const canArchive = await userCanArchiveAccount({ supabase, accountId, userId: user.id });
+    const canArchive = await userCanManageAccount({ supabase, accountId, userId: user.id });
 
     if (!canArchive) {
       return NextResponse.json(

@@ -12,6 +12,7 @@ import { CreateAccountForm } from "@/components/accounts/CreateAccountForm";
 import { InviteAccountMemberForm } from "@/components/accounts/InviteAccountMemberForm";
 import { ArchiveAccountButton } from "@/components/accounts/ArchiveAccountButton";
 import accountStyles from "@/components/accounts/AccountForms.module.css";
+import { getUserAccountContext } from "@/lib/accounts/account-context";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -77,32 +78,42 @@ export default async function AccountsPage() {
     redirect("/login");
   }
 
+  const accountContext = await getUserAccountContext({ supabase, userId: user.id });
+  const accountIds = accountContext.accounts.map((account) => account.id);
+
   const [{ data: profile }, { data: accountsData }, { data: membershipsData }] = await Promise.all([
     supabase
       .from("profiles")
       .select("id,email,full_name,platform_role")
       .eq("id", user.id)
       .maybeSingle(),
-    supabase
-      .from("accounts")
-      .select("*")
-      .neq("status", "archived")
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("account_memberships")
-      .select("*")
-      .order("created_at", { ascending: true }),
+    accountIds.length
+      ? supabase
+          .from("accounts")
+          .select("*")
+          .in("id", accountIds)
+          .neq("status", "archived")
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [], error: null }),
+    accountIds.length
+      ? supabase
+          .from("account_memberships")
+          .select("*")
+          .in("account_id", accountIds)
+          .is("removed_at", null)
+          .order("created_at", { ascending: true })
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   const currentProfile = profile as ProfileRow | null;
   const accounts = ((accountsData ?? []) as AccountRow[]).filter((account) => account.status !== "archived");
   const memberships = ((membershipsData ?? []) as MembershipRow[]).filter(
-    (membership) => !membership.removed_at,
+    (membership) => !membership.removed_at && accountIds.includes(membership.account_id),
   );
   const membershipsByAccount = groupMembershipsByAccount(memberships);
   const pendingCount = memberships.filter((membership) => membership.status === "pending").length;
   const activeCount = memberships.filter((membership) => membership.status === "active").length;
-  const canCreateAccounts = currentProfile?.platform_role === "owner" || currentProfile?.platform_role === "admin";
+  const canCreateAccounts = accountContext.isMaster;
 
   return (
     <WebsitePage>

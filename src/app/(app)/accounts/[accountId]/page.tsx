@@ -15,6 +15,7 @@ import { ArchiveAccountButton } from "@/components/accounts/ArchiveAccountButton
 import { InviteAccountMemberForm } from "@/components/accounts/InviteAccountMemberForm";
 import { RemoveAccountMemberButton } from "@/components/accounts/RemoveAccountMemberButton";
 import accountStyles from "@/components/accounts/AccountForms.module.css";
+import { getAccountAccessForUser } from "@/lib/accounts/account-context";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -47,8 +48,17 @@ export default async function AccountDetailPage({
     redirect("/login");
   }
 
+  const accountAccess = await getAccountAccessForUser({
+    supabase,
+    accountId,
+    userId: user.id,
+  });
+
+  if (!accountAccess.canView) {
+    redirect("/accounts");
+  }
+
   const [
-    { data: profile },
     { data: account },
     { data: memberships },
     { data: brandProfile },
@@ -59,7 +69,6 @@ export default async function AccountDetailPage({
     { count: campaignCount },
     { count: assetCount },
   ] = await Promise.all([
-    supabase.from("profiles").select("id,platform_role").eq("id", user.id).maybeSingle(),
     supabase.from("accounts").select("*").eq("id", accountId).maybeSingle(),
     supabase
       .from("account_memberships")
@@ -103,7 +112,6 @@ export default async function AccountDetailPage({
     redirect("/accounts");
   }
 
-  const profileRow = profile as { platform_role?: string | null } | null;
   const memberRows = (memberships ?? []) as Array<{
     id: string;
     user_id: string | null;
@@ -141,16 +149,7 @@ export default async function AccountDetailPage({
   }>;
   const activeMembers = memberRows.filter((membership) => membership.status === "active").length;
   const pendingMembers = memberRows.filter((membership) => membership.status === "pending").length;
-  const canManage =
-    profileRow?.platform_role === "owner" ||
-    profileRow?.platform_role === "admin" ||
-    account.owner_user_id === user.id ||
-    memberRows.some(
-      (membership) =>
-        membership.email?.toLowerCase() === user.email?.toLowerCase() &&
-        ["owner", "admin"].includes(membership.role) &&
-        membership.status === "active",
-    );
+  const canManage = accountAccess.canManage;
 
   const configuredChannels = [
     publishingSettings?.linkedin_enabled ? "LinkedIn" : null,

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { getAccountAccessForUser } from "@/lib/accounts/account-context";
 import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
 import { logActivity } from "@/lib/security/auditLog";
 import { loadDigitalCloneContext } from "@/lib/clone/context";
 import { generateMarketingAssetPackWithCloneMemory } from "@/lib/ai/asset-pack-generator";
@@ -43,7 +45,7 @@ function normalizeCampaignForPrompt(campaign: {
 export async function POST(_request: Request, context: RouteContext) {
   try {
     const { campaignId } = await context.params;
-    const supabase = await createClient();
+    const supabase = untypedSupabase(await createClient());
 
     const {
       data: { user },
@@ -58,11 +60,27 @@ export async function POST(_request: Request, context: RouteContext) {
       .from("campaigns")
       .select("*")
       .eq("id", campaignId)
-      .eq("user_id", user.id)
-      .single();
+      .maybeSingle();
 
     if (campaignError || !campaign) {
       return NextResponse.json({ error: "Campaign not found." }, { status: 404 });
+    }
+
+    const accountId = campaign.account_id ? String(campaign.account_id) : null;
+
+    if (accountId) {
+      const access = await getAccountAccessForUser({ supabase, accountId, userId: user.id });
+      if (!access.canManage) {
+        return NextResponse.json(
+          { error: "You do not have permission to generate assets for this campaign." },
+          { status: 403 },
+        );
+      }
+    } else if (campaign.user_id !== user.id) {
+      return NextResponse.json(
+        { error: "You do not have permission to generate assets for this campaign." },
+        { status: 403 },
+      );
     }
 
     const cloneContext = await loadDigitalCloneContext(user.id);
@@ -96,6 +114,7 @@ export async function POST(_request: Request, context: RouteContext) {
       .from("generated_assets")
       .insert(
         assets.map((asset) => ({
+          account_id: accountId,
           user_id: user.id,
           campaign_id: campaign.id,
           asset_type: asset.assetType,
@@ -137,7 +156,7 @@ export async function POST(_request: Request, context: RouteContext) {
           ? insertedGalaxyPrompt.metadata
           : {};
 
-      await supabase
+      let promptUpdate = supabase
         .from("generated_assets")
         .update({
           parent_asset_id: insertedVideoScript.id,
@@ -150,11 +169,14 @@ export async function POST(_request: Request, context: RouteContext) {
             executionRule: "Only the approved galaxyai_prompt asset should be sent to GalaxyAI.",
           }),
         })
-        .eq("id", insertedGalaxyPrompt.id)
-        .eq("user_id", user.id);
+        .eq("id", insertedGalaxyPrompt.id);
+
+      promptUpdate = accountId ? promptUpdate.eq("account_id", accountId) : promptUpdate.eq("user_id", user.id);
+
+      await promptUpdate;
     }
 
-    const { data: updatedCampaign, error: updateCampaignError } = await supabase
+    let campaignUpdate = supabase
       .from("campaigns")
       .update({
         status: "asset_pack_generated",
@@ -165,8 +187,11 @@ export async function POST(_request: Request, context: RouteContext) {
           cloneMemorySnapshot: memorySnapshot,
         }),
       })
-      .eq("id", campaign.id)
-      .eq("user_id", user.id)
+      .eq("id", campaign.id);
+
+    campaignUpdate = accountId ? campaignUpdate.eq("account_id", accountId) : campaignUpdate.eq("user_id", user.id);
+
+    const { data: updatedCampaign, error: updateCampaignError } = await campaignUpdate
       .select("*")
       .single();
 
@@ -181,6 +206,7 @@ export async function POST(_request: Request, context: RouteContext) {
       description: `${campaign.name} generated using digital clone memory.`,
       metadata: toJson({
         campaignId: campaign.id,
+        accountId,
         assetCount: insertedAssets?.length ?? 0,
         cloneMemoryUsed: true,
         memorySnapshot,

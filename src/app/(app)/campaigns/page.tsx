@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { getUserAccountContext } from "@/lib/accounts/account-context";
 import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
 import { CampaignWebsiteForm } from "@/components/campaigns/CampaignWebsiteForm";
 import {
   WebsiteBadge,
@@ -17,16 +19,42 @@ function formatDate(value: string | null) {
 }
 
 export default async function CampaignsPage() {
-  const supabase = await createClient();
+  const supabase = untypedSupabase(await createClient());
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
 
+  const accountContext = await getUserAccountContext({ supabase, userId: user.id });
+  const activeAccountId = accountContext.activeAccountId;
+
+  if (!activeAccountId) redirect("/accounts");
+
   const [campaignsResult, serviceLinesResult, buyerSegmentsResult, offersResult] = await Promise.all([
-    supabase.from("campaigns").select("*").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(100),
-    supabase.from("service_lines").select("id,name").eq("user_id", user.id).eq("active", true).order("sort_order", { ascending: true }),
-    supabase.from("buyer_segments").select("id,name").eq("user_id", user.id).eq("active", true).order("sort_order", { ascending: true }),
-    supabase.from("offers").select("id,name").eq("user_id", user.id).eq("active", true).order("name", { ascending: true }),
+    supabase
+      .from("campaigns")
+      .select("*")
+      .eq("account_id", activeAccountId)
+      .is("archived_at", null)
+      .order("updated_at", { ascending: false })
+      .limit(100),
+    supabase
+      .from("service_lines")
+      .select("id,name")
+      .eq("account_id", activeAccountId)
+      .eq("active", true)
+      .order("sort_order", { ascending: true }),
+    supabase
+      .from("buyer_segments")
+      .select("id,name")
+      .eq("account_id", activeAccountId)
+      .eq("active", true)
+      .order("sort_order", { ascending: true }),
+    supabase
+      .from("offers")
+      .select("id,name")
+      .eq("account_id", activeAccountId)
+      .eq("active", true)
+      .order("name", { ascending: true }),
   ]);
 
   const campaigns = (campaignsResult.data ?? []) as Array<Record<string, any>>;
@@ -59,7 +87,7 @@ export default async function CampaignsPage() {
         <WebsiteSection
           eyebrow="Setup Needed"
           title="Populate buyer segments and offers first"
-          description="The campaign form uses user-owned buyer segments and offers. Populate the commercial foundation once and the dropdowns will be ready."
+          description="The campaign form uses the active account’s buyer segments and offers. Populate the commercial foundation once and the dropdowns will be ready."
         >
           <Link href="/settings" className={websiteStyles.link}>
             Go to Settings to populate dropdowns →

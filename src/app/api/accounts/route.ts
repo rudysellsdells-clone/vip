@@ -1,24 +1,20 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 import {
+  getAccountWriteClient,
   maybeInviteUserByEmail,
   normalizeEmail,
   slugifyAccountName,
   textValue,
 } from "@/lib/accounts/account-utils";
+import {
+  getUserAccountContext,
+  isMasterPlatformRole,
+} from "@/lib/accounts/account-context";
 
 function canCreateManagedAccount(profile: { platform_role?: string | null } | null) {
-  return profile?.platform_role === "owner" || profile?.platform_role === "admin";
-}
-
-function getAccountWriteClient() {
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return null;
-  }
-
-  return untypedSupabase(createAdminClient());
+  return isMasterPlatformRole(profile?.platform_role);
 }
 
 export async function GET() {
@@ -34,22 +30,32 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const accountContext = await getUserAccountContext({ supabase, userId: user.id });
+    const accountIds = accountContext.accounts.map((account) => account.id);
+
+    if (!accountIds.length) {
+      return NextResponse.json({ accounts: [], memberships: [] });
+    }
+
     const { data: accounts, error: accountsError } = await supabase
       .from("accounts")
       .select("*")
+      .in("id", accountIds)
+      .neq("status", "archived")
       .order("created_at", { ascending: false });
 
     if (accountsError) {
       return NextResponse.json({ error: accountsError.message }, { status: 400 });
     }
 
-    const accountIds = (accounts ?? []).map((account: { id: string }) => account.id);
+    const visibleAccountIds = ((accounts ?? []) as Array<{ id: string }>).map((account) => account.id);
 
-    const { data: memberships, error: membershipsError } = accountIds.length
+    const { data: memberships, error: membershipsError } = visibleAccountIds.length
       ? await supabase
           .from("account_memberships")
           .select("*")
-          .in("account_id", accountIds)
+          .in("account_id", visibleAccountIds)
+          .is("removed_at", null)
           .order("created_at", { ascending: true })
       : { data: [], error: null };
 

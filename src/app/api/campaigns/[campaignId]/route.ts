@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { getAccountAccessForUser } from "@/lib/accounts/account-context";
 import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
 
 type RouteContext = {
   params: Promise<{ campaignId: string }>;
@@ -8,7 +10,7 @@ type RouteContext = {
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const { campaignId } = await context.params;
-    const supabase = await createClient();
+    const supabase = untypedSupabase(await createClient());
 
     const {
       data: { user },
@@ -23,11 +25,22 @@ export async function GET(_request: Request, context: RouteContext) {
       .from("campaigns")
       .select("*, generated_assets(*)")
       .eq("id", campaignId)
-      .eq("user_id", user.id)
-      .single();
+      .maybeSingle();
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 404 });
+    if (error || !campaign) {
+      return NextResponse.json({ error: error?.message ?? "Campaign not found." }, { status: 404 });
+    }
+
+    const accountId = campaign.account_id ? String(campaign.account_id) : null;
+
+    if (accountId) {
+      const accountAccess = await getAccountAccessForUser({ supabase, accountId, userId: user.id });
+
+      if (!accountAccess.canView) {
+        return NextResponse.json({ error: "You do not have access to this campaign." }, { status: 403 });
+      }
+    } else if (campaign.user_id !== user.id) {
+      return NextResponse.json({ error: "You do not have access to this campaign." }, { status: 403 });
     }
 
     return NextResponse.json({ campaign });

@@ -1,5 +1,9 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { untypedSupabase } from "@/lib/supabase/untyped";
+import {
+  userCanManageAccount as userCanManageAccountFromContext,
+  userCanViewAccount as userCanViewAccountFromContext,
+} from "@/lib/accounts/account-context";
 
 export type AccountRole = "owner" | "admin" | "editor" | "reviewer" | "viewer";
 
@@ -53,42 +57,7 @@ export async function userCanManageAccount({
   accountId: string;
   userId: string;
 }) {
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id,platform_role")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (profile?.platform_role === "owner" || profile?.platform_role === "admin") {
-    return true;
-  }
-
-  const { data: account, error: accountError } = await supabase
-    .from("accounts")
-    .select("id,owner_user_id,status")
-    .eq("id", accountId)
-    .maybeSingle();
-
-  if (accountError || !account || account.status === "archived") {
-    return false;
-  }
-
-  if (account.owner_user_id === userId) {
-    return true;
-  }
-
-  const { data: membership } = await supabase
-    .from("account_memberships")
-    .select("id")
-    .eq("account_id", accountId)
-    .eq("user_id", userId)
-    .in("role", ["owner", "admin"])
-    .eq("status", "active")
-    .is("removed_at", null)
-    .limit(1)
-    .maybeSingle();
-
-  return Boolean(membership?.id);
+  return userCanManageAccountFromContext({ supabase, accountId, userId });
 }
 
 export async function userCanViewAccount({
@@ -100,41 +69,7 @@ export async function userCanViewAccount({
   accountId: string;
   userId: string;
 }) {
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id,platform_role")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (profile?.platform_role === "owner" || profile?.platform_role === "admin") {
-    return true;
-  }
-
-  const { data: account, error: accountError } = await supabase
-    .from("accounts")
-    .select("id,owner_user_id,status")
-    .eq("id", accountId)
-    .maybeSingle();
-
-  if (accountError || !account || account.status === "archived") {
-    return false;
-  }
-
-  if (account.owner_user_id === userId) {
-    return true;
-  }
-
-  const { data: membership } = await supabase
-    .from("account_memberships")
-    .select("id")
-    .eq("account_id", accountId)
-    .eq("user_id", userId)
-    .eq("status", "active")
-    .is("removed_at", null)
-    .limit(1)
-    .maybeSingle();
-
-  return Boolean(membership?.id);
+  return userCanViewAccountFromContext({ supabase, accountId, userId });
 }
 
 export async function maybeInviteUserByEmail({

@@ -1,58 +1,14 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
+import { getAccountAccessForUser } from "@/lib/accounts/account-context";
 import {
+  getAccountWriteClient,
   isAccountRole,
   maybeInviteUserByEmail,
   normalizeEmail,
   textValue,
 } from "@/lib/accounts/account-utils";
-
-function getAccountWriteClient() {
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return null;
-  }
-
-  return untypedSupabase(createAdminClient());
-}
-
-async function userCanManageAccount({
-  supabase,
-  accountId,
-  userId,
-}: {
-  supabase: any;
-  accountId: string;
-  userId: string;
-}) {
-  const { data: account, error: accountError } = await supabase
-    .from("accounts")
-    .select("id,owner_user_id")
-    .eq("id", accountId)
-    .maybeSingle();
-
-  if (accountError || !account) {
-    return false;
-  }
-
-  if (account.owner_user_id === userId) {
-    return true;
-  }
-
-  const { data: membership } = await supabase
-    .from("account_memberships")
-    .select("id")
-    .eq("account_id", accountId)
-    .eq("user_id", userId)
-    .in("role", ["owner", "admin"])
-    .eq("status", "active")
-    .is("removed_at", null)
-    .limit(1)
-    .maybeSingle();
-
-  return Boolean(membership?.id);
-}
 
 export async function POST(
   request: Request,
@@ -71,9 +27,9 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const canManage = await userCanManageAccount({ supabase, accountId, userId: user.id });
+    const accountAccess = await getAccountAccessForUser({ supabase, accountId, userId: user.id });
 
-    if (!canManage) {
+    if (!accountAccess.canManage) {
       return NextResponse.json(
         { error: "Only account owners and admins can add account members." },
         { status: 403 },
@@ -169,9 +125,9 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const canManage = await userCanManageAccount({ supabase, accountId, userId: user.id });
+    const accountAccess = await getAccountAccessForUser({ supabase, accountId, userId: user.id });
 
-    if (!canManage) {
+    if (!accountAccess.canManage) {
       return NextResponse.json(
         { error: "Only account owners and admins can remove account members." },
         { status: 403 },
@@ -210,14 +166,7 @@ export async function DELETE(
       );
     }
 
-    const { data: actingProfile } = await writeSupabase
-      .from("profiles")
-      .select("id,platform_role")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    const isPlatformManager =
-      actingProfile?.platform_role === "owner" || actingProfile?.platform_role === "admin";
+    const isPlatformManager = accountAccess.isMaster;
 
     const { data: membership, error: membershipError } = await writeSupabase
       .from("account_memberships")
@@ -287,4 +236,3 @@ export async function DELETE(
     );
   }
 }
-

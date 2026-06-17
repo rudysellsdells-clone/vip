@@ -14,6 +14,7 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
+import { getAccountAccessForUser } from "@/lib/accounts/account-context";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -60,25 +61,45 @@ export default async function CampaignDetailPage({ params }: PageProps) {
     .from("campaigns")
     .select("*")
     .eq("id", campaignId)
-    .eq("user_id", user.id)
-    .single();
+    .maybeSingle();
 
   if (error || !campaign) {
     redirect("/campaigns");
   }
 
-  const { data: assetsData } = await supabase
+  const campaignAccountId = campaign.account_id ? String(campaign.account_id) : null;
+
+  if (campaignAccountId) {
+    const accountAccess = await getAccountAccessForUser({
+      supabase,
+      accountId: campaignAccountId,
+      userId: user.id,
+    });
+
+    if (!accountAccess.canView) {
+      redirect("/campaigns");
+    }
+  } else if (campaign.user_id !== user.id) {
+    redirect("/campaigns");
+  }
+
+  let assetsQuery = supabase
     .from("generated_assets")
     .select("*")
-    .eq("user_id", user.id)
     .eq("campaign_id", campaign.id)
     .is("archived_at", null)
     .order("created_at", { ascending: false });
 
+  assetsQuery = campaignAccountId
+    ? assetsQuery.eq("account_id", campaignAccountId)
+    : assetsQuery.eq("user_id", user.id);
+
+  const { data: assetsData } = await assetsQuery;
+
   const { data: lumaRunsData } = await supabase
     .from("luma_video_runs")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", campaign.user_id ?? user.id)
     .eq("campaign_id", campaign.id)
     .order("created_at", { ascending: false })
     .limit(5);

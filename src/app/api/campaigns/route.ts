@@ -1,12 +1,46 @@
 import { NextResponse } from "next/server";
+import { getUserAccountContext } from "@/lib/accounts/account-context";
 import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
 import { createCampaignSchema } from "@/lib/validation/campaignSchemas";
 import { logActivity } from "@/lib/security/auditLog";
 
+async function accountRecordExists({
+  supabase,
+  table,
+  id,
+  accountId,
+}: {
+  supabase: any;
+  table: "service_lines" | "offers";
+  id: string | null | undefined;
+  accountId: string;
+}) {
+  if (!id) return true;
+
+  const { data } = await supabase
+    .from(table)
+    .select("id")
+    .eq("id", id)
+    .eq("account_id", accountId)
+    .limit(1)
+    .maybeSingle();
+
+  return Boolean(data?.id);
+}
+
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
-    const body = await request.json();
+    const supabase = untypedSupabase(await createClient());
+    const rawBody = await request.json();
+    const requestedServiceLineId = rawBody.serviceLineId ?? rawBody.service_line_id;
+    const requestedOfferId = rawBody.offerId ?? rawBody.offer_id;
+    const body = {
+      ...rawBody,
+      serviceLineId: requestedServiceLineId || undefined,
+      offerId: requestedOfferId || undefined,
+      buyerSegment: rawBody.buyerSegment ?? rawBody.buyer_segment,
+    };
     const input = createCampaignSchema.parse(body);
 
     const {
@@ -16,6 +50,30 @@ export async function POST(request: Request) {
 
     if (userError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const accountContext = await getUserAccountContext({ supabase, userId: user.id });
+    const activeAccountId = accountContext.activeAccountId;
+
+    if (!activeAccountId) {
+      return NextResponse.json(
+        { error: "Select or create an account workspace before creating campaigns." },
+        { status: 403 },
+      );
+    }
+
+    if (!(await accountRecordExists({ supabase, table: "service_lines", id: input.serviceLineId, accountId: activeAccountId }))) {
+      return NextResponse.json(
+        { error: "Selected service line does not belong to the active account." },
+        { status: 400 },
+      );
+    }
+
+    if (!(await accountRecordExists({ supabase, table: "offers", id: input.offerId, accountId: activeAccountId }))) {
+      return NextResponse.json(
+        { error: "Selected offer does not belong to the active account." },
+        { status: 400 },
+      );
     }
 
     await supabase.from("profiles").upsert({
@@ -35,6 +93,7 @@ export async function POST(request: Request) {
     const { data: campaign, error } = await supabase
       .from("campaigns")
       .insert({
+        account_id: activeAccountId,
         user_id: user.id,
         service_line_id: input.serviceLineId ?? null,
         offer_id: input.offerId ?? null,
@@ -61,7 +120,7 @@ export async function POST(request: Request) {
       activityType: "campaign_created",
       title: "Campaign created",
       description: `Created campaign: ${campaign.name}`,
-      metadata: { campaignId: campaign.id }
+      metadata: { campaignId: campaign.id, accountId: activeAccountId }
     });
 
     return NextResponse.json({ campaign }, { status: 201 });
@@ -79,7 +138,7 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
-    const supabase = await createClient();
+    const supabase = untypedSupabase(await createClient());
 
     const {
       data: { user },
@@ -90,10 +149,18 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const accountContext = await getUserAccountContext({ supabase, userId: user.id });
+    const activeAccountId = accountContext.activeAccountId;
+
+    if (!activeAccountId) {
+      return NextResponse.json({ campaigns: [] });
+    }
+
     const { data: campaigns, error } = await supabase
       .from("campaigns")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("account_id", activeAccountId)
+      .is("archived_at", null)
       .order("created_at", { ascending: false });
 
     if (error) {
