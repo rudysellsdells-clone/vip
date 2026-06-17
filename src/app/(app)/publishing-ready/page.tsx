@@ -8,6 +8,7 @@ import {
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
 import { getAssetAccessForUser } from "@/lib/accounts/asset-access";
+import { getUserAccountContext } from "@/lib/accounts/account-context";
 import {
   loadAccountPublishingSettings,
   type AccountPublishingSettingsResolution,
@@ -135,15 +136,20 @@ export default async function PublishingReadyPage({ searchParams }: PageProps) {
     );
   }
 
+  const accountContext = assetAccess.accountId
+    ? null
+    : await getUserAccountContext({ supabase, userId: user.id });
+  const previewAccountId = assetAccess.accountId ?? accountContext?.activeAccountId ?? null;
   const accountSettings = await loadAccountPublishingSettings({
     supabase,
-    accountId: assetAccess.accountId,
+    accountId: previewAccountId,
   });
   const baseAsset = assetAccess.asset as Record<string, any>;
   const asset: Record<string, any> = {
     ...baseAsset,
+    account_id: assetAccess.accountId ?? previewAccountId,
     account_publishing_settings: accountSettings,
-    account_publishing_settings_resolution: publishingResolution(assetAccess.accountId),
+    account_publishing_settings_resolution: publishingResolution(previewAccountId),
   };
 
   const alreadySentOrPublished = isAlreadySentOrPublished(asset);
@@ -151,12 +157,22 @@ export default async function PublishingReadyPage({ searchParams }: PageProps) {
   const config = zapierMcpConfigForAsset(asset);
   const params = buildPublishingOutputParams(asset);
   const actionLabel = publishingActionLabel(asset);
-  const preflight = buildPublishingPreflightReport({
+  const basePreflight = buildPublishingPreflightReport({
     asset,
     config,
     settings: accountSettings,
     canManage: assetAccess.canManage,
   });
+  const legacyBlockers = assetAccess.accountId
+    ? []
+    : [
+        "This is a legacy unassigned asset. It is shown for MASTER rescue/review, but live execution is blocked until the asset is assigned to the active workspace by re-approving it or running the legacy assignment repair.",
+      ];
+  const preflight = {
+    ...basePreflight,
+    blockers: [...basePreflight.blockers, ...legacyBlockers],
+    ready: basePreflight.ready && legacyBlockers.length === 0,
+  };
   const canExecuteNow = approvedForPublishing && !alreadySentOrPublished && preflight.ready;
 
   return (
@@ -192,7 +208,7 @@ export default async function PublishingReadyPage({ searchParams }: PageProps) {
             </div>
 
             <p className={websiteStyles.cardMeta} style={{ marginTop: 12 }}>
-              Workspace ID: {assetAccess.accountId ?? "Legacy user asset"} · Scheduled: {dateLabel(asset.scheduled_publish_at ?? asset.planned_publish_date)}
+              Workspace ID: {previewAccountId ?? "Legacy user asset"} · Scheduled: {dateLabel(asset.scheduled_publish_at ?? asset.planned_publish_date)}
             </p>
 
             <p className={websiteStyles.cardMeta}>
@@ -260,7 +276,8 @@ export default async function PublishingReadyPage({ searchParams }: PageProps) {
             <h3 className={websiteStyles.cardTitle}>Workspace publishing settings</h3>
             <pre style={{ whiteSpace: "pre-wrap", marginTop: 12, fontSize: 12 }}>
               {compactJson({
-                account_id: assetAccess.accountId,
+                account_id: previewAccountId,
+                persisted_asset_account_id: assetAccess.accountId,
                 settings_found: Boolean(accountSettings),
                 linkedin_page_name: accountSettings?.linkedin_page_name ?? null,
                 linkedin_company_id: accountSettings?.linkedin_company_id ?? null,

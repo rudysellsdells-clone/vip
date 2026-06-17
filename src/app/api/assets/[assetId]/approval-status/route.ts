@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAssetAccessForUser, scopeAssetQueryForAccess } from "@/lib/accounts/asset-access";
+import { getUserAccountContext } from "@/lib/accounts/account-context";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -47,10 +48,20 @@ export async function POST(request: Request, context: RouteContext) {
     );
   }
 
+  const accountContext = assetAccess.accountId
+    ? null
+    : await getUserAccountContext({ supabase, userId: user.id });
+  const resolvedAccountId = assetAccess.accountId ?? accountContext?.activeAccountId ?? null;
+  const updateValues: Record<string, any> = { status };
+
+  if (status === "approved" && !assetAccess.accountId && resolvedAccountId) {
+    updateValues.account_id = resolvedAccountId;
+  }
+
   const { data: asset, error } = await scopeAssetQueryForAccess({
     query: supabase
       .from("generated_assets")
-      .update({ status })
+      .update(updateValues)
       .is("archived_at", null),
     asset: assetAccess.asset,
     accountId: assetAccess.accountId,
@@ -66,13 +77,13 @@ export async function POST(request: Request, context: RouteContext) {
 
   await supabase.from("activity_log").insert({
     user_id: user.id,
-    account_id: assetAccess.accountId,
+    account_id: resolvedAccountId,
     activity_type: "asset_approval_status_updated",
     title: "Asset approval status updated",
     description: asset.title ?? assetId,
     metadata: {
       assetId,
-      accountId: assetAccess.accountId,
+      accountId: resolvedAccountId,
       assetType: asset.asset_type,
       status,
     },

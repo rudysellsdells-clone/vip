@@ -32,6 +32,20 @@ function safeRows(data: unknown) {
   return (Array.isArray(data) ? data : []) as Array<Record<string, any>>;
 }
 
+function uniqueRowsById(rows: Array<Record<string, any>>) {
+  const map = new Map<string, Record<string, any>>();
+
+  for (const row of rows) {
+    const id = String(row.id ?? "");
+
+    if (id && !map.has(id)) {
+      map.set(id, row);
+    }
+  }
+
+  return Array.from(map.values());
+}
+
 function assetTypeLabel(value: unknown) {
   return String(value ?? "asset").replaceAll("_", " ");
 }
@@ -144,7 +158,7 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
     redirect("/accounts");
   }
 
-  const [assetsResult, toolRunsResult] = await Promise.all([
+  const [assetsResult, legacyAssetsResult, toolRunsResult] = await Promise.all([
     applyPublishingScheduleQuery(
       supabase
         .from("generated_assets")
@@ -153,6 +167,17 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
         .order("scheduled_publish_at", { ascending: true, nullsFirst: false })
         .limit(1000),
     ),
+    accountContext.isMaster
+      ? applyPublishingScheduleQuery(
+          supabase
+            .from("generated_assets")
+            .select("*")
+            .eq("user_id", user.id)
+            .is("account_id", null)
+            .order("scheduled_publish_at", { ascending: true, nullsFirst: false })
+            .limit(1000),
+        )
+      : Promise.resolve({ data: [], error: null }),
     supabase
       .from("tool_runs")
       .select("*")
@@ -161,7 +186,9 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
       .limit(100),
   ]);
 
-  const allApprovedActiveAssets = filterPublishingScheduleAssets(safeRows(assetsResult.data));
+  const allApprovedActiveAssets = filterPublishingScheduleAssets(
+    uniqueRowsById([...safeRows(assetsResult.data), ...safeRows(legacyAssetsResult.data)])
+  );
   const visibleAssets = filterPublishingAssetsByViewRange(allApprovedActiveAssets, range, {
     includeUnscheduled: true,
   });
@@ -172,6 +199,8 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
     .filter(isPublishingRelatedToolRun)
     .slice(0, 12);
   const readyNowCount = unscheduledCount + legacyPublishingActions.length;
+  const legacyUnassignedCount = allApprovedActiveAssets.filter((asset) => !asset.account_id).length;
+  const queueError = assetsResult.error ?? legacyAssetsResult.error;
 
   return (
     <WebsitePage>
@@ -193,6 +222,7 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
             <span className={websiteStyles.badge}>Workspace ID: {activeAccountId}</span>
             <span className={websiteStyles.badge}>Role: {accountContext.activeAccountRole ?? "member"}</span>
             {accountContext.isMaster ? <span className={websiteStyles.badge}>MASTER preview</span> : null}
+            {legacyUnassignedCount ? <span className={websiteStyles.badge}>{legacyUnassignedCount} legacy unassigned item(s)</span> : null}
           </div>
         </article>
       </WebsiteSection>
@@ -275,8 +305,8 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
         title={`${range.view === "day" ? "Daily" : range.view === "month" ? "Monthly" : "Weekly"} publish queue`}
         description="Approved canonical assets appear here until they are sent to their publishing destination and marked published."
       >
-        {assetsResult.error ? (
-          <div className={websiteStyles.empty}>{assetsResult.error.message}</div>
+        {queueError ? (
+          <div className={websiteStyles.empty}>{queueError.message}</div>
         ) : groups.length ? (
           <div className="grid gap-5">
             {groups.map((group) => (
@@ -301,6 +331,9 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
                         <span className={websiteStyles.badge}>{publishingDateLabel(asset)}</span>
                         {!hasPublishDate(asset) ? (
                           <span className={websiteStyles.badge}>Manual publish</span>
+                        ) : null}
+                        {!asset.account_id ? (
+                          <span className={websiteStyles.badge}>Legacy unassigned</span>
                         ) : null}
                       </div>
 

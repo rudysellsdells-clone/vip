@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getUserAccountContext } from "@/lib/accounts/account-context";
 import {
   buildCalendarAssetPrompt,
   buildCampaignPayloadFromCalendarItem,
@@ -97,11 +98,13 @@ async function findWeeklyCampaignForItem({
 async function ensureCampaignForCalendarItem({
   supabase,
   userId,
+  accountId,
   item,
   plan,
 }: {
   supabase: any;
   userId: string;
+  accountId: string | null;
   item: CalendarItemRow;
   plan: CalendarPlanRow;
 }) {
@@ -118,11 +121,14 @@ async function ensureCampaignForCalendarItem({
     }
   }
 
-  const campaignPayload = buildCampaignPayloadFromCalendarItem({
-    item,
-    plan,
-    userId,
-  });
+  const campaignPayload = {
+    ...buildCampaignPayloadFromCalendarItem({
+      item,
+      plan,
+      userId,
+    }),
+    account_id: accountId,
+  };
 
   const { data: campaign, error } = await supabase
     .from("campaigns")
@@ -150,6 +156,7 @@ async function ensureCampaignForCalendarItem({
 
   await supabase.from("activity_log").insert({
     user_id: userId,
+    account_id: accountId,
     activity_type: "calendar_campaign_generated",
     title: "Campaign created from content calendar",
     description: campaign.name,
@@ -157,6 +164,7 @@ async function ensureCampaignForCalendarItem({
       planId: item.plan_id,
       itemId: item.id,
       campaignId: campaign.id,
+      accountId,
       weekNumber: item.week_number,
     },
   });
@@ -175,6 +183,13 @@ export async function POST(_request: Request, context: RouteContext) {
 
   if (userError || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const accountContext = await getUserAccountContext({ supabase, userId: user.id });
+  const activeAccountId = accountContext.activeAccountId;
+
+  if (!activeAccountId) {
+    return NextResponse.json({ error: "No active workspace selected." }, { status: 400 });
   }
 
   const { data: rawItem, error: itemError } = await supabase
@@ -208,6 +223,7 @@ export async function POST(_request: Request, context: RouteContext) {
       const campaign = await ensureCampaignForCalendarItem({
         supabase,
         userId: user.id,
+        accountId: activeAccountId,
         item,
         plan,
       });
@@ -244,6 +260,7 @@ export async function POST(_request: Request, context: RouteContext) {
         linkedCampaign = await ensureCampaignForCalendarItem({
           supabase,
           userId: user.id,
+          accountId: activeAccountId,
           item: weeklyCampaignItem,
           plan,
         });
@@ -271,6 +288,7 @@ export async function POST(_request: Request, context: RouteContext) {
       .from("generated_assets")
       .insert({
         user_id: user.id,
+        account_id: activeAccountId,
         campaign_id: linkedCampaign?.id ?? item.campaign_id ?? null,
         asset_type: assetType,
         title: item.title,
@@ -296,6 +314,7 @@ export async function POST(_request: Request, context: RouteContext) {
         metadata: {
           ...(item.metadata ?? {}),
           generatedAssetId: asset.id,
+          accountId: activeAccountId,
           generatedAssetType: assetType,
           generatedAt: new Date().toISOString(),
         },
@@ -305,6 +324,7 @@ export async function POST(_request: Request, context: RouteContext) {
 
     await supabase.from("activity_log").insert({
       user_id: user.id,
+      account_id: activeAccountId,
       activity_type: "calendar_asset_generated",
       title: "Asset generated from content calendar",
       description: item.title,
@@ -312,6 +332,7 @@ export async function POST(_request: Request, context: RouteContext) {
         planId: item.plan_id,
         itemId: item.id,
         assetId: asset.id,
+        accountId: activeAccountId,
         assetType,
         campaignId: linkedCampaign?.id ?? item.campaign_id ?? null,
       },

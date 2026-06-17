@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAssetAccessForUser, scopeAssetQueryForAccess } from "@/lib/accounts/asset-access";
+import { getUserAccountContext } from "@/lib/accounts/account-context";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 import { logActivity } from "@/lib/security/auditLog";
@@ -39,9 +40,18 @@ export async function POST(request: Request, context: RouteContext) {
     }
 
     const asset = assetAccess.asset;
+    const accountContext = assetAccess.accountId
+      ? null
+      : await getUserAccountContext({ supabase, userId: user.id });
+    const resolvedAccountId = assetAccess.accountId ?? accountContext?.activeAccountId ?? null;
+    const updateValues: Record<string, any> = { status: "approved" };
+
+    if (!assetAccess.accountId && resolvedAccountId) {
+      updateValues.account_id = resolvedAccountId;
+    }
 
     const { error: updateError } = await scopeAssetQueryForAccess({
-      query: supabase.from("generated_assets").update({ status: "approved" }),
+      query: supabase.from("generated_assets").update(updateValues),
       asset,
       accountId: assetAccess.accountId,
       userId: user.id,
@@ -70,7 +80,7 @@ export async function POST(request: Request, context: RouteContext) {
       description: asset.title ?? asset.asset_type,
       metadata: {
         assetId,
-        accountId: assetAccess.accountId,
+        accountId: resolvedAccountId,
         campaignId: asset.campaign_id,
         assetType: asset.asset_type,
       },

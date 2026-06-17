@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getUserAccountContext } from "@/lib/accounts/account-context";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -33,6 +34,20 @@ function assetBelongsToMonth(asset: Record<string, any>, month: string) {
   );
 }
 
+function uniqueRowsById(rows: Array<Record<string, any>>) {
+  const map = new Map<string, Record<string, any>>();
+
+  for (const row of rows) {
+    const id = String(row.id ?? "");
+
+    if (id && !map.has(id)) {
+      map.set(id, row);
+    }
+  }
+
+  return Array.from(map.values());
+}
+
 export async function POST(request: Request) {
   const supabase = untypedSupabase(await createClient());
 
@@ -63,21 +78,49 @@ export async function POST(request: Request) {
     );
   }
 
-  const { data: assetsData, error: assetsError } = await supabase
-    .from("generated_assets")
-    .select("id,title,asset_type,status,quality_workflow_status,intended_publish_month,planned_publish_date,scheduled_publish_at,campaign_week_start_date,is_active_version")
-    .eq("user_id", user.id)
-    .is("archived_at", null)
-    .neq("status", "approved")
-    .eq("quality_workflow_status", "review_ready")
-    .order("created_at", { ascending: true })
-    .limit(1000);
+  const accountContext = await getUserAccountContext({ supabase, userId: user.id });
+  const activeAccountId = accountContext.activeAccountId;
+
+  if (!activeAccountId) {
+    return NextResponse.json({ error: "No active workspace selected." }, { status: 400 });
+  }
+
+  const baseSelect = "id,title,asset_type,status,quality_workflow_status,intended_publish_month,planned_publish_date,scheduled_publish_at,campaign_week_start_date,is_active_version,account_id";
+
+  const [accountAssetsResult, legacyAssetsResult] = await Promise.all([
+    supabase
+      .from("generated_assets")
+      .select(baseSelect)
+      .eq("account_id", activeAccountId)
+      .is("archived_at", null)
+      .neq("status", "approved")
+      .eq("quality_workflow_status", "review_ready")
+      .order("created_at", { ascending: true })
+      .limit(1000),
+    accountContext.isMaster
+      ? supabase
+          .from("generated_assets")
+          .select(baseSelect)
+          .eq("user_id", user.id)
+          .is("account_id", null)
+          .is("archived_at", null)
+          .neq("status", "approved")
+          .eq("quality_workflow_status", "review_ready")
+          .order("created_at", { ascending: true })
+          .limit(1000)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  const assetsError = accountAssetsResult.error ?? legacyAssetsResult.error;
 
   if (assetsError) {
     return NextResponse.json({ error: assetsError.message }, { status: 400 });
   }
 
-  const assets = (Array.isArray(assetsData) ? assetsData : [])
+  const assets = uniqueRowsById([
+    ...(Array.isArray(accountAssetsResult.data) ? accountAssetsResult.data : []),
+    ...(Array.isArray(legacyAssetsResult.data) ? legacyAssetsResult.data : []),
+  ])
     .filter((asset) => asset.is_active_version !== false)
     .filter((asset) => assetBelongsToMonth(asset, month));
 
@@ -96,9 +139,9 @@ export async function POST(request: Request) {
     .from("generated_assets")
     .update({
       status: "approved",
+      account_id: activeAccountId,
     })
-    .in("id", assetIds)
-    .eq("user_id", user.id);
+    .in("id", assetIds);
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 400 });
@@ -106,12 +149,14 @@ export async function POST(request: Request) {
 
   await supabase.from("activity_log").insert({
     user_id: user.id,
+    account_id: activeAccountId,
     activity_type: "monthly_review_ready_assets_bulk_approved",
     title: "Monthly quality-passed assets bulk approved",
     description: `${assetIds.length} quality-passed asset(s) approved for ${month}.`,
     metadata: {
       month,
       approvedCount: assetIds.length,
+      accountId: activeAccountId,
       assetIds,
       assets: assets.map((asset) => ({
         id: asset.id,
@@ -125,6 +170,7 @@ export async function POST(request: Request) {
     ok: true,
     month,
     approvedCount: assetIds.length,
+    accountId: activeAccountId,
     assetIds,
   });
 }

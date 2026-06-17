@@ -21,6 +21,20 @@ type PageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
+function uniqueRowsById(rows: Array<Record<string, any>>) {
+  const map = new Map<string, Record<string, any>>();
+
+  for (const row of rows) {
+    const id = String(row.id ?? "");
+
+    if (id && !map.has(id)) {
+      map.set(id, row);
+    }
+  }
+
+  return Array.from(map.values());
+}
+
 export default async function ApprovalsPage({ searchParams }: PageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const range = buildCalendarViewRangeFromSearchParams({
@@ -45,16 +59,33 @@ export default async function ApprovalsPage({ searchParams }: PageProps) {
     redirect("/accounts");
   }
 
-  const baseQuery = supabase
+  const accountQuery = supabase
     .from("generated_assets")
     .select("*")
     .eq("account_id", activeAccountId)
     .order("scheduled_publish_at", { ascending: true, nullsFirst: false })
     .limit(1500);
 
-  const { data, error } = await applyWorkingAssetQuery(baseQuery);
+  const legacyQuery = supabase
+    .from("generated_assets")
+    .select("*")
+    .eq("user_id", user.id)
+    .is("account_id", null)
+    .order("scheduled_publish_at", { ascending: true, nullsFirst: false })
+    .limit(1500);
 
-  const allWorkingAssets = filterWorkingAssets(safeRows(data)).filter(isApprovalCandidate);
+  const [accountResult, legacyResult] = await Promise.all([
+    applyWorkingAssetQuery(accountQuery),
+    accountContext.isMaster
+      ? applyWorkingAssetQuery(legacyQuery)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  const error = accountResult.error ?? legacyResult.error;
+  const allWorkingAssets = filterWorkingAssets(
+    uniqueRowsById([...safeRows(accountResult.data), ...safeRows(legacyResult.data)])
+  ).filter(isApprovalCandidate);
+  const legacyUnassignedCount = allWorkingAssets.filter((asset) => !asset.account_id).length;
   const { visibleAssets, groups } = pageVisibleAssets({
     assets: allWorkingAssets,
     range,
@@ -75,6 +106,21 @@ export default async function ApprovalsPage({ searchParams }: PageProps) {
         primaryAction={{ label: "Monthly Review", href: "/content-calendar/monthly-review" }}
         secondaryAction={{ label: "Publishing Schedule", href: "/publishing-schedule" }}
       />
+
+      <WebsiteSection
+        eyebrow="Active Workspace"
+        title={accountContext.activeAccountName ?? "Current workspace"}
+        description="Approvals are workspace-scoped. MASTER also sees unassigned legacy items here so they can be approved into the active workspace instead of disappearing."
+      >
+        <article className={websiteStyles.card}>
+          <div className="flex flex-wrap gap-2">
+            <span className={websiteStyles.badge}>Workspace ID: {activeAccountId}</span>
+            <span className={websiteStyles.badge}>Role: {accountContext.activeAccountRole ?? "member"}</span>
+            {accountContext.isMaster ? <span className={websiteStyles.badge}>MASTER preview</span> : null}
+            {legacyUnassignedCount ? <span className={websiteStyles.badge}>{legacyUnassignedCount} legacy unassigned item(s)</span> : null}
+          </div>
+        </article>
+      </WebsiteSection>
 
       <WebsiteSection
         eyebrow="View"
