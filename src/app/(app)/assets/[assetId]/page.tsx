@@ -13,7 +13,9 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
+import { getAssetAccessForUser, scopeRelatedAssetQueryForAccess } from "@/lib/accounts/asset-access";
 import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
 
 type PageProps = {
   params: Promise<{
@@ -44,7 +46,7 @@ function zapierMcpExecutionLabel(assetType: unknown) {
 
 export default async function AssetDetailPage({ params }: PageProps) {
   const { assetId } = await params;
-  const supabase = await createClient();
+  const supabase = untypedSupabase(await createClient());
 
   const {
     data: { user },
@@ -54,40 +56,44 @@ export default async function AssetDetailPage({ params }: PageProps) {
     redirect("/login");
   }
 
-  const { data: asset, error: assetError } = await supabase
-    .from("generated_assets")
-    .select("*")
-    .eq("id", assetId)
-    .eq("user_id", user.id)
-    .single();
+  const assetAccess = await getAssetAccessForUser({ supabase, assetId, userId: user.id });
 
-  if (assetError || !asset) {
+  if (!assetAccess.asset || !assetAccess.canView) {
     redirect("/approvals");
   }
 
+  const asset = assetAccess.asset;
+  const accountId = assetAccess.accountId;
+
   const { data: campaign } = asset.campaign_id
-    ? await supabase
-        .from("campaigns")
-        .select("*")
-        .eq("id", asset.campaign_id)
-        .eq("user_id", user.id)
-        .maybeSingle()
+    ? await scopeRelatedAssetQueryForAccess({
+        query: supabase
+          .from("campaigns")
+          .select("*")
+          .eq("id", asset.campaign_id),
+        accountId,
+        userId: user.id,
+      }).maybeSingle()
     : { data: null };
 
-  const { data: childRevisions } = await supabase
-    .from("generated_assets")
-    .select("*")
-    .eq("user_id", user.id)
-    .eq("parent_asset_id", asset.id)
-    .order("version", { ascending: false });
+  const { data: childRevisions } = await scopeRelatedAssetQueryForAccess({
+    query: supabase
+      .from("generated_assets")
+      .select("*")
+      .eq("parent_asset_id", asset.id),
+    accountId,
+    userId: user.id,
+  }).order("version", { ascending: false });
 
   const { data: parentAsset } = asset.parent_asset_id
-    ? await supabase
-        .from("generated_assets")
-        .select("*")
-        .eq("id", asset.parent_asset_id)
-        .eq("user_id", user.id)
-        .maybeSingle()
+    ? await scopeRelatedAssetQueryForAccess({
+        query: supabase
+          .from("generated_assets")
+          .select("*")
+          .eq("id", asset.parent_asset_id),
+        accountId,
+        userId: user.id,
+      }).maybeSingle()
     : { data: null };
 
   const { data: approvals } = await supabase

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { getAssetAccessForUser, scopeAssetQueryForAccess } from "@/lib/accounts/asset-access";
 import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
 import { logActivity } from "@/lib/security/auditLog";
 
 type RouteContext = {
@@ -11,8 +13,7 @@ type RouteContext = {
 export async function POST(request: Request, context: RouteContext) {
   try {
     const { assetId } = await context.params;
-    const supabase = await createClient();
-    const db = supabase as any;
+    const supabase = untypedSupabase(await createClient());
     const body = await request.json().catch(() => ({}));
     const notes = typeof body.notes === "string" ? body.notes : null;
 
@@ -25,28 +26,30 @@ export async function POST(request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data: asset, error: assetError } = await db
-      .from("generated_assets")
-      .select("*")
-      .eq("id", assetId)
-      .eq("user_id", user.id)
-      .single();
+    const assetAccess = await getAssetAccessForUser({ supabase, assetId, userId: user.id });
 
-    if (assetError || !asset) {
+    if (!assetAccess.asset) {
       return NextResponse.json({ error: "Asset not found." }, { status: 404 });
     }
 
-    const { error: updateError } = await db
-      .from("generated_assets")
-      .update({ status: "rejected" })
-      .eq("id", assetId)
-      .eq("user_id", user.id);
+    if (!assetAccess.canManage) {
+      return NextResponse.json({ error: "You do not have permission to reject this asset." }, { status: 403 });
+    }
+
+    const asset = assetAccess.asset;
+
+    const { error: updateError } = await scopeAssetQueryForAccess({
+      query: supabase.from("generated_assets").update({ status: "rejected" }),
+      asset,
+      accountId: assetAccess.accountId,
+      userId: user.id,
+    });
 
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 400 });
     }
 
-    const { error: approvalError } = await db.from("approvals").insert({
+    const { error: approvalError } = await supabase.from("approvals").insert({
       user_id: user.id,
       asset_id: assetId,
       status: "rejected",
@@ -57,13 +60,14 @@ export async function POST(request: Request, context: RouteContext) {
       return NextResponse.json({ error: approvalError.message }, { status: 400 });
     }
 
-    await logActivity(db, {
+    await logActivity(supabase, {
       userId: user.id,
       activityType: "asset_rejected",
       title: "Asset rejected",
       description: asset.title ?? asset.asset_type,
       metadata: {
         assetId,
+        accountId: assetAccess.accountId,
         campaignId: asset.campaign_id,
         assetType: asset.asset_type,
       },

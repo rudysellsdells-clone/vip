@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getAssetAccessForUser, scopeAssetQueryForAccess } from "@/lib/accounts/asset-access";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -33,16 +34,28 @@ export async function POST(request: Request, context: RouteContext) {
     );
   }
 
-  const { data: asset, error } = await supabase
-    .from("generated_assets")
-    .update({
-      status,
-    })
-    .eq("id", assetId)
-    .eq("user_id", user.id)
-    .is("archived_at", null)
-    .select("*")
-    .single();
+  const assetAccess = await getAssetAccessForUser({ supabase, assetId, userId: user.id });
+
+  if (!assetAccess.asset) {
+    return NextResponse.json({ error: "Asset not found or has been archived." }, { status: 404 });
+  }
+
+  if (!assetAccess.canManage) {
+    return NextResponse.json(
+      { error: "You do not have permission to update this asset." },
+      { status: 403 }
+    );
+  }
+
+  const { data: asset, error } = await scopeAssetQueryForAccess({
+    query: supabase
+      .from("generated_assets")
+      .update({ status })
+      .is("archived_at", null),
+    asset: assetAccess.asset,
+    accountId: assetAccess.accountId,
+    userId: user.id,
+  }).select("*").single();
 
   if (error || !asset) {
     return NextResponse.json(
@@ -53,11 +66,13 @@ export async function POST(request: Request, context: RouteContext) {
 
   await supabase.from("activity_log").insert({
     user_id: user.id,
+    account_id: assetAccess.accountId,
     activity_type: "asset_approval_status_updated",
     title: "Asset approval status updated",
     description: asset.title ?? assetId,
     metadata: {
       assetId,
+      accountId: assetAccess.accountId,
       assetType: asset.asset_type,
       status,
     },

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { getAssetAccessForUser, scopeAssetQueryForAccess, scopeRelatedAssetQueryForAccess } from "@/lib/accounts/asset-access";
 import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
 import { generateAssetRevision } from "@/lib/ai/revision-generator";
 import { logActivity } from "@/lib/security/auditLog";
 import type { Json } from "@/types/database.types";
@@ -25,7 +27,7 @@ function getInstructions(value: unknown) {
 export async function POST(request: Request, context: RouteContext) {
   try {
     const { assetId } = await context.params;
-    const supabase = await createClient();
+    const supabase = untypedSupabase(await createClient());
     const body = await request.json().catch(() => ({}));
     const instructions =
       getInstructions(body.instructions) ||
@@ -48,16 +50,21 @@ export async function POST(request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data: asset, error: assetError } = await supabase
-      .from("generated_assets")
-      .select("*")
-      .eq("id", assetId)
-      .eq("user_id", user.id)
-      .single();
+    const assetAccess = await getAssetAccessForUser({ supabase, assetId, userId: user.id });
 
-    if (assetError || !asset) {
+    if (!assetAccess.asset) {
       return NextResponse.json({ error: "Asset not found." }, { status: 404 });
     }
+
+    if (!assetAccess.canManage) {
+      return NextResponse.json(
+        { error: "You do not have permission to revise this asset." },
+        { status: 403 }
+      );
+    }
+
+    const asset = assetAccess.asset;
+    const accountId = assetAccess.accountId;
 
     if (asset.status === "published" || asset.status === "sent") {
       return NextResponse.json(
@@ -67,12 +74,14 @@ export async function POST(request: Request, context: RouteContext) {
     }
 
     const { data: campaign } = asset.campaign_id
-      ? await supabase
-          .from("campaigns")
-          .select("*")
-          .eq("id", asset.campaign_id)
-          .eq("user_id", user.id)
-          .maybeSingle()
+      ? await scopeRelatedAssetQueryForAccess({
+          query: supabase
+            .from("campaigns")
+            .select("*")
+            .eq("id", asset.campaign_id),
+          accountId,
+          userId: user.id,
+        }).maybeSingle()
       : { data: null };
 
     const revision = await generateAssetRevision({
@@ -105,6 +114,7 @@ export async function POST(request: Request, context: RouteContext) {
     const { data: revisedAsset, error: revisedAssetError } = await supabase
       .from("generated_assets")
       .insert({
+        account_id: accountId,
         user_id: user.id,
         campaign_id: asset.campaign_id,
         asset_type: asset.asset_type,
@@ -134,21 +144,24 @@ export async function POST(request: Request, context: RouteContext) {
       return NextResponse.json({ error: revisedAssetError.message }, { status: 400 });
     }
 
-    await supabase
-      .from("generated_assets")
-      .update({
-        status: "revision_requested",
-        metadata: toJson({
-          ...(asset.metadata && typeof asset.metadata === "object" && !Array.isArray(asset.metadata)
-            ? asset.metadata
-            : {}),
-          latestRevisionAssetId: revisedAsset.id,
-          latestRevisionRequestedAt: new Date().toISOString(),
-          latestRevisionInstructions: instructions,
+    await scopeAssetQueryForAccess({
+      query: supabase
+        .from("generated_assets")
+        .update({
+          status: "revision_requested",
+          metadata: toJson({
+            ...(asset.metadata && typeof asset.metadata === "object" && !Array.isArray(asset.metadata)
+              ? asset.metadata
+              : {}),
+            latestRevisionAssetId: revisedAsset.id,
+            latestRevisionRequestedAt: new Date().toISOString(),
+            latestRevisionInstructions: instructions,
+          }),
         }),
-      })
-      .eq("id", asset.id)
-      .eq("user_id", user.id);
+      asset,
+      accountId,
+      userId: user.id,
+    });
 
     await supabase.from("approvals").insert({
       user_id: user.id,
@@ -163,6 +176,7 @@ export async function POST(request: Request, context: RouteContext) {
       title: "Asset revision generated",
       description: `Created version ${nextVersion} of ${asset.title ?? asset.asset_type}.`,
       metadata: toJson({
+        accountId,
         parentAssetId: asset.id,
         revisedAssetId: revisedAsset.id,
         campaignId: asset.campaign_id,

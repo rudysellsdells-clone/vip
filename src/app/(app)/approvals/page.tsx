@@ -13,6 +13,7 @@ import { buildCalendarViewRangeFromSearchParams } from "@/lib/calendar/view-rang
 import { defaultViewForPage } from "@/lib/calendar/working-view-config";
 import { isApprovalCandidate, pageVisibleAssets, safeRows } from "@/lib/calendar/page-assets";
 import { loadLatestQualityReviewsByAssetId } from "@/lib/content-quality/load-quality-reviews";
+import { getUserAccountContext } from "@/lib/accounts/account-context";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -37,10 +38,17 @@ export default async function ApprovalsPage({ searchParams }: PageProps) {
     redirect("/login");
   }
 
+  const accountContext = await getUserAccountContext({ supabase, userId: user.id });
+  const activeAccountId = accountContext.activeAccountId;
+
+  if (!activeAccountId) {
+    redirect("/accounts");
+  }
+
   const baseQuery = supabase
     .from("generated_assets")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("account_id", activeAccountId)
     .order("scheduled_publish_at", { ascending: true, nullsFirst: false })
     .limit(1500);
 
@@ -63,7 +71,7 @@ export default async function ApprovalsPage({ searchParams }: PageProps) {
       <WebsiteHero
         eyebrow="Approvals"
         title="Approval queue"
-        description="Approve only active latest-version assets. Quality score evidence is shown on each card."
+        description={`Approve active latest-version assets for ${accountContext.activeAccountName ?? "the active workspace"}. Quality score evidence is shown when available.`}
         primaryAction={{ label: "Monthly Review", href: "/content-calendar/monthly-review" }}
         secondaryAction={{ label: "Publishing Schedule", href: "/publishing-schedule" }}
       />

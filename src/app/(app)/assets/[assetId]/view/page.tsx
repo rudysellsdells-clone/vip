@@ -8,6 +8,7 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
+import { getAssetAccessForUser } from "@/lib/accounts/asset-access";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -41,14 +42,10 @@ export default async function AssetReadOnlyViewPage({ params }: PageProps) {
 
   if (!user) redirect("/login");
 
-  const { data: asset, error } = await supabase
-    .from("generated_assets")
-    .select("*")
-    .eq("id", assetId)
-    .eq("user_id", user.id)
-    .single();
+  const assetAccess = await getAssetAccessForUser({ supabase, assetId, userId: user.id });
+  const asset = assetAccess.asset;
 
-  if (error || !asset) {
+  if (!asset || !assetAccess.canView) {
     return (
       <WebsitePage>
         <WebsiteHero
