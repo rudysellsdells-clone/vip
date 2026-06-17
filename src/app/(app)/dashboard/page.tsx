@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import styles from "./DashboardWebsite.module.css";
+import { getUserAccountContext } from "@/lib/accounts/account-context";
 import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
 
 type RecentItem = {
   id: string;
@@ -247,7 +249,7 @@ function getNextActions(input: {
 }
 
 export default async function DashboardPage() {
-  const supabase = await createClient();
+  const supabase = untypedSupabase(await createClient());
 
   const {
     data: { user },
@@ -255,6 +257,13 @@ export default async function DashboardPage() {
 
   if (!user) {
     redirect("/login");
+  }
+
+  const accountContext = await getUserAccountContext({ supabase, userId: user.id });
+  const activeAccountId = accountContext.activeAccountId;
+
+  if (!activeAccountId) {
+    redirect("/accounts");
   }
 
   const [
@@ -268,13 +277,13 @@ export default async function DashboardPage() {
     prospectsResult,
     opportunitiesResult,
   ] = await Promise.all([
-    supabase.from("campaigns").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(5),
-    supabase.from("generated_assets").select("*").eq("user_id", user.id).in("status", ["needs_review", "revision_requested"]).order("created_at", { ascending: false }).limit(8),
-    supabase.from("generated_assets").select("*").eq("user_id", user.id).eq("status", "approved").order("updated_at", { ascending: false }).limit(8),
-    supabase.from("generated_assets").select("*").eq("user_id", user.id).eq("status", "published").order("updated_at", { ascending: false }).limit(8),
-    supabase.from("galaxyai_runs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(8),
-    supabase.from("tool_runs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(12),
-    supabase.from("activity_log").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(10),
+    supabase.from("campaigns").select("*").eq("account_id", activeAccountId).is("archived_at", null).order("created_at", { ascending: false }).limit(5),
+    supabase.from("generated_assets").select("*").eq("account_id", activeAccountId).is("archived_at", null).in("status", ["needs_review", "revision_requested"]).order("created_at", { ascending: false }).limit(8),
+    supabase.from("generated_assets").select("*").eq("account_id", activeAccountId).is("archived_at", null).eq("status", "approved").order("updated_at", { ascending: false }).limit(8),
+    supabase.from("generated_assets").select("*").eq("account_id", activeAccountId).is("archived_at", null).eq("status", "published").order("updated_at", { ascending: false }).limit(8),
+    supabase.from("galaxyai_runs").select("*").eq("account_id", activeAccountId).order("created_at", { ascending: false }).limit(8),
+    supabase.from("tool_runs").select("*").eq("account_id", activeAccountId).order("created_at", { ascending: false }).limit(12),
+    supabase.from("activity_log").select("*").eq("account_id", activeAccountId).order("created_at", { ascending: false }).limit(10),
     supabase.from("prospects").select("*").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(25),
     supabase.from("opportunities").select("*").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(25),
   ]);
@@ -344,14 +353,14 @@ export default async function DashboardPage() {
       <section className={styles.hero}>
         <div className={styles.heroInner}>
           <div>
-            <p className={styles.eyebrow}>Web Search Pros Command Center</p>
+            <p className={styles.eyebrow}>Active Workspace · {accountContext.activeAccountName ?? "Workspace"}</p>
             <h1 className={styles.heroTitle}>
               Revolutionize your digital presence from one clean dashboard.
             </h1>
             <p className={styles.heroCopy}>
-              VIP helps Rudy create campaigns, review assets, run approved
-              actions, and connect marketing work to real prospects and revenue
-              opportunities.
+              VIP shows campaigns, review items, approved actions, and recent activity
+              for the active workspace only, so client users do not see work from
+              other accounts.
             </p>
 
             <div className={styles.heroActions}>
@@ -444,7 +453,7 @@ export default async function DashboardPage() {
       <section className={styles.twoColumn}>
         <RecentList
           title="Recent campaigns"
-          description="Newest campaign work in Rudy's Marketing Twin."
+          description="Newest campaign work in the active workspace."
           items={recentCampaignItems}
           emptyMessage="No campaigns yet."
         />
