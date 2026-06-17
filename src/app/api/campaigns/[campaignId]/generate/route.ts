@@ -18,6 +18,13 @@ function toJson(value: unknown): Json {
   return JSON.parse(JSON.stringify(value)) as Json;
 }
 
+
+type InsertedGeneratedAsset = {
+  id: string;
+  asset_type: string;
+  metadata: Json | null;
+};
+
 function normalizeCampaignForPrompt(campaign: {
   name: string;
   idea: string;
@@ -141,10 +148,12 @@ export async function POST(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: insertAssetsError.message }, { status: 400 });
     }
 
-    const insertedVideoScript = insertedAssets?.find(
+    const insertedAssetRows = (insertedAssets ?? []) as InsertedGeneratedAsset[];
+
+    const insertedVideoScript = insertedAssetRows.find(
       (asset) => asset.asset_type === "video_script"
     );
-    const insertedGalaxyPrompt = insertedAssets?.find(
+    const insertedGalaxyPrompt = insertedAssetRows.find(
       (asset) => asset.asset_type === "galaxyai_prompt"
     );
 
@@ -207,7 +216,7 @@ export async function POST(_request: Request, context: RouteContext) {
       metadata: toJson({
         campaignId: campaign.id,
         accountId,
-        assetCount: insertedAssets?.length ?? 0,
+        assetCount: insertedAssetRows.length,
         cloneMemoryUsed: true,
         memorySnapshot,
       }),
@@ -216,7 +225,7 @@ export async function POST(_request: Request, context: RouteContext) {
     return NextResponse.json({
       campaign: updatedCampaign,
       assetPack,
-      assets: insertedAssets ?? [],
+      assets: insertedAssetRows,
       cloneMemory: memorySnapshot,
     });
   } catch (error) {
