@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
 import { productConfig } from "@/lib/config/product";
 import { AccountSwitcher } from "@/components/accounts/AccountSwitcher";
+import { SignOutButton } from "@/components/layout/SignOutButton";
 import type { AccountContextAccount } from "@/lib/accounts/account-context";
 import styles from "./SidebarNav.module.css";
 
@@ -350,8 +351,8 @@ export function SidebarNav({
 
         <div className={styles.rightSide}>
           <div className={styles.accountSwitcherWrap}>
-            <span className={styles.accountLabel}>Active account</span>
-            <AccountSwitcher accounts={accounts} activeAccountId={activeAccountId} />
+            <span className={styles.accountLabel}>Active workspace</span>
+            <AccountSwitcher accounts={accounts} activeAccountId={activeAccountId} isMaster={isMaster} />
           </div>
 
           <div className={styles.account}>
@@ -361,6 +362,7 @@ export function SidebarNav({
               <span className={styles.accountContext}>{activeAccountName}</span>
             ) : null}
             {roleLabel ? <span className={styles.accountContext}>{roleLabel}</span> : null}
+            <SignOutButton className={styles.signOutButton} />
           </div>
 
           <button
@@ -379,8 +381,8 @@ export function SidebarNav({
         <div id="mobile-navigation" className={styles.mobilePanel}>
           <div className={styles.mobileInner}>
             <div className={styles.mobileActiveAccount}>
-              <span className={styles.accountLabel}>Active account</span>
-              <AccountSwitcher accounts={accounts} activeAccountId={activeAccountId} />
+              <span className={styles.accountLabel}>Active workspace</span>
+              <AccountSwitcher accounts={accounts} activeAccountId={activeAccountId} isMaster={isMaster} />
             </div>
 
             {navGroups.map((group) => (
@@ -416,6 +418,10 @@ export function SidebarNav({
                 </div>
               </section>
             ))}
+
+            <div className={styles.mobileSignOut}>
+              <SignOutButton className={styles.mobileSignOutButton} />
+            </div>
           </div>
         </div>
       ) : null}

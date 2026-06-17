@@ -11,6 +11,7 @@ import {
 import { CreateAccountForm } from "@/components/accounts/CreateAccountForm";
 import { InviteAccountMemberForm } from "@/components/accounts/InviteAccountMemberForm";
 import { ArchiveAccountButton } from "@/components/accounts/ArchiveAccountButton";
+import { UseAccountWorkspaceButton } from "@/components/accounts/UseAccountWorkspaceButton";
 import accountStyles from "@/components/accounts/AccountForms.module.css";
 import { getUserAccountContext } from "@/lib/accounts/account-context";
 import { createClient } from "@/lib/supabase/server";
@@ -230,6 +231,11 @@ export default async function AccountsPage() {
                         </p>
                       </div>
                       <div className={accountStyles.accountManageActions}>
+                        <UseAccountWorkspaceButton
+                          accountId={account.id}
+                          accountName={account.name}
+                          className="rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800 hover:border-blue-300 hover:bg-blue-100"
+                        />
                         <Link
                           href={`/accounts/${account.id}`}
                           className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:text-blue-700"

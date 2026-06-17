@@ -14,6 +14,7 @@ import { AccountMarketProfileManager } from "@/components/accounts/AccountMarket
 import { ArchiveAccountButton } from "@/components/accounts/ArchiveAccountButton";
 import { InviteAccountMemberForm } from "@/components/accounts/InviteAccountMemberForm";
 import { RemoveAccountMemberButton } from "@/components/accounts/RemoveAccountMemberButton";
+import { UseAccountWorkspaceButton } from "@/components/accounts/UseAccountWorkspaceButton";
 import accountStyles from "@/components/accounts/AccountForms.module.css";
 import { getAccountAccessForUser } from "@/lib/accounts/account-context";
 import { createClient } from "@/lib/supabase/server";
@@ -206,9 +207,15 @@ export default async function AccountDetailPage({
                 ))}
               </nav>
               <div className={accountStyles.accountWorkspaceBox}>
-                <p className="font-semibold text-slate-900">Active workspace</p>
+                <p className="font-semibold text-slate-900">Use this workspace</p>
                 <p className="mt-1">{account.name}</p>
-                <p className="mt-2 text-xs uppercase tracking-[0.14em] text-slate-400">Slug</p>
+                <UseAccountWorkspaceButton
+                  accountId={account.id}
+                  accountName={account.name}
+                  label="Set Active Workspace"
+                  className="mt-3 rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800 hover:border-blue-300 hover:bg-blue-100"
+                />
+                <p className="mt-3 text-xs uppercase tracking-[0.14em] text-slate-400">Slug</p>
                 <p className="font-mono text-xs text-slate-700">{account.slug}</p>
               </div>
             </div>

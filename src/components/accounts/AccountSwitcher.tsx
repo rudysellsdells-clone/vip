@@ -8,17 +8,21 @@ import type { AccountContextAccount } from "@/lib/accounts/account-context";
 export function AccountSwitcher({
   accounts,
   activeAccountId,
+  isMaster = false,
 }: {
   accounts: AccountContextAccount[];
   activeAccountId: string | null;
+  isMaster?: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
 
   async function onChange(event: React.ChangeEvent<HTMLSelectElement>) {
     const accountId = event.target.value;
     setError("");
+    setMessage("");
 
     if (!accountId) {
       return;
@@ -33,10 +37,11 @@ export function AccountSwitcher({
     const result = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      setError(result.error ?? "Unable to switch account.");
+      setError(result.error ?? "Unable to switch workspace.");
       return;
     }
 
+    setMessage(`Using ${result.accountName ?? "selected workspace"}.`);
     startTransition(() => router.refresh());
   }
 
@@ -51,7 +56,7 @@ export function AccountSwitcher({
   return (
     <div className="grid gap-1">
       <label className="sr-only" htmlFor="vip-active-account">
-        Active account
+        Active workspace
       </label>
       <select
         id="vip-active-account"
@@ -59,6 +64,7 @@ export function AccountSwitcher({
         onChange={onChange}
         disabled={isPending}
         className="min-h-10 max-w-[230px] rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm outline-none hover:border-blue-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+        title={isMaster ? "Choose which workspace VIP should use for account-scoped workflows." : "Choose your active workspace."}
       >
         {accounts.map((account) => (
           <option key={account.id} value={account.id}>
@@ -66,6 +72,12 @@ export function AccountSwitcher({
           </option>
         ))}
       </select>
+      {isMaster ? (
+        <p className="max-w-[230px] text-right text-[0.68rem] font-semibold text-slate-500">
+          MASTER workspace selector
+        </p>
+      ) : null}
+      {message ? <p className="max-w-[230px] text-xs font-semibold text-green-700">{message}</p> : null}
       {error ? <p className="max-w-[230px] text-xs font-semibold text-red-700">{error}</p> : null}
     </div>
   );
