@@ -31,11 +31,12 @@ function canExecute(run: Record<string, unknown>) {
 function getExecuteLabel(actionName: unknown) {
   const action = typeof actionName === "string" ? actionName.toLowerCase() : "";
 
-  if (action.includes("linkedin")) return "Send to LinkedIn MCP";
-  if (action.includes("facebook")) return "Send to Facebook MCP";
-  if (action.includes("gmail")) return "Create Gmail Draft";
+  if (action.includes("wordpress") || action.includes("blog")) return "Publish blog post";
+  if (action.includes("linkedin")) return "Publish to LinkedIn";
+  if (action.includes("facebook")) return "Publish to Facebook";
+  if (action.includes("gmail") || action.includes("email")) return "Create email draft";
 
-  return "Execute Action";
+  return "Run action";
 }
 
 export default async function ActionsPage() {
@@ -80,10 +81,10 @@ export default async function ActionsPage() {
     <WebsitePage>
       <WebsiteHero
         eyebrow="Execution History"
-        title="Track and execute approved actions."
-        description="Review Zapier, GalaxyAI, Gmail, Facebook, LinkedIn, and manual workflow actions so execution stays visible and accountable."
-        primaryAction={{ label: "Publishing Schedule", href: "/publishing-schedule" }}
-        secondaryAction={{ label: "Review Assets", href: "/approvals" }}
+        title="Review publishing and automation history"
+        description="Use this page for audit, troubleshooting, and legacy runnable actions. Day-to-day publishing should start in Publish Center."
+        primaryAction={{ label: "Publish Center", href: "/publishing-schedule" }}
+        secondaryAction={{ label: "Review Content", href: "/approvals" }}
       />
 
       <section className={websiteStyles.metricsGrid}>
@@ -161,7 +162,7 @@ export default async function ActionsPage() {
           </div>
         ) : (
           <div className={websiteStyles.empty}>
-            No canonical publishing executions yet. Use Publishing Schedule to publish approved assets.
+            No canonical publishing executions yet. Use Publish Center to publish approved assets.
           </div>
         )}
       </WebsiteSection>

@@ -42,11 +42,15 @@ async function readResponse(response: Response) {
   }
 }
 
+type SendAssetToZapierMcpButtonProps = {
+  assetId: string;
+  label?: string;
+};
+
 export function SendAssetToZapierMcpButton({
   assetId,
-}: {
-  assetId: string;
-}) {
+  label = "Send to ZapierMCP",
+}: SendAssetToZapierMcpButtonProps) {
   const router = useRouter();
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -71,7 +75,7 @@ export function SendAssetToZapierMcpButton({
         throw new Error(readableError(payload, "Unable to send asset to ZapierMCP."));
       }
 
-      setMessage("Sent to ZapierMCP. This asset should now leave the active publishing queue.");
+      setMessage("Publishing action sent. VIP will refresh the queue after the provider response is recorded.");
       router.refresh();
     } catch (err) {
       setError(readableError(err, "Unable to send asset to ZapierMCP."));
@@ -89,7 +93,7 @@ export function SendAssetToZapierMcpButton({
           disabled={sending}
           className={formStyles.submit}
         >
-          {sending ? "Sending to ZapierMCP..." : "Send to ZapierMCP"}
+          {sending ? "Sending..." : label}
         </button>
       </div>
 

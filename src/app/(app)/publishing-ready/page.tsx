@@ -49,6 +49,28 @@ function isAlreadySentOrPublished(asset: Record<string, any>) {
   );
 }
 
+function publishingActionLabel(asset: Record<string, any>) {
+  const text = [
+    asset.asset_type,
+    asset.channel,
+    asset.destination,
+    asset.platform,
+    asset.title,
+  ]
+    .map((value) => String(value ?? "").toLowerCase())
+    .join(" ");
+
+  if (text.includes("wordpress") || text.includes("blog") || text.includes("article")) {
+    return "Publish blog post";
+  }
+
+  if (text.includes("email") || text.includes("gmail")) return "Create email draft";
+  if (text.includes("facebook")) return "Publish to Facebook";
+  if (text.includes("linkedin")) return "Publish to LinkedIn";
+
+  return "Publish / send asset";
+}
+
 export default async function PublishingReadyPage({ searchParams }: PageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const assetId = firstValue(resolvedSearchParams.asset);
@@ -65,10 +87,10 @@ export default async function PublishingReadyPage({ searchParams }: PageProps) {
     return (
       <WebsitePage>
         <WebsiteHero
-          eyebrow="Publishing Ready"
-          title="Select an asset to send"
-          description="Open this page from the publishing schedule using a specific asset."
-          primaryAction={{ label: "Publishing Schedule", href: "/publishing-schedule" }}
+          eyebrow="Publish Center"
+          title="Select an item from Publish Center"
+          description="Open this asset-specific execution step from Publish Center. Approved assets appear there when they are ready to send."
+          primaryAction={{ label: "Publish Center", href: "/publishing-schedule" }}
         />
       </WebsitePage>
     );
@@ -85,10 +107,10 @@ export default async function PublishingReadyPage({ searchParams }: PageProps) {
     return (
       <WebsitePage>
         <WebsiteHero
-          eyebrow="Publishing Ready"
+          eyebrow="Publish Center"
           title="Asset not found"
-          description="The selected asset could not be loaded."
-          primaryAction={{ label: "Publishing Schedule", href: "/publishing-schedule" }}
+          description="The selected asset could not be loaded. Return to Publish Center and choose another approved asset."
+          primaryAction={{ label: "Publish Center", href: "/publishing-schedule" }}
         />
       </WebsitePage>
     );
@@ -98,15 +120,16 @@ export default async function PublishingReadyPage({ searchParams }: PageProps) {
   const approvedForPublishing = isApprovedForPublishing(asset);
   const config = zapierMcpConfigForAsset(asset);
   const params = buildPublishingOutputParams(asset);
+  const actionLabel = publishingActionLabel(asset);
 
   return (
     <WebsitePage>
       <WebsiteHero
-        eyebrow="Publishing Ready"
+        eyebrow="Publish Center"
         title={asset.title ?? "Untitled asset"}
-        description="This is the controlled execution screen for sending approved VIP outputs to ZapierMCP."
-        primaryAction={{ label: "Publishing Schedule", href: "/publishing-schedule" }}
-        secondaryAction={{ label: "Published", href: "/published" }}
+        description="This is the controlled execution step for an approved asset. VIP sends the structured payload to the configured publishing destination and then records provider evidence."
+        primaryAction={{ label: "Publish Center", href: "/publishing-schedule" }}
+        secondaryAction={{ label: "Action History", href: "/actions" }}
       />
 
       <WebsiteSection
@@ -156,8 +179,8 @@ export default async function PublishingReadyPage({ searchParams }: PageProps) {
 
       <WebsiteSection
         eyebrow="Execute"
-        title="Send to ZapierMCP"
-        description="This sends the structured VIP output payload to the configured ZapierMCP action."
+        title={actionLabel}
+        description="This sends the structured VIP output payload to the configured publishing action. The button label reflects the content destination, while ZapierMCP remains the execution provider behind the scenes."
       >
         {alreadySentOrPublished ? (
           <article className={websiteStyles.card}>
@@ -171,7 +194,7 @@ export default async function PublishingReadyPage({ searchParams }: PageProps) {
           </article>
         ) : approvedForPublishing ? (
           <article className={websiteStyles.card}>
-            <SendAssetToZapierMcpButton assetId={String(asset.id)} />
+            <SendAssetToZapierMcpButton assetId={String(asset.id)} label={actionLabel} />
           </article>
         ) : (
           <div className={websiteStyles.empty}>
@@ -183,7 +206,7 @@ export default async function PublishingReadyPage({ searchParams }: PageProps) {
       <WebsiteSection
         eyebrow="Payload"
         title="Payload preview"
-        description="This confirms that ZapierMCP will receive a params object, not undefined."
+        description="This confirms the structured params object that will be sent to the configured publishing provider."
       >
         <details className={websiteStyles.card}>
           <summary className={websiteStyles.cardTitle}>View params</summary>

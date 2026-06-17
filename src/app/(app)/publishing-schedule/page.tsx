@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { ExecuteToolRunButton } from "@/components/actions/ExecuteToolRunButton";
 import { WorkingViewControls } from "@/components/calendar/WorkingViewControls";
 import {
   WebsiteBadge,
   WebsiteHero,
+  WebsiteMetric,
   WebsitePage,
   WebsiteSection,
   websiteStyles,
@@ -46,6 +48,89 @@ function preview(content: unknown, length = 180) {
   return `${text.slice(0, length)}${text.length > length ? "..." : ""}`;
 }
 
+function formatDate(value: unknown) {
+  if (!value) return "No date";
+
+  const date = new Date(String(value));
+
+  if (Number.isNaN(date.getTime())) return "No date";
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+}
+
+function assetPublishActionLabel(asset: Record<string, any>) {
+  const text = [
+    asset.asset_type,
+    asset.channel,
+    asset.destination,
+    asset.platform,
+    asset.title,
+  ]
+    .map((value) => String(value ?? "").toLowerCase())
+    .join(" ");
+
+  if (text.includes("wordpress") || text.includes("blog") || text.includes("article")) {
+    return "Publish blog post →";
+  }
+
+  if (text.includes("email") || text.includes("gmail")) return "Create email draft →";
+  if (text.includes("facebook")) return "Publish to Facebook →";
+  if (text.includes("linkedin")) return "Publish to LinkedIn →";
+
+  return "Publish / send →";
+}
+
+function canExecuteLegacyRun(run: Record<string, unknown>) {
+  return (
+    run.provider === "zapier_mcp" &&
+    typeof run.status === "string" &&
+    ["planned", "waiting_approval", "failed"].includes(run.status)
+  );
+}
+
+function isPublishingRelatedToolRun(run: Record<string, unknown>) {
+  const text = [
+    run.action_name,
+    run.action_key,
+    run.provider,
+    run.destination,
+    run.channel,
+    run.app,
+  ]
+    .map((value) => String(value ?? "").toLowerCase())
+    .join(" ");
+
+  return (
+    text.includes("wordpress") ||
+    text.includes("blog") ||
+    text.includes("post") ||
+    text.includes("linkedin") ||
+    text.includes("facebook") ||
+    text.includes("gmail") ||
+    text.includes("email") ||
+    text.includes("zapier")
+  );
+}
+
+function legacyExecuteLabel(actionName: unknown) {
+  const action = typeof actionName === "string" ? actionName.toLowerCase() : "";
+
+  if (action.includes("wordpress") || action.includes("blog")) return "Publish blog post";
+  if (action.includes("linkedin")) return "Publish to LinkedIn";
+  if (action.includes("facebook")) return "Publish to Facebook";
+  if (action.includes("gmail") || action.includes("email")) return "Create email draft";
+
+  return "Run publishing action";
+}
+
+function legacyActionTitle(run: Record<string, unknown>) {
+  return String(run.action_name || run.destination || run.channel || "Publishing action");
+}
+
 export default async function PublishingSchedulePage({ searchParams }: PageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const range = buildCalendarViewRangeFromSearchParams({
@@ -63,69 +148,125 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
     redirect("/login");
   }
 
-  const baseQuery = supabase
-    .from("generated_assets")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("scheduled_publish_at", { ascending: true, nullsFirst: false })
-    .limit(1000);
+  const [assetsResult, toolRunsResult] = await Promise.all([
+    applyPublishingScheduleQuery(
+      supabase
+        .from("generated_assets")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("scheduled_publish_at", { ascending: true, nullsFirst: false })
+        .limit(1000),
+    ),
+    supabase
+      .from("tool_runs")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(100),
+  ]);
 
-  const { data, error } = await applyPublishingScheduleQuery(baseQuery);
-
-  const allApprovedActiveAssets = filterPublishingScheduleAssets(safeRows(data));
+  const allApprovedActiveAssets = filterPublishingScheduleAssets(safeRows(assetsResult.data));
   const visibleAssets = filterPublishingAssetsByViewRange(allApprovedActiveAssets, range, {
     includeUnscheduled: true,
   });
   const groups = groupPublishingAssetsByDay(visibleAssets);
   const unscheduledCount = allApprovedActiveAssets.filter((asset) => !hasPublishDate(asset)).length;
+  const legacyPublishingActions = safeRows(toolRunsResult.data)
+    .filter(canExecuteLegacyRun)
+    .filter(isPublishingRelatedToolRun)
+    .slice(0, 12);
+  const readyNowCount = unscheduledCount + legacyPublishingActions.length;
 
   return (
     <WebsitePage>
       <WebsiteHero
-        eyebrow="Publishing Schedule"
-        title="Approved content ready to publish"
-        description="Approved content appears here whether it is scheduled for a date or ready to publish now. No-date assets are grouped separately so they do not look like they are scheduled for today."
-        primaryAction={{ label: "Published", href: "/published" }}
-        secondaryAction={{ label: "Monthly Calendar", href: "/content-calendar/monthly" }}
+        eyebrow="Publish Center"
+        title="Publish approved content"
+        description="This is the main place to act on approved blogs, social posts, emails, and other publish-ready content. Use Action History only when you need audit details or troubleshooting."
+        primaryAction={{ label: "Action History", href: "/actions" }}
+        secondaryAction={{ label: "Review Content", href: "/approvals" }}
       />
 
+      <section className={websiteStyles.metricsGrid}>
+        <WebsiteMetric
+          label="Approved Assets"
+          value={allApprovedActiveAssets.length}
+          description="Canonical assets eligible for the publish queue."
+          dot="blue"
+        />
+        <WebsiteMetric
+          label="Ready Now"
+          value={readyNowCount}
+          description="Approved items with no publish date plus runnable legacy publish actions."
+          dot={readyNowCount ? "green" : "blue"}
+        />
+        <WebsiteMetric
+          label="In Current View"
+          value={visibleAssets.length}
+          description="Assets visible in the selected calendar view."
+          dot="gold"
+        />
+        <WebsiteMetric
+          label="Legacy Actions"
+          value={legacyPublishingActions.length}
+          description="Older publish actions still ready to run from the Publish Center."
+          dot={legacyPublishingActions.length ? "gold" : "blue"}
+        />
+      </section>
+
       <WebsiteSection
-        eyebrow="View"
+        eyebrow="Queue View"
         title={range.label}
-        description="Daily, weekly, and monthly views apply to dated assets. Unscheduled approved assets stay visible in the Publish Now group."
+        description="Switch between daily, weekly, and monthly queue views. Unscheduled approved content stays visible in the Ready Now group."
       >
         <WorkingViewControls
           basePath="/publishing-schedule"
           range={range}
           visibleCount={visibleAssets.length}
           totalCount={allApprovedActiveAssets.length}
-          title="Publishing view"
+          title="Publish Center view"
           visibleLabel="In View"
           totalLabel="Approved Queue"
         />
       </WebsiteSection>
 
-      {unscheduledCount ? (
+      {readyNowCount ? (
         <WebsiteSection
-          eyebrow="Publish Now"
-          title={`${unscheduledCount} approved item(s) have no publish date`}
-          description="These are not broken. They are approved assets without a scheduled date, so they can be sent manually or assigned a schedule."
+          eyebrow="Ready Now"
+          title={`${readyNowCount} item(s) ready for a publishing action`}
+          description="These items can be acted on now. Canonical assets open an asset-specific publishing step. Legacy publishing actions can be executed directly here while we finish consolidating old workflows."
         >
-          <div className={websiteStyles.card}>
-            <p className={websiteStyles.cardText}>
-              If an item is approved and appears here, it should be publishable. Use the “Send to Zapier” action to open the execution flow.
-            </p>
+          <div className={websiteStyles.cardGrid}>
+            {unscheduledCount ? (
+              <article className={websiteStyles.card}>
+                <h3 className={websiteStyles.cardTitle}>Approved assets without a publish date</h3>
+                <p className={websiteStyles.cardText}>
+                  These are approved assets that are not scheduled yet. They remain visible in the queue and can be published manually.
+                </p>
+                <p className={websiteStyles.cardMeta}>{unscheduledCount} canonical item(s)</p>
+              </article>
+            ) : null}
+
+            {legacyPublishingActions.length ? (
+              <article className={websiteStyles.card}>
+                <h3 className={websiteStyles.cardTitle}>Legacy publishing actions</h3>
+                <p className={websiteStyles.cardText}>
+                  Some older flows still create executable publishing actions. They are now surfaced here so users do not have to hunt through Action History.
+                </p>
+                <p className={websiteStyles.cardMeta}>{legacyPublishingActions.length} action(s) ready</p>
+              </article>
+            ) : null}
           </div>
         </WebsiteSection>
       ) : null}
 
       <WebsiteSection
-        eyebrow="Queue"
-        title={`${range.view === "day" ? "Daily" : range.view === "month" ? "Monthly" : "Weekly"} publishing queue`}
-        description="Once an asset is sent to Zapier and marked published, it leaves this queue."
+        eyebrow="Canonical Queue"
+        title={`${range.view === "day" ? "Daily" : range.view === "month" ? "Monthly" : "Weekly"} publish queue`}
+        description="Approved canonical assets appear here until they are sent to their publishing destination and marked published."
       >
-        {error ? (
-          <div className={websiteStyles.empty}>{error.message}</div>
+        {assetsResult.error ? (
+          <div className={websiteStyles.empty}>{assetsResult.error.message}</div>
         ) : groups.length ? (
           <div className="grid gap-5">
             {groups.map((group) => (
@@ -137,7 +278,7 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
 
                 {group.isUnscheduled ? (
                   <p className={websiteStyles.cardMeta} style={{ marginTop: 8 }}>
-                    These approved assets have no publish date. They are still eligible for manual publishing/Zapier execution.
+                    These approved assets have no publish date. They are eligible for manual publishing.
                   </p>
                 ) : null}
 
@@ -166,7 +307,7 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
                           Open →
                         </Link>
                         <Link href={`/publishing-ready?asset=${asset.id}`} className={websiteStyles.link}>
-                          Send to Zapier →
+                          {assetPublishActionLabel(asset)}
                         </Link>
                         {!hasPublishDate(asset) ? (
                           <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
@@ -182,10 +323,57 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
           </div>
         ) : (
           <div className={websiteStyles.empty}>
-            No approved active assets are scheduled in this {range.view} view.
+            No approved active assets are visible in this {range.view} view. If you just approved content and do not see it here, check Review Content for approval status or Action History for older legacy publishing actions.
+            <div className={websiteStyles.actionRow} style={{ justifyContent: "center", marginTop: 14 }}>
+              <Link href="/approvals" className={websiteStyles.link}>
+                Review Content →
+              </Link>
+              <Link href="/actions" className={websiteStyles.link}>
+                Action History →
+              </Link>
+            </div>
           </div>
         )}
       </WebsiteSection>
+
+      {legacyPublishingActions.length ? (
+        <WebsiteSection
+          eyebrow="Legacy Publish Actions"
+          title="Publish actions ready to run"
+          description="These are older ZapierMCP tool-run actions that are still actionable. They are shown here to make publishing easier to find while the workflow is consolidated."
+        >
+          <div className={websiteStyles.cardGrid}>
+            {legacyPublishingActions.map((run) => (
+              <article key={String(run.id)} className={websiteStyles.card}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className={websiteStyles.cardTitle}>{legacyActionTitle(run)}</h3>
+                  <WebsiteBadge status={String(run.status)} />
+                </div>
+
+                <p className={websiteStyles.cardMeta}>
+                  {String(run.provider ?? "zapier_mcp")} • Created {formatDate(run.created_at)}
+                </p>
+
+                {run.error ? (
+                  <p className={websiteStyles.cardText}>
+                    <strong>Error:</strong> {String(run.error)}
+                  </p>
+                ) : null}
+
+                <div className={websiteStyles.actionRow}>
+                  <ExecuteToolRunButton
+                    toolRunId={String(run.id)}
+                    label={legacyExecuteLabel(run.action_name)}
+                  />
+                  <Link href="/actions" className={websiteStyles.link}>
+                    View history →
+                  </Link>
+                </div>
+              </article>
+            ))}
+          </div>
+        </WebsiteSection>
+      ) : null}
     </WebsitePage>
   );
 }
