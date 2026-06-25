@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getUserAccountContext } from "@/lib/accounts/account-context";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -93,6 +94,17 @@ export async function POST(request: Request) {
     );
   }
 
+  const accountContext = await getUserAccountContext({ supabase, userId: user.id });
+  const activeAccountId = accountContext.activeAccountId;
+
+  if (!activeAccountId) {
+    return NextResponse.json({ error: "No active workspace selected." }, { status: 400 });
+  }
+
+  if (!accountContext.canManageActiveAccount) {
+    return NextResponse.json({ error: "You do not have permission to delete this workspace month." }, { status: 403 });
+  }
+
   const range = monthRange(month);
 
   const campaignRows = mergeRows(
@@ -100,14 +112,14 @@ export async function POST(request: Request) {
       supabase
         .from("campaigns")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", activeAccountId)
         .eq("campaign_month", month)
     ),
     await safeSelect(
       supabase
         .from("campaigns")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", activeAccountId)
         .gte("campaign_week_start_date", range.startDate)
         .lt("campaign_week_start_date", range.nextMonthDate)
     ),
@@ -115,7 +127,7 @@ export async function POST(request: Request) {
       supabase
         .from("campaigns")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", activeAccountId)
         .gte("planned_start_date", range.startDate)
         .lt("planned_start_date", range.nextMonthDate)
     )
@@ -128,14 +140,14 @@ export async function POST(request: Request) {
       supabase
         .from("generated_assets")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", activeAccountId)
         .eq("intended_publish_month", month)
     ),
     await safeSelect(
       supabase
         .from("generated_assets")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", activeAccountId)
         .gte("planned_publish_date", range.startDate)
         .lt("planned_publish_date", range.nextMonthDate)
     ),
@@ -143,7 +155,7 @@ export async function POST(request: Request) {
       supabase
         .from("generated_assets")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", activeAccountId)
         .gte("scheduled_publish_at", range.startIso)
         .lt("scheduled_publish_at", range.endIso)
     ),
@@ -155,7 +167,7 @@ export async function POST(request: Request) {
         supabase
           .from("generated_assets")
           .select("*")
-          .eq("user_id", user.id)
+          .eq("account_id", activeAccountId)
           .in("campaign_id", campaignIds)
       )
     );
@@ -164,39 +176,17 @@ export async function POST(request: Request) {
   const assetRows = mergeRows(...assetGroups);
   const assetIds = uniqueIds(assetRows);
 
-  const calendarGroups: Array<Array<Record<string, any>>> = [
-    await safeSelect(
-      supabase
-        .from("content_calendar_items")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("intended_publish_month", month)
-    ),
-    await safeSelect(
-      supabase
-        .from("content_calendar_items")
-        .select("*")
-        .eq("user_id", user.id)
-        .gte("planned_publish_date", range.startDate)
-        .lt("planned_publish_date", range.nextMonthDate)
-    ),
-    await safeSelect(
-      supabase
-        .from("content_calendar_items")
-        .select("*")
-        .eq("user_id", user.id)
-        .gte("scheduled_publish_at", range.startIso)
-        .lt("scheduled_publish_at", range.endIso)
-    ),
-  ];
+  const calendarGroups: Array<Array<Record<string, any>>> = [];
 
+  // content_calendar_items are legacy plan rows without reliable account_id in older databases.
+  // Only delete rows linked to the account-scoped campaign IDs found above.
   if (campaignIds.length) {
     calendarGroups.push(
       await safeSelect(
         supabase
           .from("content_calendar_items")
           .select("*")
-          .eq("user_id", user.id)
+          .eq("account_id", activeAccountId)
           .in("campaign_id", campaignIds)
       )
     );
@@ -212,7 +202,6 @@ export async function POST(request: Request) {
       supabase
         .from("publishing_execution_runs")
         .select("*")
-        .eq("user_id", user.id)
         .in("asset_id", assetIds)
     );
   }
@@ -330,7 +319,7 @@ export async function POST(request: Request) {
   const activityResult = await supabase
     .from("activity_log")
     .delete({ count: "exact" })
-    .eq("user_id", user.id)
+    .eq("account_id", activeAccountId)
     .in("activity_type", [
       "monthly_campaign_package_generated",
       "monthly_publish_schedule_assigned",
@@ -341,6 +330,7 @@ export async function POST(request: Request) {
 
   await supabase.from("activity_log").insert({
     user_id: user.id,
+    account_id: activeAccountId,
     activity_type: "monthly_campaign_package_deleted",
     title: "Monthly campaign package deleted",
     description: `Deleted monthly campaign package for ${month}.`,
@@ -348,6 +338,8 @@ export async function POST(request: Request) {
       month,
       includeExecuted,
       deleted,
+      accountId: activeAccountId,
+      activeAccountName: accountContext.activeAccountName,
       campaignIds,
       assetIds,
       calendarItemIds,

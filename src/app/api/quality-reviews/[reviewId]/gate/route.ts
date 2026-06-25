@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getAssetAccessForUser } from "@/lib/accounts/asset-access";
 import {
   evaluateQualityGate,
   getOrCreateQualityGateSettings,
@@ -31,7 +32,6 @@ export async function POST(_request: Request, context: RouteContext) {
     .from("asset_quality_reviews")
     .select("*")
     .eq("id", reviewId)
-    .eq("user_id", user.id)
     .single();
 
   if (reviewError || !review) {
@@ -41,20 +41,24 @@ export async function POST(_request: Request, context: RouteContext) {
     );
   }
 
-  const { data: asset, error: assetError } = await supabase
-    .from("generated_assets")
-    .select("*")
-    .eq("id", review.asset_id)
-    .eq("user_id", user.id)
-    .is("archived_at", null)
-    .single();
+  const assetAccess = await getAssetAccessForUser({
+    supabase,
+    assetId: String(review.asset_id),
+    userId: user.id,
+  });
 
-  if (assetError || !asset) {
+  if (!assetAccess.asset || assetAccess.asset.archived_at) {
     return NextResponse.json(
       { error: "Asset not found or has been archived." },
       { status: 404 }
     );
   }
+
+  if (!assetAccess.canManage) {
+    return NextResponse.json({ error: "You do not have permission to evaluate this quality gate." }, { status: 403 });
+  }
+
+  const asset = assetAccess.asset;
 
   try {
     const settingsRow = await getOrCreateQualityGateSettings({
@@ -71,14 +75,19 @@ export async function POST(_request: Request, context: RouteContext) {
     let updatedAsset = null;
 
     if (evaluation.decision === "auto_approved") {
-      const { data: approvedAsset, error: approveError } = await supabase
+      let approveQuery = supabase
         .from("generated_assets")
         .update({
           status: "approved",
         })
         .eq("id", asset.id)
-        .eq("user_id", user.id)
-        .is("archived_at", null)
+        .is("archived_at", null);
+
+      approveQuery = assetAccess.accountId
+        ? approveQuery.eq("account_id", assetAccess.accountId)
+        : approveQuery.eq("user_id", user.id);
+
+      const { data: approvedAsset, error: approveError } = await approveQuery
         .select("*")
         .single();
 
@@ -104,6 +113,7 @@ export async function POST(_request: Request, context: RouteContext) {
           assetTitle: asset.title,
           assetType: asset.asset_type,
           evaluatedAt: new Date().toISOString(),
+          accountId: assetAccess.accountId,
         },
       })
       .select("*")
@@ -118,6 +128,7 @@ export async function POST(_request: Request, context: RouteContext) {
 
     await supabase.from("activity_log").insert({
       user_id: user.id,
+      account_id: assetAccess.accountId,
       activity_type: "quality_gate_evaluated",
       title: "Quality gate evaluated",
       description: evaluation.reason,
@@ -128,6 +139,7 @@ export async function POST(_request: Request, context: RouteContext) {
         evaluation,
         settings,
         autoApproved: evaluation.decision === "auto_approved",
+        accountId: assetAccess.accountId,
       },
     });
 

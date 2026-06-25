@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { buildMonthlyCampaignPlan } from "@/lib/content-calendar/monthly-campaign-planner";
-import { getUserAccountContext } from "@/lib/accounts/account-context";
+import { canManageAccountRole, getUserAccountContext } from "@/lib/accounts/account-context";
 import {
   fetchAccountMarketProfile,
   marketProfileSummary,
@@ -189,10 +189,19 @@ export async function POST(request: Request) {
 
   const accountContext = await getUserAccountContext({ supabase, userId: user.id });
   const requestedAccountId = textValue(body.accountId);
-  const activeAccountId =
-    accountContext.accounts.find((account) => account.id === requestedAccountId)?.id ??
-    accountContext.activeAccountId ??
+  const activeAccount =
+    accountContext.accounts.find((account) => account.id === requestedAccountId) ??
+    accountContext.accounts.find((account) => account.id === accountContext.activeAccountId) ??
     null;
+  const activeAccountId = activeAccount?.id ?? null;
+
+  if (!activeAccountId) {
+    return NextResponse.json({ error: "No active workspace selected." }, { status: 400 });
+  }
+
+  if (!(accountContext.isMaster || canManageAccountRole(activeAccount?.role))) {
+    return NextResponse.json({ error: "You do not have permission to generate monthly campaigns for this workspace." }, { status: 403 });
+  }
 
   const marketProfileOptions = await fetchAccountMarketProfile({
     supabase,
@@ -231,7 +240,6 @@ export async function POST(request: Request) {
     const { count, error: countError } = await supabase
       .from("campaigns")
       .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
       .eq("campaign_month", month)
       .eq("account_id", activeAccountId)
       .is("archived_at", null);
@@ -392,7 +400,7 @@ export async function POST(request: Request) {
         }),
       })
       .eq("id", promptAsset.id)
-      .eq("user_id", user.id);
+      .eq("account_id", activeAccountId);
 
     if (linkError) {
       linkWarnings.push(
@@ -456,7 +464,7 @@ export async function POST(request: Request) {
         }),
       })
       .eq("id", imagePromptAsset.id)
-      .eq("user_id", user.id);
+      .eq("account_id", activeAccountId);
 
     if (imageLinkError) {
       linkWarnings.push(

@@ -47,11 +47,13 @@ export async function runBatchQualityGateEvaluation({
   userId,
   limit = 50,
   skipExistingReviewDecisions = true,
+  accountId = null,
 }: {
   supabase: any;
   userId: string;
   limit?: number;
   skipExistingReviewDecisions?: boolean;
+  accountId?: string | null;
 }): Promise<BatchQualityGateResult> {
   const result: BatchQualityGateResult = {
     evaluatedCount: 0,
@@ -72,14 +74,19 @@ export async function runBatchQualityGateEvaluation({
 
   const settings = normalizeQualityGateSettings(settingsRow);
 
-  const { data: assetsData, error: assetsError } = await supabase
+  let assetsQuery = supabase
     .from("generated_assets")
-    .select("id,title,asset_type,status,archived_at")
-    .eq("user_id", userId)
+    .select("id,title,asset_type,status,archived_at,account_id")
     .is("archived_at", null)
     .in("asset_type", QUALITY_AUTOMATION_ASSET_TYPES)
     .order("created_at", { ascending: false })
     .limit(Math.max(1, Math.min(200, limit)));
+
+  if (accountId) {
+    assetsQuery = assetsQuery.eq("account_id", accountId);
+  }
+
+  const { data: assetsData, error: assetsError } = await assetsQuery;
 
   if (assetsError) {
     throw new Error(assetsError.message);
@@ -95,7 +102,6 @@ export async function runBatchQualityGateEvaluation({
   const { data: reviewsData, error: reviewsError } = await supabase
     .from("asset_quality_reviews")
     .select("*")
-    .eq("user_id", userId)
     .in("asset_id", assetIds)
     .order("created_at", { ascending: false });
 
@@ -112,7 +118,6 @@ export async function runBatchQualityGateEvaluation({
     const { data: existingDecisionsData, error: existingError } = await supabase
       .from("quality_gate_decisions")
       .select("id,review_id")
-      .eq("user_id", userId)
       .in("review_id", reviewIds);
 
     if (existingError) {
@@ -152,14 +157,19 @@ export async function runBatchQualityGateEvaluation({
       let updatedAsset = asset;
 
       if (evaluation.decision === "auto_approved") {
-        const { data: approvedAsset, error: approveError } = await supabase
+        let approveQuery = supabase
           .from("generated_assets")
           .update({
             status: "approved",
           })
           .eq("id", asset.id)
-          .eq("user_id", userId)
-          .is("archived_at", null)
+          .is("archived_at", null);
+
+        approveQuery = accountId
+          ? approveQuery.eq("account_id", accountId)
+          : approveQuery.eq("user_id", userId);
+
+        const { data: approvedAsset, error: approveError } = await approveQuery
           .select("id,title,asset_type,status")
           .single();
 
@@ -187,6 +197,7 @@ export async function runBatchQualityGateEvaluation({
             batchEvaluated: true,
             evaluatedAt: new Date().toISOString(),
             updatedAssetStatus: updatedAsset?.status ?? asset.status,
+            accountId,
           },
         })
         .select("*")

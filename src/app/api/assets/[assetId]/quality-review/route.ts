@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getAssetAccessForUser } from "@/lib/accounts/asset-access";
 import { reviewAssetQuality } from "@/lib/content-quality/reviewer";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
@@ -57,20 +58,20 @@ export async function POST(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: asset, error: assetError } = await supabase
-    .from("generated_assets")
-    .select("*")
-    .eq("id", assetId)
-    .eq("user_id", user.id)
-    .is("archived_at", null)
-    .single();
+  const assetAccess = await getAssetAccessForUser({ supabase, assetId, userId: user.id });
 
-  if (assetError || !asset) {
+  if (!assetAccess.asset || assetAccess.asset.archived_at) {
     return NextResponse.json(
       { error: "Asset not found or has been archived." },
       { status: 404 }
     );
   }
+
+  if (!assetAccess.canManage) {
+    return NextResponse.json({ error: "You do not have permission to quality-review this asset." }, { status: 403 });
+  }
+
+  const asset = assetAccess.asset;
 
   try {
     const brandContext = await loadBrandContext(supabase, user.id);
@@ -106,6 +107,7 @@ export async function POST(_request: Request, context: RouteContext) {
           assetTitle: asset.title,
           assetType: asset.asset_type,
           reviewedAt: new Date().toISOString(),
+          accountId: assetAccess.accountId,
         },
       })
       .select("*")
@@ -120,6 +122,7 @@ export async function POST(_request: Request, context: RouteContext) {
 
     await supabase.from("activity_log").insert({
       user_id: user.id,
+      account_id: assetAccess.accountId,
       activity_type: "asset_quality_reviewed",
       title: "Asset quality reviewed",
       description: asset.title,
@@ -129,6 +132,7 @@ export async function POST(_request: Request, context: RouteContext) {
         overallScore: review.overall_score,
         status: review.status,
         model: result.model,
+        accountId: assetAccess.accountId,
       },
     });
 

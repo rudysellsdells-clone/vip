@@ -18,7 +18,6 @@ export async function loadLatestQualityReviewsByAssetId({
   const { data, error } = await supabase
     .from("asset_quality_reviews")
     .select("*")
-    .eq("user_id", userId)
     .in("asset_id", ids)
     .order("created_at", { ascending: false });
 

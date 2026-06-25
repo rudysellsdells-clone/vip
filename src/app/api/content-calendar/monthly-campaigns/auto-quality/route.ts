@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getUserAccountContext } from "@/lib/accounts/account-context";
 import { preparePublicAssetContent } from "@/lib/content/public-content-cleaner";
 import {
   failingScoreLabels,
@@ -67,12 +68,14 @@ async function insertReview({
   assetId,
   review,
   metadata,
+  accountId,
 }: {
   supabase: any;
   userId: string;
   assetId: string;
   review: Awaited<ReturnType<typeof generateAutoQualityReview>>;
   metadata: Record<string, any>;
+  accountId: string;
 }) {
   const { data, error } = await supabase
     .from("asset_quality_reviews")
@@ -91,6 +94,7 @@ async function insertReview({
       conversion_score: review.scores.conversion,
       metadata: {
         ...metadata,
+        accountId,
         source: review.source,
         model: review.model,
         autoQualityGate: true,
@@ -111,17 +115,19 @@ async function markAsset({
   userId,
   assetId,
   updates,
+  accountId,
 }: {
   supabase: any;
   userId: string;
   assetId: string;
   updates: Record<string, any>;
+  accountId: string;
 }) {
   const { error } = await supabase
     .from("generated_assets")
     .update(updates)
     .eq("id", assetId)
-    .eq("user_id", userId);
+    .eq("account_id", accountId);
 
   if (error) throw new Error(error.message);
 }
@@ -131,6 +137,7 @@ async function runQualityForAsset({
   userId,
   asset,
   month,
+  accountId,
   maxRegenerations,
   autoApprovePassing,
   stats,
@@ -139,6 +146,7 @@ async function runQualityForAsset({
   userId: string;
   asset: Record<string, any>;
   month: string;
+  accountId: string;
   maxRegenerations: number;
   autoApprovePassing: boolean;
   stats: {
@@ -162,6 +170,7 @@ async function runQualityForAsset({
       supabase,
       userId,
       assetId: asset.id,
+      accountId,
       updates: {
         content: cleanedContent,
       },
@@ -187,6 +196,7 @@ async function runQualityForAsset({
       autoQualityAttempts: asset.auto_quality_attempts ?? 0,
       autoApprovePassing,
     },
+    accountId,
   });
 
   const passed = passesAutoQualityGate({ review });
@@ -210,12 +220,14 @@ async function runQualityForAsset({
       supabase,
       userId,
       assetId: asset.id,
+      accountId,
       updates,
     });
 
     if (autoApprovePassing) {
       await supabase.from("activity_log").insert({
         user_id: userId,
+        account_id: accountId,
         activity_type: "asset_auto_approved_after_quality_gate",
         title: "Asset auto-approved after quality gate",
         description: asset.title ?? "Untitled asset",
@@ -243,6 +255,7 @@ async function runQualityForAsset({
       supabase,
       userId,
       assetId: asset.id,
+      accountId,
       updates: {
         quality_workflow_status: "needs_human_review_after_quality",
         quality_checked_at: new Date().toISOString(),
@@ -281,6 +294,7 @@ async function runQualityForAsset({
     .from("generated_assets")
     .insert({
       user_id: userId,
+      account_id: accountId,
       asset_type: asset.asset_type,
       title: nextTitle(asset.title, nextVersion),
       content: preparePublicAssetContent({
@@ -309,6 +323,7 @@ async function runQualityForAsset({
     supabase,
     userId,
     assetId: asset.id,
+    accountId,
     updates: {
       quality_workflow_status: "auto_regenerated_from_failed_quality",
       quality_checked_at: new Date().toISOString(),
@@ -319,6 +334,7 @@ async function runQualityForAsset({
 
   await supabase.from("activity_log").insert({
     user_id: userId,
+    account_id: accountId,
     activity_type: "asset_auto_quality_regenerated",
     title: "Asset auto-regenerated after quality gate",
     description: newAsset.title,
@@ -339,6 +355,7 @@ async function runQualityForAsset({
     userId,
     asset: newAsset,
     month,
+    accountId,
     maxRegenerations,
     autoApprovePassing,
     stats,
@@ -369,10 +386,21 @@ export async function POST(request: Request) {
     );
   }
 
+  const accountContext = await getUserAccountContext({ supabase, userId: user.id });
+  const activeAccountId = accountContext.activeAccountId;
+
+  if (!activeAccountId) {
+    return NextResponse.json({ error: "No active workspace selected." }, { status: 400 });
+  }
+
+  if (!accountContext.canManageActiveAccount) {
+    return NextResponse.json({ error: "You do not have permission to run auto-quality for this workspace." }, { status: 403 });
+  }
+
   const { data: assetsData, error: assetsError } = await supabase
     .from("generated_assets")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("account_id", activeAccountId)
     .is("archived_at", null)
     .order("created_at", { ascending: true })
     .limit(1000);
@@ -407,6 +435,7 @@ export async function POST(request: Request) {
         userId: user.id,
         asset,
         month,
+        accountId: activeAccountId,
         maxRegenerations,
         autoApprovePassing,
         stats,
@@ -419,6 +448,7 @@ export async function POST(request: Request) {
 
   await supabase.from("activity_log").insert({
     user_id: user.id,
+    account_id: activeAccountId,
     activity_type: "monthly_auto_quality_gate_completed",
     title: "Monthly auto quality gate completed",
     description: `Auto quality gate completed for ${month}.`,
@@ -427,6 +457,8 @@ export async function POST(request: Request) {
       maxRegenerations,
       autoApprovePassing,
       assetCount: assets.length,
+      accountId: activeAccountId,
+      activeAccountName: accountContext.activeAccountName,
       stats,
     },
   });
@@ -435,6 +467,7 @@ export async function POST(request: Request) {
     ok: true,
     month,
     assetCount: assets.length,
+    accountId: activeAccountId,
     autoApprovePassing,
     ...stats,
   });

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { buildMonthlyCampaignPlan } from "@/lib/content-calendar/monthly-campaign-planner";
+import { getUserAccountContext } from "@/lib/accounts/account-context";
 import { buildBusinessMemoryContext } from "@/lib/content-generation/memory-context";
 import { readableError } from "@/lib/errors/readable-error";
 import { createClient } from "@/lib/supabase/server";
@@ -35,6 +36,20 @@ export async function POST(request: Request) {
           error: userError?.message ?? "Unauthorized",
         },
         { status: 401 }
+      );
+    }
+
+    const accountContext = await getUserAccountContext({ supabase, userId: user.id });
+    const activeAccountId = accountContext.activeAccountId;
+
+    if (!activeAccountId) {
+      return NextResponse.json(
+        {
+          ok: false,
+          step: "active_workspace",
+          error: "No active workspace selected.",
+        },
+        { status: 400 }
       );
     }
 
@@ -79,7 +94,7 @@ export async function POST(request: Request) {
     const { count: existingCampaignCount, error: existingCampaignError } = await supabase
       .from("campaigns")
       .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
+      .eq("account_id", activeAccountId)
       .eq("campaign_month", month)
       .is("archived_at", null);
 
@@ -90,6 +105,11 @@ export async function POST(request: Request) {
       env,
       auth: {
         userIdPresent: Boolean(user.id),
+      },
+      workspace: {
+        activeAccountId,
+        activeAccountName: accountContext.activeAccountName,
+        activeAccountRole: accountContext.activeAccountRole,
       },
       memory: {
         hasUsefulMemory: memory.hasUsefulMemory,

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getUserAccountContext } from "@/lib/accounts/account-context";
 import {
   fastQualityPasses,
   generateFastQualityReview,
@@ -82,12 +83,14 @@ async function saveQualityReview({
   asset,
   review,
   month,
+  accountId,
 }: {
   supabase: any;
   userId: string;
   asset: Record<string, any>;
   review: ReturnType<typeof generateFastQualityReview>;
   month: string;
+  accountId: string;
 }) {
   const { data, error } = await supabase
     .from("asset_quality_reviews")
@@ -106,6 +109,7 @@ async function saveQualityReview({
       conversion_score: review.scores.conversion,
       metadata: {
         month,
+        accountId,
         assetType: asset.asset_type,
         model: review.model,
         source: review.source,
@@ -125,11 +129,13 @@ async function saveQualityReview({
 async function markAssetReviewed({
   supabase,
   userId,
+  accountId,
   assetId,
   passed,
 }: {
   supabase: any;
   userId: string;
+  accountId: string;
   assetId: string;
   passed: boolean;
 }) {
@@ -143,7 +149,7 @@ async function markAssetReviewed({
       review_ready_at: passed ? now : null,
     })
     .eq("id", assetId)
-    .eq("user_id", userId);
+    .eq("account_id", accountId);
 
   if (error) throw new Error(error.message);
 }
@@ -167,11 +173,21 @@ export async function POST(request: Request) {
     const month = normalizeMonth(body.month);
     const includeAlreadyChecked = Boolean(body.includeAlreadyChecked);
     const limit = batchLimit(body.batchSize);
+    const accountContext = await getUserAccountContext({ supabase, userId: user.id });
+    const activeAccountId = accountContext.activeAccountId;
+
+    if (!activeAccountId) {
+      return NextResponse.json({ error: "No active workspace selected." }, { status: 400 });
+    }
+
+    if (!accountContext.canManageActiveAccount) {
+      return NextResponse.json({ error: "You do not have permission to run quality review for this workspace." }, { status: 403 });
+    }
 
     const { data, error } = await supabase
       .from("generated_assets")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("account_id", activeAccountId)
       .order("scheduled_publish_at", { ascending: true, nullsFirst: false })
       .limit(2000);
 
@@ -240,11 +256,13 @@ export async function POST(request: Request) {
           asset,
           review,
           month,
+          accountId: activeAccountId,
         });
 
         await markAssetReviewed({
           supabase,
           userId: user.id,
+          accountId: activeAccountId,
           assetId: asset.id,
           passed,
         });
@@ -264,10 +282,15 @@ export async function POST(request: Request) {
 
     await supabase.from("activity_log").insert({
       user_id: user.id,
+      account_id: activeAccountId,
       activity_type: "monthly_bulk_quality_review_batch_completed",
       title: "Monthly bulk quality review batch completed",
       description: `${stats.reviewed} asset(s) reviewed for ${month}.`,
-      metadata: stats,
+      metadata: {
+        ...stats,
+        accountId: activeAccountId,
+        activeAccountName: accountContext.activeAccountName,
+      },
     });
 
     return NextResponse.json({

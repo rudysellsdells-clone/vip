@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getUserAccountContext } from "@/lib/accounts/account-context";
 import {
   buildCalendarAssetPrompt,
   buildCampaignPayloadFromCalendarItem,
@@ -30,6 +31,7 @@ type CalendarItemRow = {
   plan_id: string;
   campaign_id?: string | null;
   status?: string | null;
+  account_id?: string | null;
 };
 
 type CalendarPlanRow = {
@@ -39,6 +41,7 @@ type CalendarPlanRow = {
   business_goal?: string | null;
   target_audience?: string | null;
   offer_focus?: string | null;
+  account_id?: string | null;
 };
 
 function asCalendarItemRow(value: Record<string, any>): CalendarItemRow {
@@ -59,6 +62,7 @@ function asCalendarItemRow(value: Record<string, any>): CalendarItemRow {
     plan_id: String(value.plan_id),
     campaign_id: value.campaign_id ?? null,
     status: value.status ?? null,
+    account_id: value.account_id ?? null,
   };
 }
 
@@ -70,6 +74,7 @@ function asCalendarPlanRow(value: Record<string, any>): CalendarPlanRow {
     business_goal: value.business_goal ?? null,
     target_audience: value.target_audience ?? null,
     offer_focus: value.offer_focus ?? null,
+    account_id: value.account_id ?? null,
   };
 }
 
@@ -82,18 +87,20 @@ async function ensureCampaignForCalendarItem({
   userId,
   item,
   plan,
+  accountId,
 }: {
   supabase: any;
   userId: string;
   item: CalendarItemRow;
   plan: CalendarPlanRow;
+  accountId: string;
 }) {
   if (item.campaign_id) {
     const { data: existingCampaign } = await supabase
       .from("campaigns")
       .select("*")
       .eq("id", item.campaign_id)
-      .eq("user_id", userId)
+      .eq("account_id", accountId)
       .maybeSingle();
 
     if (existingCampaign) {
@@ -101,11 +108,14 @@ async function ensureCampaignForCalendarItem({
     }
   }
 
-  const campaignPayload = buildCampaignPayloadFromCalendarItem({
-    item,
-    plan,
-    userId,
-  });
+  const campaignPayload = {
+    ...buildCampaignPayloadFromCalendarItem({
+      item,
+      plan,
+      userId,
+    }),
+    account_id: accountId,
+  };
 
   const { data: campaign, error } = await supabase
     .from("campaigns")
@@ -121,18 +131,20 @@ async function ensureCampaignForCalendarItem({
     .from("content_calendar_items")
     .update({
       campaign_id: campaign.id,
+      account_id: accountId,
       status: "generated",
       metadata: {
         ...(item.metadata ?? {}),
         generatedCampaignId: campaign.id,
         generatedAt: new Date().toISOString(),
+        accountId,
       },
     })
-    .eq("id", item.id)
-    .eq("user_id", userId);
+    .eq("id", item.id);
 
   await supabase.from("activity_log").insert({
     user_id: userId,
+    account_id: accountId,
     activity_type: "calendar_campaign_generated",
     title: "Campaign created from content calendar",
     description: campaign.name,
@@ -141,6 +153,7 @@ async function ensureCampaignForCalendarItem({
       itemId: item.id,
       campaignId: campaign.id,
       weekNumber: item.week_number,
+      accountId,
     },
   });
 
@@ -153,12 +166,14 @@ async function generateAssetForItem({
   item,
   plan,
   campaign,
+  accountId,
 }: {
   supabase: any;
   userId: string;
   item: CalendarItemRow;
   plan: CalendarPlanRow;
   campaign: Record<string, any> | null;
+  accountId: string;
 }) {
   const prompt = buildCalendarAssetPrompt({
     item,
@@ -173,12 +188,19 @@ async function generateAssetForItem({
     .from("generated_assets")
     .insert({
       user_id: userId,
+      account_id: accountId,
       campaign_id: campaign?.id ?? item.campaign_id ?? null,
       asset_type: assetType,
       title: item.title,
       content,
       status: "needs_review",
       version: 1,
+      intended_publish_month: item.scheduled_date ? String(item.scheduled_date).slice(0, 7) : null,
+      planned_publish_date: item.scheduled_date ?? null,
+      publish_timezone: "America/Chicago",
+      scheduling_status: "scheduled",
+      campaign_week_number: item.week_number ?? null,
+      calendar_notes: item.content_angle ?? null,
     })
     .select("*")
     .single();
@@ -191,19 +213,21 @@ async function generateAssetForItem({
     .from("content_calendar_items")
     .update({
       status: "generated",
+      account_id: accountId,
       campaign_id: campaign?.id ?? item.campaign_id ?? null,
       metadata: {
         ...(item.metadata ?? {}),
         generatedAssetId: asset.id,
         generatedAssetType: assetType,
         generatedAt: new Date().toISOString(),
+        accountId,
       },
     })
-    .eq("id", item.id)
-    .eq("user_id", userId);
+    .eq("id", item.id);
 
   await supabase.from("activity_log").insert({
     user_id: userId,
+    account_id: accountId,
     activity_type: "calendar_asset_generated",
     title: "Asset generated from content calendar",
     description: item.title,
@@ -214,6 +238,7 @@ async function generateAssetForItem({
       assetType,
       campaignId: campaign?.id ?? item.campaign_id ?? null,
       weekNumber: item.week_number,
+      accountId,
     },
   });
 
@@ -238,11 +263,21 @@ export async function POST(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const accountContext = await getUserAccountContext({ supabase, userId: user.id });
+  const activeAccountId = accountContext.activeAccountId;
+
+  if (!activeAccountId) {
+    return NextResponse.json({ error: "No active workspace selected." }, { status: 400 });
+  }
+
+  if (!accountContext.canManageActiveAccount) {
+    return NextResponse.json({ error: "You do not have permission to generate calendar content for this workspace." }, { status: 403 });
+  }
+
   const { data: rawPlan, error: planError } = await supabase
     .from("content_calendar_plans")
     .select("*")
     .eq("id", planId)
-    .eq("user_id", user.id)
     .single();
 
   if (planError || !rawPlan) {
@@ -250,12 +285,27 @@ export async function POST(_request: Request, context: RouteContext) {
   }
 
   const plan = asCalendarPlanRow(rawPlan);
+  const planAccountId = plan.account_id ? String(plan.account_id) : null;
+
+  if (planAccountId && planAccountId !== activeAccountId) {
+    return NextResponse.json({ error: "Content calendar plan belongs to another workspace." }, { status: 403 });
+  }
+
+  if (!planAccountId && !accountContext.isMaster) {
+    return NextResponse.json({ error: "Legacy unassigned calendar plan cannot be generated by this user." }, { status: 403 });
+  }
+
+  if (!planAccountId) {
+    await supabase
+      .from("content_calendar_plans")
+      .update({ account_id: activeAccountId })
+      .eq("id", planId);
+  }
 
   const { data: rawItems, error: itemsError } = await supabase
     .from("content_calendar_items")
     .select("*")
     .eq("plan_id", planId)
-    .eq("user_id", user.id)
     .eq("week_number", week)
     .order("scheduled_date", { ascending: true });
 
@@ -264,6 +314,24 @@ export async function POST(_request: Request, context: RouteContext) {
   }
 
   const items = ((rawItems ?? []) as Array<Record<string, any>>).map(asCalendarItemRow);
+  const wrongWorkspaceItem = items.find((item) => item.account_id && String(item.account_id) !== activeAccountId);
+
+  if (wrongWorkspaceItem) {
+    return NextResponse.json({ error: "One or more calendar items belong to another workspace." }, { status: 403 });
+  }
+
+  const legacyItems = items.filter((item) => !item.account_id);
+
+  if (legacyItems.length && !accountContext.isMaster) {
+    return NextResponse.json({ error: "Legacy unassigned calendar items cannot be generated by this user." }, { status: 403 });
+  }
+
+  if (legacyItems.length) {
+    await supabase
+      .from("content_calendar_items")
+      .update({ account_id: activeAccountId })
+      .in("id", legacyItems.map((item) => item.id));
+  }
 
   if (items.length === 0) {
     return NextResponse.json({ error: "No calendar items found for this week." }, { status: 404 });
@@ -289,6 +357,7 @@ export async function POST(_request: Request, context: RouteContext) {
       userId: user.id,
       item: weeklyCampaignItem,
       plan,
+      accountId: activeAccountId,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to create weekly campaign.";
@@ -312,6 +381,7 @@ export async function POST(_request: Request, context: RouteContext) {
         item,
         plan,
         campaign,
+        accountId: activeAccountId,
       });
 
       generatedAssets.push(asset);
@@ -326,6 +396,7 @@ export async function POST(_request: Request, context: RouteContext) {
 
   await supabase.from("activity_log").insert({
     user_id: user.id,
+    account_id: activeAccountId,
     activity_type: "calendar_week_package_generated",
     title: "Calendar week package generated",
     description: `${plan.month_label ?? "Content plan"} - Week ${week}`,
@@ -337,6 +408,8 @@ export async function POST(_request: Request, context: RouteContext) {
       skippedCount,
       errorCount: errors.length,
       errors,
+      accountId: activeAccountId,
+      activeAccountName: accountContext.activeAccountName,
     },
   });
 

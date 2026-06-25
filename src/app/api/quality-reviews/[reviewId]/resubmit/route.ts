@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getAssetAccessForUser } from "@/lib/accounts/asset-access";
 import { activateAssetVersion, archiveSiblingAssetVersions, rootAssetId } from "@/lib/assets/asset-lifecycle";
 import { preparePublicAssetContent } from "@/lib/content/public-content-cleaner";
 import { generateQualityResubmission } from "@/lib/content-quality/resubmitter";
@@ -50,23 +51,27 @@ export async function POST(_request: Request, context: RouteContext) {
     .from("asset_quality_reviews")
     .select("*")
     .eq("id", reviewId)
-    .eq("user_id", user.id)
     .single();
 
   if (reviewError || !review) {
     return NextResponse.json({ error: "Quality review not found." }, { status: 404 });
   }
 
-  const { data: asset, error: assetError } = await supabase
-    .from("generated_assets")
-    .select("*")
-    .eq("id", review.asset_id)
-    .eq("user_id", user.id)
-    .single();
+  const assetAccess = await getAssetAccessForUser({
+    supabase,
+    assetId: String(review.asset_id),
+    userId: user.id,
+  });
 
-  if (assetError || !asset) {
+  if (!assetAccess.asset) {
     return NextResponse.json({ error: "Original asset not found." }, { status: 404 });
   }
+
+  if (!assetAccess.canManage) {
+    return NextResponse.json({ error: "You do not have permission to resubmit this asset." }, { status: 403 });
+  }
+
+  const asset = assetAccess.asset;
 
   const rootId = rootAssetId(asset);
 
@@ -75,15 +80,19 @@ export async function POST(_request: Request, context: RouteContext) {
     If this review already produced a replacement, return it instead of creating another V2.
     This prevents double-clicks and duplicate requests from creating duplicate replacement assets.
   */
-  const { data: existingReplacement } = await supabase
+  let existingReplacementQuery = supabase
     .from("generated_assets")
     .select("*")
-    .eq("user_id", user.id)
     .eq("parent_asset_id", rootId)
     .eq("metadata->>sourceReviewId", review.id)
     .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+
+  existingReplacementQuery = assetAccess.accountId
+    ? existingReplacementQuery.eq("account_id", assetAccess.accountId)
+    : existingReplacementQuery.eq("user_id", user.id);
+
+  const { data: existingReplacement } = await existingReplacementQuery.maybeSingle();
 
   if (existingReplacement?.id) {
     await activateAssetVersion({
@@ -91,6 +100,7 @@ export async function POST(_request: Request, context: RouteContext) {
       userId: user.id,
       assetId: existingReplacement.id,
       rootId,
+      accountId: assetAccess.accountId,
     });
 
     await archiveSiblingAssetVersions({
@@ -99,6 +109,7 @@ export async function POST(_request: Request, context: RouteContext) {
       rootId,
       activeAssetId: existingReplacement.id,
       reason: "existing_quality_resubmission_reactivated",
+      accountId: assetAccess.accountId,
     });
 
     return NextResponse.json({
@@ -109,11 +120,16 @@ export async function POST(_request: Request, context: RouteContext) {
   }
 
   try {
-    const { data: currentFamilyVersions } = await supabase
+    let familyVersionsQuery = supabase
       .from("generated_assets")
       .select("version")
-      .eq("user_id", user.id)
       .or(`id.eq.${rootId},parent_asset_id.eq.${rootId}`);
+
+    familyVersionsQuery = assetAccess.accountId
+      ? familyVersionsQuery.eq("account_id", assetAccess.accountId)
+      : familyVersionsQuery.eq("user_id", user.id);
+
+    const { data: currentFamilyVersions } = await familyVersionsQuery;
 
     const highestVersion = Array.isArray(currentFamilyVersions)
       ? currentFamilyVersions.reduce((max, row) => Math.max(max, Number(row.version ?? 1)), 1)
@@ -147,6 +163,7 @@ export async function POST(_request: Request, context: RouteContext) {
       .from("generated_assets")
       .insert({
         user_id: user.id,
+        account_id: assetAccess.accountId,
         campaign_id: asset.campaign_id ?? null,
         asset_type: asset.asset_type,
         title: revisedTitle(asset.title, nextVersion),
@@ -168,6 +185,7 @@ export async function POST(_request: Request, context: RouteContext) {
           originalAssetId: asset.id,
           rootAssetId: rootId,
           model: result.model,
+        accountId: assetAccess.accountId,
         },
         ...inheritedCalendarFields(asset),
       })
@@ -186,6 +204,7 @@ export async function POST(_request: Request, context: RouteContext) {
       userId: user.id,
       assetId: newAsset.id,
       rootId,
+      accountId: assetAccess.accountId,
     });
 
     await archiveSiblingAssetVersions({
@@ -194,10 +213,12 @@ export async function POST(_request: Request, context: RouteContext) {
       rootId,
       activeAssetId: newAsset.id,
       reason: "quality_resubmission_created",
+      accountId: assetAccess.accountId,
     });
 
     await supabase.from("activity_log").insert({
       user_id: user.id,
+      account_id: assetAccess.accountId,
       activity_type: "asset_quality_resubmission_created",
       title: "Quality resubmission created",
       description: newAsset.title,
@@ -209,6 +230,7 @@ export async function POST(_request: Request, context: RouteContext) {
         newVersion: nextVersion,
         originalArchived: true,
         model: result.model,
+        accountId: assetAccess.accountId,
       },
     });
 

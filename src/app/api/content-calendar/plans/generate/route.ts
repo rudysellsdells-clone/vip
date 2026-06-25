@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getUserAccountContext } from "@/lib/accounts/account-context";
 import {
   buildCalendarItems,
   buildWeeklyCampaigns,
@@ -17,6 +18,17 @@ export async function POST(request: Request) {
 
   if (userError || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const accountContext = await getUserAccountContext({ supabase, userId: user.id });
+  const activeAccountId = accountContext.activeAccountId;
+
+  if (!activeAccountId) {
+    return NextResponse.json({ error: "No active workspace selected." }, { status: 400 });
+  }
+
+  if (!accountContext.canManageActiveAccount) {
+    return NextResponse.json({ error: "You do not have permission to create calendar plans for this workspace." }, { status: 403 });
   }
 
   const formData = await request.formData();
@@ -52,6 +64,7 @@ export async function POST(request: Request) {
     .from("content_calendar_plans")
     .insert({
       user_id: user.id,
+      account_id: activeAccountId,
       plan_month: planMonth,
       month_label: label,
       monthly_theme: monthlyTheme,
@@ -73,7 +86,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const items = buildCalendarItems(input, plan.id, user.id);
+  const items = buildCalendarItems(input, plan.id, user.id).map((item) => ({
+    ...item,
+    account_id: activeAccountId,
+  }));
 
   const { data: createdItems, error: itemError } = await supabase
     .from("content_calendar_items")
@@ -85,13 +101,14 @@ export async function POST(request: Request) {
       .from("content_calendar_plans")
       .delete()
       .eq("id", plan.id)
-      .eq("user_id", user.id);
+      .eq("account_id", activeAccountId);
 
     return NextResponse.json({ error: itemError.message }, { status: 400 });
   }
 
   await supabase.from("activity_log").insert({
     user_id: user.id,
+    account_id: activeAccountId,
     activity_type: "content_calendar_plan_generated",
     title: "Strategic content calendar generated",
     description: `${label}: ${monthlyTheme}`,
@@ -105,6 +122,8 @@ export async function POST(request: Request) {
       businessGoal,
       targetAudience,
       offerFocus,
+      accountId: activeAccountId,
+      activeAccountName: accountContext.activeAccountName,
     },
   });
 
