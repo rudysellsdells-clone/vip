@@ -30,7 +30,7 @@ const services = [
     title: "Marketing Automation",
     description:
       "Use approved assets to create drafts, trigger workflows, and keep follow-up moving.",
-    href: "/zapier",
+    href: "/publishing-schedule",
   },
   {
     title: "Revenue Pipeline",
@@ -410,7 +410,7 @@ export default async function DashboardPage() {
       <section className={styles.metricsGrid}>
         <Metric label="Campaigns" value={campaigns.length} description="Revenue-focused campaigns in motion." href="/campaigns" />
         <Metric label="Pending Review" value={pendingAssets.length} description="Assets waiting for approval or revision." href="/approvals" dotClass={styles.dotGold} />
-        <Metric label="Approved" value={approvedAssets.length} description="Ready for safe execution." href="/zapier" dotClass={styles.dotGreen} />
+        <Metric label="Approved" value={approvedAssets.length} description="Ready in Publish Center." href="/publishing-schedule" dotClass={styles.dotGreen} />
         <Metric label="Published" value={publishedAssets.length} description="Completed public publishing actions." href="/actions" dotClass={styles.dotPurple} />
         <Metric label="Failed" value={failedToolRuns.length} description="Actions that need attention." href="/actions" dotClass={failedToolRuns.length ? styles.dotRed : undefined} />
       </section>

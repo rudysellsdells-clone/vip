@@ -299,7 +299,7 @@ export default async function ContentCalendarCommandCenterPage({ searchParams }:
         title="Content calendar overview"
         description="See where the month stands, what needs attention, and where to go next."
         primaryAction={{ label: "Monthly Calendar", href: `/content-calendar/monthly?view=month&date=${monthDate}` }}
-        secondaryAction={{ label: "Publishing Schedule", href: `/publishing-schedule?view=week&date=${monthDate}` }}
+        secondaryAction={{ label: "Publish Center", href: `/publishing-schedule?view=week&date=${monthDate}` }}
       />
 
       <WebsiteSection
@@ -364,10 +364,10 @@ export default async function ContentCalendarCommandCenterPage({ searchParams }:
           })}
 
           {metricCard({
-            label: "Published",
+            label: "Completed",
             value: publishedAssets.length,
-            description: "Assets already marked published or sent downstream.",
-            href: `/published?view=month&date=${monthDate}`,
+            description: "Assets already sent, published, or completed.",
+            href: `/actions?view=month&date=${monthDate}`,
           })}
         </div>
       </WebsiteSection>
@@ -442,8 +442,8 @@ export default async function ContentCalendarCommandCenterPage({ searchParams }:
 
           <article className={websiteStyles.card}>
             <div className="flex flex-wrap gap-2">{statusBadge("Publish")}</div>
-            <h3 className={websiteStyles.cardTitle}>Publishing Schedule</h3>
-            <p className={websiteStyles.cardText}>See approved active assets waiting to publish.</p>
+            <h3 className={websiteStyles.cardTitle}>Publish Center</h3>
+            <p className={websiteStyles.cardText}>See approved active assets waiting to schedule, send, or publish.</p>
             <Link href={`/publishing-schedule?view=week&date=${monthDate}`} className={websiteStyles.link}>
               Open Schedule →
             </Link>
@@ -451,10 +451,10 @@ export default async function ContentCalendarCommandCenterPage({ searchParams }:
 
           <article className={websiteStyles.card}>
             <div className="flex flex-wrap gap-2">{statusBadge("History")}</div>
-            <h3 className={websiteStyles.cardTitle}>Published</h3>
-            <p className={websiteStyles.cardText}>Review completed content that has been sent downstream.</p>
-            <Link href={`/published?view=month&date=${monthDate}`} className={websiteStyles.link}>
-              Open Published →
+            <h3 className={websiteStyles.cardTitle}>Action History</h3>
+            <p className={websiteStyles.cardText}>Review completed publishing, draft, and automation activity.</p>
+            <Link href={`/actions?view=month&date=${monthDate}`} className={websiteStyles.link}>
+              Open History →
             </Link>
           </article>
         </div>

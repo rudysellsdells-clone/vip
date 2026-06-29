@@ -57,7 +57,7 @@ export function nextStepForAsset({
     case "linkedin_post":
     case "facebook_post":
     case "email":
-      return "Open Publishing Ready to execute or prepare the asset.";
+      return "Open Publish Center to execute or prepare the asset.";
     case "video_script":
       return "Review the companion GalaxyAI prompt before running video generation.";
     case "galaxyai_prompt":

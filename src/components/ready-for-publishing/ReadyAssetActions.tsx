@@ -75,7 +75,7 @@ export function ReadyAssetActions({
 
         {status === "approved" && canUsePublishingReady(assetType) ? (
           <Link href={`/publishing-ready?asset=${assetId}`} className={websiteStyles.link}>
-            Publish / Draft via ZapierMCP →
+            Open Publishing Preflight →
           </Link>
         ) : null}
 

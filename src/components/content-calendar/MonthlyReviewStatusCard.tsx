@@ -35,7 +35,7 @@ export function MonthlyReviewStatusCard({
         <p className={websiteStyles.cardText}>
           <strong>Publishing:</strong>{" "}
           {readyForPublishing
-            ? "Approved assets are ready to flow into Publishing Ready when due."
+            ? "Approved assets are ready to appear in Publish Center when due."
             : "Keep reviewing, approving, and scheduling before publishing."}
         </p>
       </div>

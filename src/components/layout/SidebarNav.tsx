@@ -51,18 +51,6 @@ function buildNavGroups({
           href: "/dashboard",
           description: "Overview, status, and next actions.",
         },
-        {
-          label: "Reporting",
-          href: "/phase-two-reporting",
-          description: "Proof of work and campaign progress.",
-          masterOnly: true,
-        },
-        {
-          label: "Phase Two",
-          href: "/phase-two",
-          description: "Growth system hub and core workflows.",
-          masterOnly: true,
-        },
       ],
     },
     {
@@ -78,13 +66,13 @@ function buildNavGroups({
         {
           label: "Content Calendar",
           href: "/content-calendar",
-          description: "Monthly strategy, weekly campaigns, and planned assets.",
+          description: "Plan the month and move content through production.",
           requiresAccount: true,
         },
         {
-          label: "Monthly Calendar",
-          href: "/content-calendar/monthly",
-          description: "Month view of planned and generated content.",
+          label: "Monthly Review",
+          href: "/content-calendar/monthly-review",
+          description: "Review generated monthly content before approval.",
           requiresAccount: true,
         },
       ],
@@ -118,15 +106,15 @@ function buildNavGroups({
       requiresAccount: true,
       items: [
         {
-          label: "Approvals",
-          href: "/approvals",
-          description: "Review, revise, and approve assets.",
+          label: "Quality Review",
+          href: "/content-quality",
+          description: "Review quality scores and improvement notes.",
           requiresAccount: true,
         },
         {
-          label: "Quality Review",
-          href: "/quality-automation",
-          description: "Apply quality gates to reviewed assets.",
+          label: "Approvals",
+          href: "/approvals",
+          description: "Review, revise, and approve assets.",
           requiresAccount: true,
         },
         {
@@ -148,21 +136,15 @@ function buildNavGroups({
           requiresAccount: true,
         },
         {
-          label: "Published Content",
-          href: "/published",
-          description: "Review published and completed assets.",
-          requiresAccount: true,
-        },
-        {
           label: "Action History",
           href: "/actions",
-          description: "Execution history and troubleshooting.",
+          description: "Publishing, draft, and automation history.",
           requiresAccount: true,
         },
         {
           label: "Integrations",
           href: "/zapier",
-          description: "Zapier MCP setup, diagnostics, and provider status.",
+          description: "ZapierMCP diagnostics and provider execution records.",
           masterOnly: true,
         },
         {
@@ -198,7 +180,7 @@ function buildNavGroups({
       label: "Workspace",
       items: [
         {
-          label: isMaster ? "All Accounts" : "Account Workspace",
+          label: isMaster ? "Accounts" : "Account Workspace",
           href: isMaster ? "/accounts" : activeAccountHref,
           description: isMaster
             ? "Create client accounts, owners, seats, and access."
@@ -208,7 +190,7 @@ function buildNavGroups({
         {
           label: "Brand Voice",
           href: "/brand-voice",
-          description: "Control global voice, tone, and brand rules.",
+          description: "Control voice, tone, and brand rules.",
           masterOnly: true,
         },
         {
@@ -220,7 +202,7 @@ function buildNavGroups({
         {
           label: "Settings",
           href: "/settings",
-          description: "Manage setup, thresholds, and product configuration.",
+          description: "Manage thresholds and setup controls.",
           masterOnly: true,
         },
       ],

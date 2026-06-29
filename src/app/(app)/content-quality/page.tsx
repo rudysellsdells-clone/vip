@@ -64,8 +64,8 @@ export default async function ContentQualityPage({ searchParams }: PageProps) {
         eyebrow="Content Quality"
         title="Quality review queue"
         description="Review quality scores, pass/fail status, and improvement notes across active content."
-        primaryAction={{ label: "Quality Automation", href: "/quality-automation" }}
-        secondaryAction={{ label: "Approvals", href: "/approvals" }}
+        primaryAction={{ label: "Approvals", href: "/approvals" }}
+        secondaryAction={{ label: "Content Calendar", href: "/content-calendar" }}
       />
 
       <WebsiteSection

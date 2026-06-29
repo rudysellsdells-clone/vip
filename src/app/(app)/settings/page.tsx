@@ -78,9 +78,9 @@ export default async function SettingsPage() {
       </WebsiteSection>
 
       <WebsiteSection
-        eyebrow="System"
-        title="Related settings"
-        description="Quick access to the other setup areas that influence VIP output quality and automation behavior."
+        eyebrow="Workspace Setup"
+        title="Related controls"
+        description="The core setup areas that support content quality, publishing, and workspace management."
       >
         <div className={websiteStyles.cardGrid}>
           <article className={websiteStyles.card}>
@@ -104,39 +104,29 @@ export default async function SettingsPage() {
           </article>
 
           <article className={websiteStyles.card}>
-            <h3 className={websiteStyles.cardTitle}>Content Quality</h3>
+            <h3 className={websiteStyles.cardTitle}>Quality Review</h3>
             <p className={websiteStyles.cardText}>
               Review active assets, request improved versions, and check quality scores.
             </p>
             <Link href="/content-quality" className={websiteStyles.link}>
-              Open Content Quality →
+              Open Quality Review →
             </Link>
           </article>
 
           <article className={websiteStyles.card}>
-            <h3 className={websiteStyles.cardTitle}>Publishing Ready</h3>
+            <h3 className={websiteStyles.cardTitle}>Publish Center</h3>
             <p className={websiteStyles.cardText}>
-              Execute approved assets and track publishing or outreach runs.
+              Schedule approved content, prepare drafts, and review publishing readiness.
             </p>
-            <Link href="/publishing-ready" className={websiteStyles.link}>
-              Open Publishing Ready →
-            </Link>
-          </article>
-
-          <article className={websiteStyles.card}>
-            <h3 className={websiteStyles.cardTitle}>Reporting</h3>
-            <p className={websiteStyles.cardText}>
-              View proof of work across planning, generation, approvals, PDFs, drafts, and execution.
-            </p>
-            <Link href="/phase-two-reporting" className={websiteStyles.link}>
-              Open Reporting →
+            <Link href="/publishing-schedule" className={websiteStyles.link}>
+              Open Publish Center →
             </Link>
           </article>
 
           <article className={websiteStyles.card}>
             <h3 className={websiteStyles.cardTitle}>Accounts</h3>
             <p className={websiteStyles.cardText}>
-              Create separate client or brand accounts, assign owners, and invite seats for review and approval.
+              Create client workspaces, assign owners, and manage workspace access.
             </p>
             <Link href="/accounts" className={websiteStyles.link}>
               Open Accounts →
