@@ -46,13 +46,18 @@ function stringValue(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function socialImageForAsset(asset: PublishingAsset) {
+export function publishingImageForAsset(asset: PublishingAsset) {
   const metadata = recordValue(asset.metadata);
 
   const imageUrl = firstValue(
     stringValue(metadata.hostedImageUrl),
     stringValue(metadata.generatedSocialImageUrl),
     stringValue(metadata.socialImageUrl),
+    stringValue(metadata.featuredImageUrl),
+    stringValue(metadata.blogFeaturedImageUrl),
+    stringValue(metadata.emailBannerUrl),
+    stringValue(metadata.primaryVisualUrl),
+    stringValue(metadata.selectedVisualUrl),
     stringValue(metadata.imageUrl),
     stringValue(metadata.mediaUrl),
     stringValue(asset.hosted_image_url),
@@ -64,6 +69,10 @@ function socialImageForAsset(asset: PublishingAsset) {
   const imageAssetId = firstValue(
     stringValue(metadata.generatedSocialImageAssetId),
     stringValue(metadata.socialImageAssetId),
+    stringValue(metadata.featuredImageAssetId),
+    stringValue(metadata.emailBannerAssetId),
+    stringValue(metadata.primaryVisualAssetId),
+    stringValue(metadata.selectedVisualAssetId),
     stringValue(metadata.imageAssetId)
   );
 
@@ -72,11 +81,18 @@ function socialImageForAsset(asset: PublishingAsset) {
     stringValue(metadata.imagePromptAssetId)
   );
 
+  const imageUse = firstValue(
+    stringValue(metadata.primaryVisualUse),
+    stringValue(metadata.selectedImageUse),
+    stringValue(metadata.imageUse)
+  );
+
   return {
     ready: Boolean(imageUrl),
     url: imageUrl || null,
     assetId: imageAssetId || null,
     promptAssetId: imagePromptAssetId || null,
+    imageUse: imageUse || null,
   };
 }
 
@@ -211,6 +227,7 @@ export function zapierMcpConfigForAsset(asset: PublishingAsset): ZapierMcpAssetC
 function buildWordPressParams(asset: PublishingAsset) {
   const title = String(asset.title ?? "");
   const content = String(asset.content ?? "");
+  const socialImage = publishingImageForAsset(asset);
 
   return {
     asset_id: String(asset.id ?? ""),
@@ -227,6 +244,16 @@ function buildWordPressParams(asset: PublishingAsset) {
 
     post_title: title,
     post_content: content,
+
+    has_generated_image: socialImage.ready,
+    featured_image_url: socialImage.url,
+    featured_media_url: socialImage.url,
+    hero_image_url: socialImage.url,
+    hosted_image_url: socialImage.url,
+    image_url: socialImage.url,
+    media_url: socialImage.url,
+    generated_social_image_asset_id: socialImage.assetId,
+    galaxyai_image_prompt_asset_id: socialImage.promptAssetId,
   };
 }
 
@@ -234,7 +261,7 @@ function buildFacebookParams(asset: PublishingAsset, config: ZapierMcpAssetConfi
   const content = String(asset.content ?? "");
   const pageId = (config.pageId ?? env("ZAPIER_FACEBOOK_PAGE_ID")) || null;
   const pageName = (config.pageName ?? env("ZAPIER_FACEBOOK_PAGE_NAME")) || null;
-  const socialImage = socialImageForAsset(asset);
+  const socialImage = publishingImageForAsset(asset);
 
   return {
     asset_id: String(asset.id ?? ""),
@@ -274,7 +301,7 @@ function buildFacebookParams(asset: PublishingAsset, config: ZapierMcpAssetConfi
 
 function buildLinkedInParams(asset: PublishingAsset, config: ZapierMcpAssetConfig) {
   const content = String(asset.content ?? "");
-  const socialImage = socialImageForAsset(asset);
+  const socialImage = publishingImageForAsset(asset);
   const settings = publishingSettingsFromAsset(asset);
   const pageName = firstValue(
     config.pageName,
@@ -331,6 +358,7 @@ function buildLinkedInParams(asset: PublishingAsset, config: ZapierMcpAssetConfi
 function buildEmailParams(asset: PublishingAsset) {
   const subject = String(asset.title ?? "VIP email draft").trim() || "VIP email draft";
   const content = String(asset.content ?? "").trim();
+  const socialImage = publishingImageForAsset(asset);
 
   return {
     asset_id: String(asset.id ?? ""),
@@ -350,6 +378,15 @@ function buildEmailParams(asset: PublishingAsset) {
     email_body: content,
     message: content,
     content,
+
+    has_generated_image: socialImage.ready,
+    hosted_image_url: socialImage.url,
+    image_url: socialImage.url,
+    media_url: socialImage.url,
+    banner_image_url: socialImage.url,
+    email_banner_url: socialImage.url,
+    generated_social_image_asset_id: socialImage.assetId,
+    galaxyai_image_prompt_asset_id: socialImage.promptAssetId,
 
     draft_only: true,
     create_draft_only: true,
@@ -436,6 +473,8 @@ export function buildPublishingInstructions(asset: PublishingAsset) {
         ? `Use LinkedIn organization/company ID from params.company_id: ${config.pageId}.`
         : "LinkedIn organization/company ID is missing. Do not choose a default company page.",
       "If params.company_id is missing, stop and return an error instead of selecting another LinkedIn page.",
+      "If params.hosted_image_url or params.image_url is present and the action supports media, attach that hosted image to the LinkedIn company post.",
+      "Do not append the raw image URL to the post copy unless the action requires it.",
       "Return the created LinkedIn share id, URL, status, author organization, and a concise confirmation message.",
     ].join(" ");
   }
@@ -447,6 +486,7 @@ export function buildPublishingInstructions(asset: PublishingAsset) {
       "Create a draft only. Do not send the email.",
       "Use params.subject as the Gmail draft subject.",
       "Use params.body, params.email_body, or params.content as the Gmail draft body.",
+      "If params.banner_image_url, params.hosted_image_url, or params.image_url is present and the selected action supports HTML or media fields, preserve that image for the email draft instead of discarding it.",
       "Leave the recipient blank unless the configured Zapier action requires one.",
       "Return the Gmail draft id, URL if available, status, and a concise confirmation message.",
     ].join(" ");
@@ -456,7 +496,7 @@ export function buildPublishingInstructions(asset: PublishingAsset) {
     `Send this approved VIP ${assetType} to the configured Zapier destination.`,
     "Use the params object as the source of truth.",
     normalizedAssetType === "blog_post"
-      ? `For WordPress, use params.post_type=${wordpressPostType()}, params.post_status=${wordpressPostStatus()}, params.post_title or params.title for the title, and params.post_content or params.content for the body.`
+      ? `For WordPress, use params.post_type=${wordpressPostType()}, params.post_status=${wordpressPostStatus()}, params.post_title or params.title for the title, and params.post_content or params.content for the body. If params.featured_image_url, params.hosted_image_url, or params.image_url is present and the action supports media or featured images, attach that image as the post featured image instead of appending the raw URL into the body.`
       : "",
     config.pageName ? `Use destination page/account: ${config.pageName}.` : "",
     config.pageId ? `Use destination page id: ${config.pageId}.` : "",
