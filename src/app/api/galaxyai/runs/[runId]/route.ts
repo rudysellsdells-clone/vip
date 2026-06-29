@@ -231,7 +231,7 @@ async function createGalaxyAiMediaAssetIfNeeded(input: {
     throw new Error(existingError.message);
   }
 
-  const alreadySaved = existingAssets?.some((asset) => {
+  const alreadySaved = (existingAssets ?? []).some((asset: Record<string, unknown>) => {
     const metadata = isPlainObject(asset.metadata) ? asset.metadata : null;
 
     return metadata?.provider === "galaxyai" && metadata?.runId === input.galaxyRunId;
