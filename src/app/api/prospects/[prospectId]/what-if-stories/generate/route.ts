@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getActiveWorkspaceForUser } from "@/lib/accounts/active-workspace";
 import { normalizeProspect } from "@/lib/prospects/normalizer";
 import { generateWhatIfStory } from "@/lib/what-if-stories/generator";
 import { createClient } from "@/lib/supabase/server";
@@ -23,11 +24,17 @@ export async function POST(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+  if (!workspace) {
+    return NextResponse.json({ error: "Select an active workspace before generating a What-If Story." }, { status: 409 });
+  }
+
   const { data: prospectRow, error: prospectError } = await supabase
     .from("prospects")
     .select("*")
     .eq("id", prospectId)
-    .eq("user_id", user.id)
+    .eq("account_id", workspace.activeAccountId)
     .single();
 
   if (prospectError || !prospectRow) {
@@ -57,6 +64,7 @@ export async function POST(_request: Request, context: RouteContext) {
       .from("generated_assets")
       .insert({
         user_id: user.id,
+        account_id: workspace.activeAccountId,
         campaign_id: null,
         asset_type: "prospect_what_if_story",
         title,
@@ -79,6 +87,7 @@ export async function POST(_request: Request, context: RouteContext) {
       .upsert(
         {
           user_id: user.id,
+          account_id: workspace.activeAccountId,
           prospect_id: prospect.id,
           asset_id: asset.id,
           relationship_type: "what_if_story",
@@ -100,10 +109,12 @@ export async function POST(_request: Request, context: RouteContext) {
     if (linkError) {
       await supabase.from("activity_log").insert({
         user_id: user.id,
+        account_id: workspace.activeAccountId,
         activity_type: "prospect_what_if_story_link_warning",
         title: "What-If Story generated but not linked",
         description: linkError.message,
         metadata: {
+          accountId: workspace.activeAccountId,
           prospectId: prospect.id,
           assetId: asset.id,
           businessName: prospect.businessName,
@@ -113,10 +124,12 @@ export async function POST(_request: Request, context: RouteContext) {
 
     await supabase.from("activity_log").insert({
       user_id: user.id,
+      account_id: workspace.activeAccountId,
       activity_type: "prospect_what_if_story_generated",
       title: "Prospect What-If Story generated",
       description: prospect.businessName,
       metadata: {
+        accountId: workspace.activeAccountId,
         prospectId: prospect.id,
         assetId: asset.id,
         prospectName: prospect.prospectName,

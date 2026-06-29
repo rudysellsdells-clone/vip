@@ -284,8 +284,8 @@ export default async function DashboardPage() {
     supabase.from("galaxyai_runs").select("*").eq("account_id", activeAccountId).order("created_at", { ascending: false }).limit(8),
     supabase.from("tool_runs").select("*").eq("account_id", activeAccountId).order("created_at", { ascending: false }).limit(12),
     supabase.from("activity_log").select("*").eq("account_id", activeAccountId).order("created_at", { ascending: false }).limit(10),
-    supabase.from("prospects").select("*").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(25),
-    supabase.from("opportunities").select("*").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(25),
+    supabase.from("prospects").select("*").eq("account_id", activeAccountId).order("updated_at", { ascending: false }).limit(25),
+    supabase.from("opportunities").select("*").eq("account_id", activeAccountId).order("updated_at", { ascending: false }).limit(25),
   ]);
 
   const campaigns = (campaignsResult.data ?? []) as Array<Record<string, any>>;

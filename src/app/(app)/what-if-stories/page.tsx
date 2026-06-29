@@ -9,6 +9,7 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
+import { getActiveWorkspaceForUser } from "@/lib/accounts/active-workspace";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -43,10 +44,18 @@ export default async function WhatIfStoriesPage() {
     redirect("/login");
   }
 
+  const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+  if (!workspace) {
+    redirect("/accounts");
+  }
+
+  const activeWorkspace = workspace!;
+
   const { data: recentData } = await supabase
     .from("generated_assets")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("account_id", activeWorkspace.activeAccountId)
     .eq("asset_type", "prospect_what_if_story")
     .order("created_at", { ascending: false })
     .limit(8);
@@ -58,7 +67,7 @@ export default async function WhatIfStoriesPage() {
     ? await supabase
         .from("asset_exports")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", activeWorkspace.activeAccountId)
         .in("asset_id", storyIds)
         .order("created_at", { ascending: false })
     : { data: [] };
@@ -74,7 +83,7 @@ export default async function WhatIfStoriesPage() {
   return (
     <WebsitePage>
       <WebsiteHero
-        eyebrow="What-If Success Stories"
+        eyebrow={`What-If Success Stories • ${activeWorkspace.activeAccountName}`}
         title="Create personalized scenarios, package them as PDFs, and draft the outreach."
         description="Generate the story, render a polished PDF, prepare the email, and create a Gmail draft through Zapier without sending it."
         primaryAction={{ label: "Generate Story", href: "#generate-story" }}

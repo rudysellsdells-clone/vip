@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getActiveWorkspaceForUser } from "@/lib/accounts/active-workspace";
 import { executeZapierMcpWriteAction } from "@/lib/zapier/mcp-write-client";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
@@ -67,14 +68,16 @@ function buildInstructions({
 async function getToolRunsSample({
   supabase,
   userId,
+  accountId,
 }: {
   supabase: any;
   userId: string;
+  accountId: string;
 }) {
   const { data, error } = await supabase
     .from("tool_runs")
     .select("*")
-    .eq("user_id", userId)
+    .eq("account_id", accountId)
     .limit(1);
 
   if (error) {
@@ -129,6 +132,7 @@ async function tryInsertToolRun({
 async function recordZapierToolRun({
   supabase,
   userId,
+  accountId,
   assetId,
   exportId,
   app,
@@ -140,6 +144,7 @@ async function recordZapierToolRun({
 }: {
   supabase: any;
   userId: string;
+  accountId: string;
   assetId: string;
   exportId: string;
   app: string;
@@ -156,6 +161,7 @@ async function recordZapierToolRun({
 
   const primaryPayload = {
     user_id: userId,
+    account_id: accountId,
     source_asset_id: assetId,
     provider: "zapier_mcp",
     tool_name: toolName,
@@ -164,6 +170,7 @@ async function recordZapierToolRun({
     output: output ?? null,
     error: error ?? null,
     metadata: {
+      accountId,
       exportId,
       app,
       action,
@@ -191,6 +198,7 @@ async function recordZapierToolRun({
 
   const fallbackPayload = {
     user_id: userId,
+    account_id: accountId,
     source_asset_id: assetId,
     provider: "zapier_mcp",
     tool_name: toolName,
@@ -219,6 +227,7 @@ async function recordZapierToolRun({
 
   const alternateProviderPayload = {
     user_id: userId,
+    account_id: accountId,
     source_asset_id: assetId,
     tool_provider: "zapier_mcp",
     tool_name: toolName,
@@ -247,6 +256,7 @@ async function recordZapierToolRun({
 
   const minimalPayload = {
     user_id: userId,
+    account_id: accountId,
     tool_name: toolName,
     status,
     input,
@@ -272,6 +282,7 @@ async function recordZapierToolRun({
 
   const legacyPayload = {
     user_id: userId,
+    account_id: accountId,
     action_type: toolName,
     status,
     request_payload: input,
@@ -300,16 +311,19 @@ async function recordZapierToolRun({
   const sample = await getToolRunsSample({
     supabase,
     userId,
+    accountId,
   });
 
   await supabase.from("activity_log").insert({
     user_id: userId,
+    account_id: accountId,
     activity_type: "zapier_tool_run_audit_failed",
     title: "Zapier action audit failed",
     description:
       "Gmail draft execution finished, but VIP could not insert a matching tool_runs record.",
     metadata: {
       assetId,
+      accountId,
       exportId,
       app,
       action,
@@ -340,6 +354,14 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+  if (!workspace) {
+    return NextResponse.json({ error: "Select an active workspace before executing this Gmail draft." }, { status: 409 });
+  }
+
+  const accountId = workspace.activeAccountId;
+
   const formData = await request.formData();
   const toEmail = readForm(formData, "to_email");
   const ccEmail = readForm(formData, "cc_email");
@@ -353,7 +375,7 @@ export async function POST(request: Request, context: RouteContext) {
     .from("asset_exports")
     .select("*")
     .eq("id", exportId)
-    .eq("user_id", user.id)
+    .eq("account_id", accountId)
     .single();
 
   if (exportError || !exportRow) {
@@ -439,7 +461,7 @@ export async function POST(request: Request, context: RouteContext) {
         },
       })
       .eq("id", exportRow.id)
-      .eq("user_id", user.id);
+      .eq("account_id", accountId);
 
     const result = await executeZapierMcpWriteAction({
       app,
@@ -453,6 +475,7 @@ export async function POST(request: Request, context: RouteContext) {
     const auditResult = await recordZapierToolRun({
       supabase,
       userId: user.id,
+      accountId,
       assetId: exportRow.asset_id,
       exportId: exportRow.id,
       app,
@@ -480,7 +503,7 @@ export async function POST(request: Request, context: RouteContext) {
         },
       })
       .eq("id", exportRow.id)
-      .eq("user_id", user.id)
+      .eq("account_id", accountId)
       .select("*")
       .single();
 
@@ -490,10 +513,12 @@ export async function POST(request: Request, context: RouteContext) {
 
     await supabase.from("activity_log").insert({
       user_id: user.id,
+      account_id: accountId,
       activity_type: "what_if_story_gmail_draft_created",
       title: "What-If Story Gmail draft created",
       description: subject,
       metadata: {
+        accountId,
         exportId: exportRow.id,
         assetId: exportRow.asset_id,
         toEmail,
@@ -519,6 +544,7 @@ export async function POST(request: Request, context: RouteContext) {
     const auditResult = await recordZapierToolRun({
       supabase,
       userId: user.id,
+      accountId,
       assetId: exportRow.asset_id,
       exportId: exportRow.id,
       app,
@@ -546,14 +572,16 @@ export async function POST(request: Request, context: RouteContext) {
         },
       })
       .eq("id", exportRow.id)
-      .eq("user_id", user.id);
+      .eq("account_id", accountId);
 
     await supabase.from("activity_log").insert({
       user_id: user.id,
+      account_id: accountId,
       activity_type: "what_if_story_gmail_draft_failed",
       title: "What-If Story Gmail draft failed",
       description: message,
       metadata: {
+        accountId,
         exportId: exportRow.id,
         assetId: exportRow.asset_id,
         toEmail,

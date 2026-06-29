@@ -10,6 +10,7 @@ import {
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
 import { CAMPAIGN_ASSET_TYPES } from "@/lib/archive/archive-utils";
+import { getActiveWorkspaceForUser } from "@/lib/accounts/active-workspace";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -32,10 +33,16 @@ export default async function ArchivePage() {
 
   if (!user) redirect("/login");
 
+  const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+  if (!workspace) redirect("/accounts");
+
+  const activeWorkspace = workspace!;
+
   const { data: archivedCampaignsData } = await supabase
     .from("campaigns")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("account_id", activeWorkspace.activeAccountId)
     .not("archived_at", "is", null)
     .order("archived_at", { ascending: false })
     .limit(40);
@@ -43,7 +50,7 @@ export default async function ArchivePage() {
   const { data: archivedAssetsData } = await supabase
     .from("generated_assets")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("account_id", activeWorkspace.activeAccountId)
     .not("archived_at", "is", null)
     .order("archived_at", { ascending: false })
     .limit(60);
@@ -51,7 +58,7 @@ export default async function ArchivePage() {
   const { data: activeOrphanAssetsData } = await supabase
     .from("generated_assets")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("account_id", activeWorkspace.activeAccountId)
     .is("campaign_id", null)
     .is("archived_at", null)
     .in("asset_type", CAMPAIGN_ASSET_TYPES)
@@ -65,7 +72,7 @@ export default async function ArchivePage() {
   return (
     <WebsitePage>
       <WebsiteHero
-        eyebrow="Archive"
+        eyebrow={`Archive • ${activeWorkspace.activeAccountName}`}
         title="Keep old campaigns and assets out of the working area."
         description="Archived items are preserved for reference but removed from active workflows once working pages are filtered."
         primaryAction={{ label: "Campaigns", href: "/campaigns" }}

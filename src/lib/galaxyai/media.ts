@@ -169,23 +169,28 @@ export function extractGalaxyMediaAttachments(value: unknown) {
 export async function loadGalaxyMediaForAsset({
   supabase,
   userId,
+  accountId = null,
   assetId,
   campaignId,
   limit = 8,
 }: {
   supabase: any;
   userId: string;
+  accountId?: string | null;
   assetId: string;
   campaignId?: string | null;
   limit?: number;
 }) {
   const runs: Array<Record<string, any>> = [];
 
-  const { data: assetRuns } = await supabase
+  let assetRunsQuery = supabase
     .from("galaxyai_runs")
     .select("id,output,status,completed_at,created_at,asset_id,campaign_id")
-    .eq("user_id", userId)
-    .eq("asset_id", assetId)
+    .eq("asset_id", assetId);
+
+  assetRunsQuery = accountId ? assetRunsQuery.eq("account_id", accountId) : assetRunsQuery.eq("user_id", userId);
+
+  const { data: assetRuns } = await assetRunsQuery
     .eq("status", "completed")
     .order("completed_at", { ascending: false })
     .limit(limit);
@@ -195,11 +200,14 @@ export async function loadGalaxyMediaForAsset({
   }
 
   if (campaignId) {
-    const { data: campaignRuns } = await supabase
+    let campaignRunsQuery = supabase
       .from("galaxyai_runs")
       .select("id,output,status,completed_at,created_at,asset_id,campaign_id")
-      .eq("user_id", userId)
-      .eq("campaign_id", campaignId)
+      .eq("campaign_id", campaignId);
+
+    campaignRunsQuery = accountId ? campaignRunsQuery.eq("account_id", accountId) : campaignRunsQuery.eq("user_id", userId);
+
+    const { data: campaignRuns } = await campaignRunsQuery
       .eq("status", "completed")
       .order("completed_at", { ascending: false })
       .limit(limit);

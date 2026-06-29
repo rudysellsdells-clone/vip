@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getAssetAccessForUser } from "@/lib/accounts/asset-access";
 import {
   buildWhatIfEmailDraft,
   inferBusinessNameFromTitle,
@@ -25,16 +26,33 @@ export async function POST(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: asset, error: assetError } = await supabase
-    .from("generated_assets")
-    .select("*")
-    .eq("id", assetId)
-    .eq("user_id", user.id)
-    .single();
+  const assetAccess = await getAssetAccessForUser({
+    supabase,
+    assetId,
+    userId: user.id,
+  });
 
-  if (assetError || !asset) {
+  if (!assetAccess.asset || !assetAccess.canView) {
     return NextResponse.json({ error: "Asset not found." }, { status: 404 });
   }
+
+  if (!assetAccess.canManage) {
+    return NextResponse.json(
+      { error: "You do not have permission to prepare a draft for this asset." },
+      { status: 403 }
+    );
+  }
+
+  const accountId = assetAccess.accountId;
+
+  if (!accountId) {
+    return NextResponse.json(
+      { error: "This asset is not assigned to a workspace. Re-approve it from the active workspace before preparing a Gmail draft." },
+      { status: 409 }
+    );
+  }
+
+  const asset = assetAccess.asset;
 
   if (asset.asset_type !== "prospect_what_if_story") {
     return NextResponse.json(
@@ -46,7 +64,7 @@ export async function POST(_request: Request, context: RouteContext) {
   const { data: latestPdf, error: pdfError } = await supabase
     .from("asset_exports")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("account_id", accountId)
     .eq("asset_id", asset.id)
     .eq("export_type", "what_if_pdf")
     .order("created_at", { ascending: false })
@@ -75,6 +93,7 @@ export async function POST(_request: Request, context: RouteContext) {
     .from("asset_exports")
     .insert({
       user_id: user.id,
+      account_id: accountId,
       asset_id: asset.id,
       export_type: "gmail_draft_with_pdf",
       status: "prepared",
@@ -101,10 +120,12 @@ export async function POST(_request: Request, context: RouteContext) {
 
   await supabase.from("activity_log").insert({
     user_id: user.id,
+    account_id: accountId,
     activity_type: "what_if_story_gmail_draft_prepared",
     title: "What-If Story Gmail draft prepared",
     description: asset.title,
     metadata: {
+      accountId,
       assetId: asset.id,
       exportId: exportRow.id,
       pdfUrl: latestPdf.file_url,

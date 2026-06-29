@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getAssetAccessForUser } from "@/lib/accounts/asset-access";
 import { loadGalaxyMediaForAsset } from "@/lib/galaxyai/media";
 import {
   attachAccountPublishingSettingsToAsset,
@@ -6,6 +7,7 @@ import {
   publishingSettingsFromAsset,
 } from "@/lib/accounts/account-publishing-settings";
 import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
 import {
   LINKEDIN_ACTION_NAME,
   LINKEDIN_APP_NAME,
@@ -25,7 +27,7 @@ type RouteContext = {
 export async function POST(_request: Request, context: RouteContext) {
   try {
     const { assetId } = await context.params;
-    const supabase = await createClient();
+    const supabase = untypedSupabase(await createClient());
 
     const {
       data: { user },
@@ -36,16 +38,36 @@ export async function POST(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data: asset, error: assetError } = await supabase
-      .from("generated_assets")
-      .select("*")
-      .eq("id", assetId)
-      .eq("user_id", user.id)
-      .single();
+    const assetAccess = await getAssetAccessForUser({
+      supabase,
+      assetId,
+      userId: user.id,
+    });
 
-    if (assetError || !asset) {
+    if (!assetAccess.asset || !assetAccess.canView) {
       return NextResponse.json({ error: "Asset not found." }, { status: 404 });
     }
+
+    if (!assetAccess.canManage) {
+      return NextResponse.json(
+        { error: "You do not have permission to prepare this asset for publishing." },
+        { status: 403 }
+      );
+    }
+
+    const accountId = assetAccess.accountId;
+
+    if (!accountId) {
+      return NextResponse.json(
+        {
+          error:
+            "This asset is not assigned to a workspace. Re-approve it from the active workspace before preparing live publishing.",
+        },
+        { status: 409 }
+      );
+    }
+
+    const asset = assetAccess.asset;
 
     const assetForPublishing = await attachAccountPublishingSettingsToAsset({
       supabase,
@@ -86,6 +108,7 @@ export async function POST(_request: Request, context: RouteContext) {
     const mediaAttachments = await loadGalaxyMediaForAsset({
       supabase,
       userId: user.id,
+      accountId,
       assetId: assetForPublishing.id,
       campaignId: assetForPublishing.campaign_id ?? null,
     });
@@ -103,7 +126,7 @@ export async function POST(_request: Request, context: RouteContext) {
     const { data: existingPolicy } = await supabase
       .from("zapier_action_policies")
       .select("id")
-      .eq("user_id", user.id)
+      .eq("account_id", accountId)
       .eq("app_name", LINKEDIN_APP_NAME)
       .eq("action_name", LINKEDIN_ACTION_NAME)
       .eq("active", true)
@@ -114,6 +137,7 @@ export async function POST(_request: Request, context: RouteContext) {
         .from("zapier_action_policies")
         .insert({
           user_id: user.id,
+          account_id: accountId,
           app_name: LINKEDIN_APP_NAME,
           action_name: LINKEDIN_ACTION_NAME,
           risk_level: "medium",
@@ -132,6 +156,7 @@ export async function POST(_request: Request, context: RouteContext) {
       .from("tool_runs")
       .insert({
         user_id: user.id,
+        account_id: accountId,
         provider: "zapier_mcp",
         action_name: "LinkedIn company page post",
         status: "waiting_approval",
@@ -152,6 +177,7 @@ export async function POST(_request: Request, context: RouteContext) {
 
     await supabase.from("activity_log").insert({
       user_id: user.id,
+      account_id: accountId,
       activity_type: "zapier_action_prepared",
       title: "LinkedIn post prepared",
       description: `Prepared LinkedIn company page post for ${pageName}.`,
@@ -160,6 +186,7 @@ export async function POST(_request: Request, context: RouteContext) {
         action: LINKEDIN_ACTION_NAME,
         policyKey: LINKEDIN_POLICY_KEY,
         assetId: assetForPublishing.id,
+        accountId,
         campaignId: assetForPublishing.campaign_id ?? null,
         toolRunId: toolRun.id,
         pageName,
@@ -173,6 +200,7 @@ export async function POST(_request: Request, context: RouteContext) {
     return NextResponse.json({
       ok: true,
       toolRunId: toolRun.id,
+      accountId,
       pageName,
       mediaUploadMode: mcpInput.mediaUploadMode,
       mediaAttachmentCount: mediaAttachments.length,

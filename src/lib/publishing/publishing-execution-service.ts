@@ -183,6 +183,7 @@ export async function createPublishingExecutionRun({
     .from("publishing_execution_runs")
     .insert({
       user_id: userId,
+      account_id: asset.account_id ?? null,
       asset_id: asset.id,
       provider: "zapier_mcp",
       channel,
@@ -291,6 +292,7 @@ export async function failPublishingExecutionRun({
 async function insertPublishingActivity({
   supabase,
   userId,
+  accountId = null,
   activityType,
   title,
   description,
@@ -298,6 +300,7 @@ async function insertPublishingActivity({
 }: {
   supabase: SupabaseLike;
   userId: string;
+  accountId?: string | null;
   activityType: string;
   title: string;
   description?: string | null;
@@ -305,6 +308,7 @@ async function insertPublishingActivity({
 }) {
   await supabase.from("activity_log").insert({
     user_id: userId,
+    account_id: accountId,
     activity_type: activityType,
     title,
     description,
@@ -341,6 +345,7 @@ export async function startZapierMcpPublishingExecution({
   await insertPublishingActivity({
     supabase,
     userId,
+    accountId: asset.account_id ?? null,
     activityType: "asset_zapier_mcp_send_started",
     title: "ZapierMCP send started",
     description: asset.title,
@@ -401,6 +406,7 @@ export async function completeZapierMcpPublishingExecution({
   await insertPublishingActivity({
     supabase,
     userId,
+    accountId: asset.account_id ?? null,
     activityType: "asset_sent_to_zapier_mcp",
     title: "Asset sent to ZapierMCP",
     description: sentAsset.title,
@@ -452,6 +458,7 @@ export async function failZapierMcpPublishingExecution({
   await insertPublishingActivity({
     supabase,
     userId,
+    accountId: asset.account_id ?? null,
     activityType: "asset_zapier_mcp_send_failed",
     title: "ZapierMCP send failed",
     description: asset.title,

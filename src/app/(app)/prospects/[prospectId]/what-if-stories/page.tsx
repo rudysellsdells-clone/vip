@@ -8,6 +8,7 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
+import { getActiveWorkspaceForUser } from "@/lib/accounts/active-workspace";
 import { normalizeProspect } from "@/lib/prospects/normalizer";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
@@ -30,11 +31,19 @@ export default async function ProspectWhatIfStoriesPage({ params }: PageProps) {
     redirect("/login");
   }
 
+  const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+  if (!workspace) {
+    redirect("/accounts");
+  }
+
+  const activeWorkspace = workspace!;
+
   const { data: prospectRow, error } = await supabase
     .from("prospects")
     .select("*")
     .eq("id", prospectId)
-    .eq("user_id", user.id)
+    .eq("account_id", activeWorkspace.activeAccountId)
     .single();
 
   if (error || !prospectRow) {
@@ -46,7 +55,7 @@ export default async function ProspectWhatIfStoriesPage({ params }: PageProps) {
   const { data: linksData } = await supabase
     .from("prospect_asset_links")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("account_id", activeWorkspace.activeAccountId)
     .eq("prospect_id", prospectId)
     .eq("relationship_type", "what_if_story");
 
@@ -55,7 +64,7 @@ export default async function ProspectWhatIfStoriesPage({ params }: PageProps) {
   return (
     <WebsitePage>
       <WebsiteHero
-        eyebrow="Prospect What-If Stories"
+        eyebrow={`Prospect What-If Stories • ${activeWorkspace.activeAccountName}`}
         title={prospect.businessName}
         description="Generate and manage personalized What-If Success Stories tied directly to this prospect."
         primaryAction={{ label: "Back to Prospects", href: "/prospects" }}

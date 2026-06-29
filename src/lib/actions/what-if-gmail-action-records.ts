@@ -76,16 +76,18 @@ export type WhatIfGmailActionRecord = {
 export async function loadRecentWhatIfGmailActions({
   supabase,
   userId,
+  accountId,
   limit = 10,
 }: {
   supabase: any;
   userId: string;
+  accountId: string;
   limit?: number;
 }): Promise<WhatIfGmailActionRecord[]> {
   const { data, error } = await supabase
     .from("asset_exports")
     .select("*")
-    .eq("user_id", userId)
+    .eq("account_id", accountId)
     .eq("export_type", "gmail_draft_with_pdf")
     .in("status", ["sent_to_zapier", "completed", "failed"])
     .order("updated_at", { ascending: false })

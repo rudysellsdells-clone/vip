@@ -4,6 +4,7 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
+import { getActiveWorkspaceForUser } from "@/lib/accounts/active-workspace";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -32,10 +33,16 @@ export async function ProspectWhatIfStoriesPanel({
     return null;
   }
 
+  const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+  if (!workspace) {
+    return null;
+  }
+
   const { data: linksData } = await supabase
     .from("prospect_asset_links")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("account_id", workspace.activeAccountId)
     .eq("prospect_id", prospectId)
     .eq("relationship_type", "what_if_story")
     .eq("status", "active")
@@ -48,7 +55,7 @@ export async function ProspectWhatIfStoriesPanel({
     ? await supabase
         .from("generated_assets")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", workspace.activeAccountId)
         .in("id", assetIds)
         .order("created_at", { ascending: false })
     : { data: [] };

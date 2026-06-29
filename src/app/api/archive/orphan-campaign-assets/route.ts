@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getActiveWorkspaceForUser } from "@/lib/accounts/active-workspace";
 import { CAMPAIGN_ASSET_TYPES, archiveTimestamp } from "@/lib/archive/archive-utils";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
@@ -15,6 +16,12 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+  if (!workspace || !workspace.canManageActiveAccount) {
+    return NextResponse.json({ error: "You do not have permission to archive assets in this workspace." }, { status: 403 });
+  }
+
   const archivedAt = archiveTimestamp();
 
   const { data: archivedAssets, error } = await supabase
@@ -24,7 +31,7 @@ export async function POST() {
       archived_reason: "Bulk archived orphan campaign asset",
       archived_by: user.id,
     })
-    .eq("user_id", user.id)
+    .eq("account_id", workspace.activeAccountId)
     .is("campaign_id", null)
     .is("archived_at", null)
     .in("asset_type", CAMPAIGN_ASSET_TYPES)
@@ -36,10 +43,12 @@ export async function POST() {
 
   await supabase.from("activity_log").insert({
     user_id: user.id,
+    account_id: workspace.activeAccountId,
     activity_type: "orphan_campaign_assets_bulk_archived",
     title: "Orphan campaign assets bulk archived",
     description: `${archivedAssets?.length ?? 0} orphan campaign assets archived.`,
     metadata: {
+      accountId: workspace.activeAccountId,
       archivedAt,
       archivedAssetCount: archivedAssets?.length ?? 0,
       archivedAssetIds: (archivedAssets ?? []).map((asset: Record<string, any>) => asset.id),

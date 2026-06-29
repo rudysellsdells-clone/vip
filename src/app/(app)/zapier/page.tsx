@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
+import { getActiveWorkspaceForUser } from "@/lib/accounts/active-workspace";
 import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
 import {
   WebsiteBadge,
   WebsiteHero,
@@ -15,15 +17,21 @@ function formatDate(value: string | null) {
 }
 
 export default async function ZapierPage() {
-  const supabase = await createClient();
+  const supabase = untypedSupabase(await createClient());
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
 
+  const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+  if (!workspace) redirect("/accounts");
+
+  const activeWorkspace = workspace!;
+
   const [toolRunsResult, publishingRunsResult, policiesResult] = await Promise.all([
-    supabase.from("tool_runs").select("*").eq("user_id", user.id).eq("provider", "zapier_mcp").order("created_at", { ascending: false }).limit(100),
-    supabase.from("publishing_execution_runs").select("*").eq("user_id", user.id).eq("provider", "zapier_mcp").order("created_at", { ascending: false }).limit(100),
-    supabase.from("zapier_action_policies").select("*").eq("user_id", user.id).eq("active", true).order("created_at", { ascending: false }).limit(100),
+    supabase.from("tool_runs").select("*").eq("account_id", activeWorkspace.activeAccountId).eq("provider", "zapier_mcp").order("created_at", { ascending: false }).limit(100),
+    supabase.from("publishing_execution_runs").select("*").eq("account_id", activeWorkspace.activeAccountId).eq("provider", "zapier_mcp").order("created_at", { ascending: false }).limit(100),
+    supabase.from("zapier_action_policies").select("*").eq("account_id", activeWorkspace.activeAccountId).eq("active", true).order("created_at", { ascending: false }).limit(100),
   ]);
 
   const runs = (toolRunsResult.data ?? []) as Array<Record<string, any>>;
@@ -42,7 +50,7 @@ export default async function ZapierPage() {
   return (
     <WebsitePage>
       <WebsiteHero
-        eyebrow="Zapier MCP"
+        eyebrow={`Zapier MCP • ${activeWorkspace.activeAccountName}`}
         title="Prepare and audit business actions."
         description="Track Zapier MCP actions for Gmail drafts, Facebook publishing, and other approved business workflows."
         primaryAction={{ label: "Publishing Schedule", href: "/publishing-schedule" }}

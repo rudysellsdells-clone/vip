@@ -4,6 +4,7 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
+import { getActiveWorkspaceForUser } from "@/lib/accounts/active-workspace";
 import { loadRecentWhatIfGmailActions } from "@/lib/actions/what-if-gmail-action-records";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
@@ -30,9 +31,16 @@ export async function RecentWhatIfGmailActions() {
     return null;
   }
 
+  const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+  if (!workspace) {
+    return null;
+  }
+
   const actions = await loadRecentWhatIfGmailActions({
     supabase,
     userId: user.id,
+    accountId: workspace.activeAccountId,
     limit: 10,
   });
 
