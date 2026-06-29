@@ -5,6 +5,7 @@ import { AssetReviewActions } from "@/components/approvals/AssetReviewActions";
 import { RunGalaxyAiAssetButton } from "@/components/galaxyai/RunGalaxyAiAssetButton";
 import { ExecuteApprovedAssetButton } from "@/components/publishing/ExecuteApprovedAssetButton";
 import { RequestRevisionButton } from "@/components/assets/RequestRevisionButton";
+import { VisualAssetPanel } from "@/components/assets/VisualAssetPanel";
 import {
   WebsiteBadge,
   WebsiteHero,
@@ -21,6 +22,16 @@ type PageProps = {
   params: Promise<{
     assetId: string;
   }>;
+};
+
+type VisualAssetRow = {
+  id: string;
+  title: string | null;
+  content: string | null;
+  status: string | null;
+  asset_type: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string | null;
 };
 
 function formatDate(value: string | null) {
@@ -42,6 +53,18 @@ function zapierMcpExecutionLabel(assetType: unknown) {
   if (String(assetType ?? "") === "linkedin_post") return "LinkedIn execution";
   if (String(assetType ?? "") === "email") return "Gmail draft execution";
   return "ZapierMCP execution";
+}
+
+function metadataRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function primaryVisualAssetIdFromMetadata(value: unknown) {
+  const metadata = metadataRecord(value);
+  const text = String(metadata.primaryVisualAssetId ?? "").trim();
+  return text || null;
 }
 
 export default async function AssetDetailPage({ params }: PageProps) {
@@ -80,10 +103,21 @@ export default async function AssetDetailPage({ params }: PageProps) {
     query: supabase
       .from("generated_assets")
       .select("*")
-      .eq("parent_asset_id", asset.id),
+      .eq("parent_asset_id", asset.id)
+      .not("asset_type", "in", "(generated_visual,generated_social_image)"),
     accountId,
     userId: user.id,
   }).order("version", { ascending: false });
+
+  const { data: visualAssets } = await scopeRelatedAssetQueryForAccess({
+    query: supabase
+      .from("generated_assets")
+      .select("id,title,content,status,asset_type,metadata,created_at,parent_asset_id")
+      .eq("parent_asset_id", asset.id)
+      .in("asset_type", ["generated_visual", "generated_social_image"]),
+    accountId,
+    userId: user.id,
+  }).order("created_at", { ascending: false });
 
   const { data: parentAsset } = asset.parent_asset_id
     ? await scopeRelatedAssetQueryForAccess({
@@ -105,7 +139,9 @@ export default async function AssetDetailPage({ params }: PageProps) {
     .limit(10);
 
   const revisions = (childRevisions ?? []) as Array<Record<string, any>>;
+  const visualRows = (visualAssets ?? []) as VisualAssetRow[];
   const approvalRows = (approvals ?? []) as Array<Record<string, any>>;
+  const primaryVisualAssetId = primaryVisualAssetIdFromMetadata(asset.metadata);
   const canRevise = asset.status !== "published" && asset.status !== "sent";
   const canExecuteZapierMcp =
     asset.status === "approved" && isCanonicalZapierMcpAsset(asset.asset_type);
@@ -160,9 +196,9 @@ export default async function AssetDetailPage({ params }: PageProps) {
           dot="purple"
         />
         <WebsiteMetric
-          label="Activity"
-          value={approvalRows.length}
-          description="Approval records for this asset."
+          label="Visuals"
+          value={visualRows.length}
+          description="Generated images attached to this asset."
           dot="green"
         />
       </section>
@@ -261,6 +297,14 @@ export default async function AssetDetailPage({ params }: PageProps) {
           ) : null}
         </WebsiteSection>
       </section>
+
+      <VisualAssetPanel
+        assetId={asset.id}
+        canManage={assetAccess.canManage}
+        sourceStatus={asset.status}
+        primaryVisualAssetId={primaryVisualAssetId}
+        visualAssets={visualRows}
+      />
 
       <section className={websiteStyles.twoColumn}>
         <WebsiteSection
