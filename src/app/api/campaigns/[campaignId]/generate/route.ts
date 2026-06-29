@@ -130,6 +130,8 @@ export async function POST(_request: Request, context: RouteContext) {
           metadata: toJson({
             generatedBy: "campaign_asset_pack",
             sprint: "5.7",
+            contentSpecificityContract: "h1_4g1",
+            preReviewEnrichment: true,
             cloneMemoryUsed: true,
             cloneMemorySnapshot: memorySnapshot,
             companionAssetFlow:

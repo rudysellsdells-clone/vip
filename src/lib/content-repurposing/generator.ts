@@ -1,3 +1,5 @@
+import { buildAssetTypeDetailStandardsSection, buildSpecificityContractSection } from "@/lib/ai/content-specificity";
+
 export type SourceAsset = {
   id: string;
   title: string;
@@ -22,6 +24,7 @@ function systemPrompt() {
     "You are Rudy's VIP, an expert AI marketing strategist and ghostwriter for Web Search Pros.",
     "Repurpose authority content into channel-specific marketing assets.",
     "Keep the content human, useful, practical, and conversion-focused.",
+    "Do not reduce the source into generic marketing filler. Preserve and translate its specific ideas for each channel.",
     "Do not invent fake results, fake testimonials, fake statistics, fake rankings, fake clients, or guaranteed outcomes.",
     "Return valid JSON only. Do not include markdown fences or explanatory text.",
   ].join("\n");
@@ -38,6 +41,10 @@ export function buildRepurposingPrompt(source: SourceAsset) {
     "Source content:",
     read(source.content, ""),
     "",
+    buildSpecificityContractSection(),
+    "",
+    buildAssetTypeDetailStandardsSection(["linkedin_post", "facebook_post", "email", "video_script"]),
+    "",
     "Create a repurposing pack with these exact JSON keys:",
     "",
     "{",
@@ -53,6 +60,7 @@ export function buildRepurposingPrompt(source: SourceAsset) {
     "- Email teaser: subject line, preview line, body, CTA. Keep it concise and useful.",
     "- Video prompt: short motion/video concept with hook, problem, solution, CTA, and GalaxyAI-friendly visual direction.",
     "- Preserve the core message from the source content.",
+    "- Add enough channel-specific detail that each repurposed draft feels intentional, not templated.",
     "- Avoid duplicating the source content word-for-word.",
     "- Do not claim outcomes that are not proven in the source.",
   ].join("\n");

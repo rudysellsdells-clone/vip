@@ -1,3 +1,4 @@
+import { buildAssetTypeDetailStandardsSection, buildSpecificityContractSection } from "@/lib/ai/content-specificity";
 import { isSocialAssetType, preparePublicAssetContent } from "@/lib/content/public-content-cleaner";
 
 export type QualityResubmissionInput = {
@@ -49,6 +50,7 @@ function systemPrompt(assetType: string) {
     "Keep the same strategic intent, asset type, and general purpose.",
     "Improve weak sections based on the quality review notes.",
     "Keep the writing human, clear, useful, practical, and aligned with Web Search Pros.",
+    "Make the revised asset more specific, detailed, and useful before it returns to review.",
     "Do not fabricate case studies, client results, testimonials, rankings, traffic, revenue, or guaranteed outcomes.",
     "Return only the improved public-facing asset content.",
     "Do not include notes, JSON, markdown fences, explanations, internal IDs, review IDs, source asset IDs, prior asset IDs, or new asset IDs.",
@@ -83,6 +85,10 @@ export function buildQualityResubmissionPrompt(input: QualityResubmissionInput) 
     "Review summary:",
     read(input.reviewSummary, "No review summary provided."),
     "",
+    buildSpecificityContractSection(),
+    "",
+    buildAssetTypeDetailStandardsSection([assetType]),
+    "",
     "Strengths to preserve:",
     strengths.length ? strengths.map((item) => `- ${item}`).join("\n") : "- Preserve the best parts of the original asset.",
     "",
@@ -97,6 +103,7 @@ export function buildQualityResubmissionPrompt(input: QualityResubmissionInput) 
     "- Keep the asset useful and ready for human review.",
     "- Make the CTA clearer and more relevant.",
     "- Improve brand voice and remove generic AI phrasing.",
+    "- Add specific examples, buyer pain points, workflow steps, objections, decision triggers, or practical consequences where relevant.",
     "- Improve SEO/AIO usefulness where relevant with better headings, topical clarity, FAQs, examples, or entity-rich language.",
     "- Do not mention that this was revised by AI or based on a quality review.",
     "- Do not include a score or review commentary in the output.",

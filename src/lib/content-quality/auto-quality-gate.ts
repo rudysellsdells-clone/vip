@@ -1,3 +1,4 @@
+import { GENERIC_PHRASE_WARNINGS, buildGenericContentPenaltyRules, buildSpecificityContractSection } from "@/lib/ai/content-specificity";
 import { preparePublicAssetContent } from "@/lib/content/public-content-cleaner";
 
 export type AutoQualityScores = {
@@ -49,6 +50,19 @@ function clampScore(value: unknown, fallback = 74) {
 function includesAny(content: string, words: string[]) {
   const lower = content.toLowerCase();
   return words.some((word) => lower.includes(word.toLowerCase()));
+}
+
+function genericPhraseHits(content: string) {
+  const lower = content.toLowerCase();
+  return GENERIC_PHRASE_WARNINGS.filter((phrase) => lower.includes(phrase.toLowerCase()));
+}
+
+function hasSpecificitySignals(content: string) {
+  return (
+    /\bexample\b|\bfor instance\b|\bscenario\b|\bwhen a\b|\bbefore\b.*\bafter\b/i.test(content) ||
+    /\bobjection\b|\bworkflow\b|\bchecklist\b|\bstep\b|\bdecision\b|\bbuyer\b/i.test(content) ||
+    /\bSEO\b|\bAIO\b|\blocal search\b|\bservice page\b|\bcontent calendar\b|\bfollow-up\b/i.test(content)
+  );
 }
 
 function wordCount(content: string) {
@@ -145,13 +159,18 @@ function heuristicReview({
     "review",
   ]);
   const socialFormatted = !isSocial || hasSocialFormatting(cleaned);
-  const enoughLength = isShortForm ? words >= 35 : words >= 120;
+  const genericHits = genericPhraseHits(cleaned);
+  const specificitySignals = hasSpecificitySignals(cleaned);
+  const enoughLength = isShortForm ? words >= 45 : words >= 140;
 
-  const clarity = clampScore(68 + (enoughLength ? 10 : 0) + (structured ? 8 : 0));
+  const genericPenalty = Math.min(12, genericHits.length * 3);
+  const specificityAdjustment = specificitySignals ? 5 : -8;
+
+  const clarity = clampScore(68 + (enoughLength ? 10 : 0) + (structured ? 8 : 0) + specificityAdjustment - genericPenalty);
   const ctaScore = clampScore(cta ? 82 : 68);
-  const brandVoice = clampScore(brandRelevant ? 82 : 70);
-  const seoAio = clampScore(assetType === "blog_post" ? (structured ? 76 : 66) : 72);
-  const conversion = clampScore((cta ? 78 : 66) + (brandRelevant ? 6 : 0));
+  const brandVoice = clampScore((brandRelevant ? 82 : 70) + (specificitySignals ? 4 : -8) - genericPenalty);
+  const seoAio = clampScore(assetType === "blog_post" ? (structured && specificitySignals ? 80 : 64) : 72);
+  const conversion = clampScore((cta ? 78 : 66) + (brandRelevant ? 6 : 0) + (specificitySignals ? 4 : -8) - genericPenalty);
   const socialScore = clampScore(socialFormatted ? 82 : 68);
   const overall = clampScore(
     Math.round((clarity + ctaScore + brandVoice + seoAio + conversion + socialScore) / 6)
@@ -162,6 +181,8 @@ function heuristicReview({
     clarity < 72 ? "Make the message clearer and easier to scan." : "",
     ctaScore < 70 ? "Make the call to action more specific." : "",
     brandVoice < 72 ? "Tie the message more clearly to visibility, search, trust, or business growth." : "",
+    !specificitySignals ? "Add concrete buyer-specific detail: example, scenario, workflow step, objection, decision trigger, or practical consequence." : "",
+    genericHits.length ? `Replace generic language with specific detail. Generic phrases found: ${genericHits.slice(0, 4).join(", ")}.` : "",
     !socialFormatted && isSocial ? "Add relevant emoji and hashtags for the social channel." : "",
   ].filter(Boolean);
 
@@ -186,7 +207,7 @@ function heuristicReview({
     improvements: improvements.length ? improvements : ["No major improvement required before human review."],
     suggestedRevision:
       improvements.length > 0
-        ? "Improve the asset lightly while preserving the core topic, channel format, and intended CTA."
+        ? "Improve the asset by adding concrete buyer-specific detail, strengthening the CTA, and removing generic filler while preserving the core topic and channel format."
         : "Move this asset to human review.",
     model: "heuristic-v2-calibrated",
     source: "heuristic",
@@ -235,7 +256,7 @@ function qualityPrompt({
     "Use this scale:",
     "90-100: excellent and publish-ready after a quick human glance",
     "80-89: strong and likely review-ready",
-    "70-79: acceptable first-pass content with minor improvement opportunities",
+    "70-79: acceptable first-pass content with minor improvement opportunities, but not generic",
     "60-69: needs targeted revision",
     "below 60: significant quality issue",
     "",
@@ -246,6 +267,10 @@ function qualityPrompt({
     "- suggestedRevision: one paragraph describing exactly how to improve the asset if needed",
     "",
     "Important quality criteria:",
+    buildSpecificityContractSection(),
+    "",
+    buildGenericContentPenaltyRules(),
+    "",
     "- Content must be public-facing and must not include internal campaign labels, IDs, or private prompt notes.",
     "- Social posts should include useful emoji and relevant hashtags.",
     "- Blog content should be structured and useful.",

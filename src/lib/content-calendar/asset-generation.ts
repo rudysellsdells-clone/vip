@@ -1,3 +1,5 @@
+import { buildAssetTypeDetailStandardsSection, buildSpecificityContractSection } from "@/lib/ai/content-specificity";
+
 type CalendarItem = {
   id: string;
   title: string;
@@ -85,6 +87,9 @@ function systemPrompt() {
     "You are Rudy's VIP, an expert AI marketing strategist and ghostwriter for Web Search Pros.",
     "Write polished, practical, conversion-focused marketing content.",
     "Use a confident, human, clear style.",
+    "The first draft must be specific enough for a serious human review before any quality pass runs.",
+    "Use concrete buyer problems, examples, scenarios, workflow steps, objections, or implementation detail.",
+    "Do not create a generic asset that could apply to any random business in any industry.",
     "Do not invent fake case studies, fake results, fake testimonials, or guaranteed outcomes.",
     "If content is hypothetical, clearly label it as a scenario, not a completed case study.",
     "Return only the finished content. Do not include process notes.",
@@ -97,14 +102,15 @@ function itemSpecificInstructions(item: CalendarItem) {
       return [
         "Create a complete blog post.",
         "Include an SEO title, meta description, introduction, clear sections, practical advice, a short FAQ, and a CTA.",
-        "Write enough detail to be useful, but keep it readable and not bloated.",
+        "Use concrete examples, buyer situations, implementation steps, and search-friendly topical depth.",
+        "Write enough detail to be genuinely useful before review, but keep it readable and not bloated.",
       ].join("\n");
 
     case "facebook_post":
       return [
         "Create a Facebook Page post.",
         "Make it approachable, clear, and helpful.",
-        "Include a strong opening, short paragraphs, and a soft CTA.",
+        "Include a strong opening tied to a real business situation, short paragraphs, useful detail, and a soft CTA.",
         "Do not overuse hashtags. Use at most 3 if helpful.",
       ].join("\n");
 
@@ -112,15 +118,16 @@ function itemSpecificInstructions(item: CalendarItem) {
       return [
         "Create a LinkedIn company page post.",
         "Make it professional, authority-building, and readable.",
-        "Use a strong hook, short paragraphs, and a clear point of view.",
-        "End with a thoughtful CTA.",
+        "Use a strong hook, short paragraphs, a specific business lesson, and a clear point of view.",
+        "End with a thoughtful CTA or engagement prompt.",
       ].join("\n");
 
     case "email_outreach":
       return [
         "Create a prospecting email draft.",
         "Keep it consultative, useful, and not spammy.",
-        "Include a subject line, preview line, email body, and soft CTA.",
+        "Include a subject line, preview line, email body, and one soft CTA.",
+        "Name a specific pain, missed opportunity, or trigger that would matter to the buyer.",
         "Do not claim we audited their site unless specific audit data is provided.",
       ].join("\n");
 
@@ -128,7 +135,8 @@ function itemSpecificInstructions(item: CalendarItem) {
       return [
         "Create a campaign video concept and production prompt.",
         "Include a 20-second structure with Hook, Problem, Solution, and CTA.",
-        "Include a GalaxyAI-style prompt for social media motion/video output.",
+        "Make the first 3 seconds specific and interesting.",
+        "Include scene-by-scene visual direction, camera/mood notes, and a GalaxyAI-style prompt for social media motion/video output.",
         "Include a YouTube title and description draft.",
       ].join("\n");
 
@@ -171,6 +179,10 @@ export function buildCalendarAssetPrompt({
     "Content request:",
     itemSpecificInstructions(item),
     "",
+    buildSpecificityContractSection(),
+    "",
+    buildAssetTypeDetailStandardsSection([mapCalendarItemToAssetType(item.item_type)]),
+    "",
     "Monthly plan context:",
     `Month: ${read(plan.month_label, "Not provided")}`,
     `Theme: ${read(plan.monthly_theme, "Not provided")}`,
@@ -188,6 +200,9 @@ export function buildCalendarAssetPrompt({
     `Content angle: ${read(item.content_angle, "Not provided")}`,
     `CTA: ${read(item.cta, "Schedule a strategy call")}`,
     linkedCampaignName ? `Linked campaign: ${linkedCampaignName}` : "",
+    "",
+    "Pre-review detail pass:",
+    "Before finalizing, revise your own draft once to remove generic filler, add concrete detail, strengthen the CTA, and make the asset useful enough for human review.",
   ]
     .filter(Boolean)
     .join("\n");

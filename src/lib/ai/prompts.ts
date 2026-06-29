@@ -1,3 +1,5 @@
+import { buildAssetTypeDetailStandardsSection, buildSpecificityContractSection } from "./content-specificity";
+
 type PromptCampaign = {
   name: string;
   idea: string;
@@ -47,11 +49,21 @@ Write in clear, polished, human English. Be practical, specific, and business-fo
 Avoid robotic phrasing, vague hype, fake guarantees, and filler.
 Use Rudy's digital clone memory, brand rules, knowledge library, offers, and examples whenever provided.
 
+First-draft quality standard:
+- The first draft must already feel ready for a serious human marketing review.
+- Do not submit generic placeholder content for later cleanup.
+- Every asset must include concrete detail, channel-aware structure, and a clear reason the audience should care.
+- If the brief is thin, use the available business context to make the content more useful without inventing fake claims.
+
 Safety rules:
 - Do not claim anything that is not supported by the provided context.
 - Do not create legal, medical, or financial guarantees.
 - Do not imply any action has been sent, posted, published, or launched.
 - All external actions require Rudy's approval.
+
+${buildSpecificityContractSection()}
+
+${buildAssetTypeDetailStandardsSection()}
 
 Return only valid JSON matching this shape:
 
@@ -111,16 +123,21 @@ ${buyerSegments}
 
 ${offers}
 
+${buildSpecificityContractSection()}
+
+${buildAssetTypeDetailStandardsSection()}
+
 ## Output Requirements
 1. Make this sound like Rudy, not generic AI.
-2. Tie the campaign to revenue, leads, visibility, or qualified conversations.
-3. Use the buyer segment's likely pain points.
-4. Keep the email useful and ready to review.
-5. Keep the LinkedIn and Facebook posts publish-ready but still approval-gated.
-6. Make the YouTube metadata clear and search-friendly.
-7. Make the short video script practical and easy to record.
-8. Make the GalaxyAI prompt visual and specific.
-9. Include an approval checklist that helps Rudy decide whether the campaign is safe and useful.
+2. Tie the campaign to revenue, leads, visibility, or qualified conversations with concrete detail.
+3. Use the buyer segment's likely pain points, objections, decision triggers, and desired outcomes.
+4. Keep the email useful and ready to review with a subject line, preview line, body, and one CTA.
+5. Keep the LinkedIn and Facebook posts publish-ready but still approval-gated; include a hook and useful detail.
+6. Make the YouTube metadata clear, search-friendly, and tied to a specific viewer intent.
+7. Make the short video script practical, easy to record, and structured around a first-three-seconds hook.
+8. Make the GalaxyAI prompt visual and specific with scene, camera, mood, action, and exclusions.
+9. Include an approval checklist that helps Rudy decide whether the campaign is safe, specific, and useful.
+10. Before finalizing, quietly improve any asset that still sounds like it could apply to any random business.
 
 Return only valid JSON.`;
 }
@@ -131,4 +148,69 @@ export function formatCampaignStrategyForAsset(strategy: unknown) {
   }
 
   return JSON.stringify(strategy, null, 2);
+}
+
+
+export function buildPreReviewEnrichmentSystemPrompt() {
+  return `You are VIP's pre-review content enrichment editor for Web Search Pros.
+
+Your job is to improve an already generated Marketing Asset Pack before it reaches human quality review.
+Do not change the campaign strategy or invent unsupported proof.
+Do make every asset more specific, detailed, structured, and useful.
+
+${buildSpecificityContractSection()}
+
+${buildAssetTypeDetailStandardsSection()}
+
+Return only valid JSON using the same field names as the original asset pack.`;
+}
+
+export function buildPreReviewEnrichmentUserPrompt(input: {
+  campaign: PromptCampaign;
+  digitalCloneMemoryContext?: string | null;
+  cloneMemoryContext?: string | null;
+  serviceLines?: PromptEntity[] | null;
+  buyerSegments?: PromptEntity[] | null;
+  offers?: PromptEntity[] | null;
+}, assetPack: Record<string, string>) {
+  const cloneMemory =
+    input.digitalCloneMemoryContext ??
+    input.cloneMemoryContext ??
+    "No digital clone memory was provided.";
+
+  return `Strengthen this Marketing Asset Pack before review.
+
+## Campaign Brief
+Campaign name: ${input.campaign.name}
+Campaign idea: ${input.campaign.idea}
+Buyer segment: ${input.campaign.buyer_segment ?? "Not specified"}
+Audience: ${input.campaign.audience ?? "Not specified"}
+Goal: ${input.campaign.goal ?? "Book qualified sales conversations"}
+Platforms: ${normalizePlatforms(input.campaign.platforms)}
+Tone: ${input.campaign.tone ?? "Clear, practical, confident"}
+CTA: ${input.campaign.cta ?? "Book a call"}
+Notes: ${input.campaign.notes ?? "None"}
+
+## Rudy Digital Clone Memory
+${cloneMemory}
+
+${formatUnknownList("Service Lines", input.serviceLines)}
+
+${formatUnknownList("Buyer Segments", input.buyerSegments)}
+
+${formatUnknownList("Offers", input.offers)}
+
+## Current Asset Pack JSON
+${JSON.stringify(assetPack, null, 2)}
+
+## Enrichment Instructions
+- Keep the same JSON keys.
+- Make each asset more specific, useful, and detailed.
+- Add examples, buyer-specific pain points, objections, scenario language, workflow steps, or implementation detail where appropriate.
+- Strengthen the CTA without becoming pushy.
+- Remove generic marketing filler.
+- Do not add unsupported claims, fake statistics, fake testimonials, fake rankings, or fake client results.
+- Do not mention this enrichment pass.
+
+Return only valid JSON.`;
 }

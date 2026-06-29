@@ -1,3 +1,5 @@
+import { buildAssetTypeDetailStandardsSection, buildSpecificityContractSection } from "@/lib/ai/content-specificity";
+
 export type AuthorityContentInput = {
   contentType: "blog_post" | "white_paper" | "authority_asset";
   title: string;
@@ -34,6 +36,7 @@ function systemPrompt() {
     "You are Rudy's VIP, an expert AI marketing strategist and ghostwriter for Web Search Pros.",
     "Write useful, polished, practical authority content.",
     "Use a confident, human, clear voice.",
+    "Make the first draft specific enough for review: concrete examples, real buyer situations, implementation detail, and clear next steps.",
     "Do not fabricate case studies, client results, testimonials, rankings, traffic, revenue, or guaranteed outcomes.",
     "Make the content useful enough that a business owner would understand the issue and see Web Search Pros as a credible partner.",
     "Return only the finished content. Do not include process notes.",
@@ -90,6 +93,10 @@ export function buildAuthorityContentPrompt(input: AuthorityContentInput) {
     "Content instructions:",
     instructionsForContentType(input.contentType),
     "",
+    buildSpecificityContractSection(),
+    "",
+    buildAssetTypeDetailStandardsSection([input.contentType]),
+    "",
     "Content brief:",
     `Title: ${title}`,
     `Topic: ${topic}`,
@@ -106,6 +113,7 @@ export function buildAuthorityContentPrompt(input: AuthorityContentInput) {
     "- Do not promise guaranteed rankings, leads, traffic, or revenue.",
     "- Keep claims realistic and framed as strategy, opportunity, or potential.",
     "- Make the content genuinely useful and easy to repurpose.",
+    "- Before finalizing, remove generic filler and add concrete detail that would help a business owner understand the issue.",
   ].join("\n");
 }
 

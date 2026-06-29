@@ -1,3 +1,5 @@
+import { buildGenericContentPenaltyRules, buildSpecificityContractSection } from "@/lib/ai/content-specificity";
+
 export type QualityReviewInput = {
   assetId: string;
   title: string;
@@ -28,9 +30,10 @@ function read(value: unknown, fallback = "") {
 function systemPrompt() {
   return [
     "You are Rudy's VIP content quality reviewer for Web Search Pros.",
-    "Review generated marketing content for brand fit, clarity, CTA strength, SEO/AIO readiness, and conversion value.",
+    "Review generated marketing content for brand fit, clarity, CTA strength, SEO/AIO readiness, conversion value, and specificity.",
     "Be useful, direct, practical, and honest.",
-    "Do not be overly harsh, but do not rubber-stamp weak content.",
+    "Do not be overly harsh, but do not rubber-stamp weak or generic content.",
+    "Content that could apply to any random business should not receive a strong score.",
     "Return valid JSON only. Do not include markdown fences or extra commentary.",
   ].join("\n");
 }
@@ -43,7 +46,7 @@ export function buildQualityReviewPrompt(input: QualityReviewInput) {
       "Voice: strategic, confident, helpful, plain-English, practical, and business-focused.",
       "Audience: business owners, marketing leaders, and prospects who want better visibility, AI search presence, authority, content, and automation.",
       "Avoid: fake case studies, fake results, fake testimonials, guaranteed rankings, exaggerated claims, generic AI fluff, and robotic phrasing.",
-      "Prefer: clear value, useful strategy, strong hooks, specific business language, consultative tone, and practical calls to action.",
+      "Prefer: clear value, useful strategy, strong hooks, specific business language, consultative tone, concrete examples, useful detail, and practical calls to action.",
     ].join(" ")
   );
 
@@ -52,6 +55,10 @@ export function buildQualityReviewPrompt(input: QualityReviewInput) {
     "",
     "Brand context:",
     brandContext,
+    "",
+    buildSpecificityContractSection(),
+    "",
+    buildGenericContentPenaltyRules(),
     "",
     "Asset to review:",
     `Asset ID: ${input.assetId}`,
@@ -82,7 +89,9 @@ export function buildQualityReviewPrompt(input: QualityReviewInput) {
     "- Brand voice score should reflect fit with Web Search Pros.",
     "- CTA score should reward clear, relevant next steps.",
     "- SEO/AIO score should reward topical clarity, useful headings, FAQ/search intent value, and entity-rich language where relevant.",
-    "- Conversion score should reward business value, specificity, and sales usefulness.",
+    "- Conversion score should reward business value, specificity, detail density, and sales usefulness.",
+    "- A high overall score requires specific audience relevance, not just clean writing.",
+    "- Reduce scores for generic phrases, vague advice, weak examples, missing buyer pain, or unclear next steps.",
     "",
     "Status rules:",
     '- Use "strong" if overall_score is 85 or higher.',
@@ -91,6 +100,7 @@ export function buildQualityReviewPrompt(input: QualityReviewInput) {
     "",
     "Suggested revision:",
     "- Provide a concise improved version or partial rewrite of the weakest section.",
+    "- When content is too generic, show exactly what detail should be added: audience pain, example, objection, workflow step, CTA, or business consequence.",
     "- Do not rewrite the entire asset unless it is very short.",
   ].join("\n");
 }

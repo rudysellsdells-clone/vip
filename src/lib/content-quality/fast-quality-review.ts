@@ -1,3 +1,4 @@
+import { GENERIC_PHRASE_WARNINGS } from "@/lib/ai/content-specificity";
 import { preparePublicAssetContent } from "@/lib/content/public-content-cleaner";
 
 export type FastQualityReview = {
@@ -41,6 +42,19 @@ function lineCount(content: string) {
 function includesAny(content: string, terms: string[]) {
   const lower = content.toLowerCase();
   return terms.some((term) => lower.includes(term.toLowerCase()));
+}
+
+function genericPhraseHits(content: string) {
+  const lower = content.toLowerCase();
+  return GENERIC_PHRASE_WARNINGS.filter((phrase) => lower.includes(phrase.toLowerCase()));
+}
+
+function hasSpecificitySignals(content: string) {
+  return (
+    /\bexample\b|\bfor instance\b|\bscenario\b|\bwhen a\b|\bbefore\b.*\bafter\b/i.test(content) ||
+    /\bworkflow\b|\bchecklist\b|\bstep\b|\bdecision\b|\bbuyer\b|\bobjection\b/i.test(content) ||
+    /\bSEO\b|\bAIO\b|\blocal search\b|\bservice page\b|\bcontent calendar\b|\bfollow-up\b/i.test(content)
+  );
 }
 
 function hasCta(content: string) {
@@ -127,15 +141,28 @@ export function generateFastQualityReview({
   const socialFormatted = !isSocial || (hasEmoji(cleaned) && hasHashtag(cleaned));
   const internalLabels = hasInternalLabels(cleaned);
   const unsupportedClaims = hasUnsupportedClaims(cleaned);
+  const genericHits = genericPhraseHits(cleaned);
+  const specificitySignals = hasSpecificitySignals(cleaned);
 
-  const minimumWords = assetType === "blog_post" ? 350 : assetType === "email" ? 90 : isSocial ? 35 : 70;
+  const minimumWords = assetType === "blog_post" ? 450 : assetType === "email" ? 110 : isSocial ? 45 : 90;
   const enoughLength = words >= minimumWords;
 
-  let clarity = 70 + (enoughLength ? 10 : -8) + (structured ? 6 : 0);
+  let clarity = 70 + (enoughLength ? 10 : -8) + (structured ? 6 : 0) + (specificitySignals ? 5 : -8);
   let ctaScore = cta ? 82 : 64;
   let brandVoice = brandRelevant ? 82 : 68;
-  let seoAio = assetType === "blog_post" ? (structured ? 78 : 68) : brandRelevant ? 72 : 64;
+  let seoAio = assetType === "blog_post" ? (structured && specificitySignals ? 82 : 66) : brandRelevant ? 72 : 64;
   let conversion = cta ? 78 : 64;
+
+  if (!specificitySignals) {
+    brandVoice -= 8;
+    conversion -= 10;
+  }
+
+  if (genericHits.length) {
+    clarity -= Math.min(14, genericHits.length * 4);
+    brandVoice -= Math.min(12, genericHits.length * 3);
+    conversion -= Math.min(12, genericHits.length * 3);
+  }
 
   if (isSocial && socialFormatted) {
     clarity += 4;
@@ -177,6 +204,8 @@ export function generateFastQualityReview({
     !enoughLength ? "Add more useful substance before approval." : "",
     !cta ? "Add a clearer call to action." : "",
     !brandRelevant ? "Tie the message more clearly to the business value proposition." : "",
+    !specificitySignals ? "Add concrete detail: a buyer scenario, example, workflow step, objection, decision trigger, or practical consequence." : "",
+    genericHits.length ? `Replace generic language with specific detail. Generic phrases found: ${genericHits.slice(0, 4).join(", ")}.` : "",
     isSocial && !socialFormatted ? "Add natural emoji and relevant hashtags." : "",
     internalLabels ? "Remove internal labels, campaign names, IDs, or prompt-style text." : "",
     unsupportedClaims ? "Remove unsupported guarantees, rankings, statistics, or claims." : "",
@@ -192,7 +221,7 @@ export function generateFastQualityReview({
     improvements: improvements.length ? improvements : ["No major improvement required before approval review."],
     suggestedRevision:
       improvements.length > 0
-        ? "Revise the asset to improve clarity, strengthen the CTA, and remove any internal or unsupported language while preserving the core idea."
+        ? "Revise the asset to improve clarity, strengthen the CTA, add concrete buyer-specific detail, and remove any generic, internal, or unsupported language while preserving the core idea."
         : "Move this asset to approval review.",
     model: "fast-deterministic-quality-v1",
     source: "heuristic",
