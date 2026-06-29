@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { getAssetAccessForUser } from "@/lib/accounts/asset-access";
 import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
 import { startGalaxyAiWorkflowRun } from "@/lib/galaxyai/client";
 import { logActivity } from "@/lib/security/auditLog";
 import type { Json } from "@/types/database.types";
@@ -62,15 +64,13 @@ function buildGalaxyAiValues(input: {
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = untypedSupabase(await createClient());
     const body = await request.json();
 
     const workflowId =
       typeof body.workflowId === "string" ? body.workflowId : null;
     const assetId = typeof body.assetId === "string" ? body.assetId : null;
-    const campaignId =
-      typeof body.campaignId === "string" ? body.campaignId : null;
-
+    
     if (!workflowId || !assetId) {
       return NextResponse.json(
         { error: "workflowId and assetId are required." },
@@ -87,16 +87,31 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data: asset, error: assetError } = await supabase
-      .from("generated_assets")
-      .select("*")
-      .eq("id", assetId)
-      .eq("user_id", user.id)
-      .single();
+    const assetAccess = await getAssetAccessForUser({
+      supabase,
+      assetId,
+      userId: user.id,
+    });
 
-    if (assetError || !asset) {
+    if (!assetAccess.asset || !assetAccess.canView) {
       return NextResponse.json({ error: "Asset not found." }, { status: 404 });
     }
+
+    if (!assetAccess.accountId) {
+      return NextResponse.json(
+        { error: "This GalaxyAI asset must be assigned to a workspace before it can be run." },
+        { status: 400 }
+      );
+    }
+
+    if (!assetAccess.canManage) {
+      return NextResponse.json(
+        { error: "You do not have permission to run GalaxyAI workflows for this workspace." },
+        { status: 403 }
+      );
+    }
+
+    const asset = assetAccess.asset;
 
     const supportedGalaxyPromptTypes = ["galaxyai_prompt", "galaxyai_image_prompt"];
 
@@ -135,7 +150,8 @@ export async function POST(request: Request) {
       .from("galaxyai_runs")
       .insert({
         user_id: user.id,
-        campaign_id: campaignId ?? asset.campaign_id ?? null,
+        account_id: assetAccess.accountId,
+        campaign_id: asset.campaign_id ?? null,
         asset_id: asset.id,
         galaxy_run_id: galaxyRunId,
         galaxy_workflow_id: workflowId,
@@ -181,9 +197,10 @@ export async function POST(request: Request) {
         workflowId,
         runId: galaxyRunId,
         assetId: asset.id,
+        accountId: assetAccess.accountId,
         assetType: asset.asset_type,
         parentAssetId: asset.parent_asset_id ?? null,
-        campaignId: campaignId ?? asset.campaign_id ?? null,
+        campaignId: asset.campaign_id ?? null,
         inputMapping:
           GALAXYAI_WORKFLOW_INPUT_MAPPINGS[workflowId] ?? "fallback_prompt_mapping",
       },

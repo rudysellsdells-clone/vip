@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getActiveWorkspaceForUser, activeWorkspaceManageRequiredMessage, activeWorkspaceRequiredMessage } from "@/lib/accounts/active-workspace";
 import { braveResultToDirectoryOpportunity } from "@/lib/link-builder/directory-discovery";
 import { searchBraveWeb } from "@/lib/link-builder/brave-search";
 import { createClient } from "@/lib/supabase/server";
@@ -37,6 +38,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+  if (!workspace) {
+    return NextResponse.json({ error: activeWorkspaceRequiredMessage() }, { status: 400 });
+  }
+
+  if (!workspace.canManageActiveAccount) {
+    return NextResponse.json({ error: activeWorkspaceManageRequiredMessage() }, { status: 403 });
+  }
+
   const formData = await request.formData();
   const submittedQuery = String(formData.get("query") || "").trim();
   const country = String(formData.get("country") || "US").trim() || "US";
@@ -47,7 +58,7 @@ export async function POST(request: Request) {
   const { data: profile } = await supabase
     .from("directory_profiles")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("account_id", workspace.activeAccountId)
     .eq("active", true)
     .order("updated_at", { ascending: false })
     .limit(1)
@@ -95,6 +106,7 @@ export async function POST(request: Request) {
   if (candidates.length === 0) {
     await supabase.from("activity_log").insert({
       user_id: user.id,
+      account_id: workspace.activeAccountId,
       activity_type: "directory_discovery_completed",
       title: "Directory discovery completed",
       description: `Brave returned ${rawResultCount} result(s), but VIP found no directory-like candidates.`,
@@ -124,7 +136,7 @@ export async function POST(request: Request) {
   const { data: existingRows } = await supabase
     .from("directory_opportunities")
     .select("url,domain")
-    .eq("user_id", user.id);
+    .eq("account_id", workspace.activeAccountId);
 
   const existingUrls = new Set(
     ((existingRows ?? []) as Array<Record<string, string>>).map((row) => row.url)
@@ -140,6 +152,7 @@ export async function POST(request: Request) {
       .insert(
         newCandidates.map((candidate) => ({
           user_id: user.id,
+          account_id: workspace.activeAccountId,
           ...candidate,
         }))
       )
@@ -154,6 +167,7 @@ export async function POST(request: Request) {
 
   await supabase.from("activity_log").insert({
     user_id: user.id,
+    account_id: workspace.activeAccountId,
     activity_type: "directory_discovery_completed",
     title: "Directory discovery completed",
     description: `Brave returned ${rawResultCount} result(s), found ${candidates.length} candidate(s), saved ${insertedRows.length}.`,

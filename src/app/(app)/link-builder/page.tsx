@@ -13,7 +13,9 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
+import { getActiveWorkspaceForUser } from "@/lib/accounts/active-workspace";
 import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
 
 type DirectoryProfile = {
   id: string;
@@ -91,7 +93,7 @@ function scoreLabel(value: unknown) {
 }
 
 export default async function LinkBuilderPage() {
-  const supabase = await createClient();
+  const supabase = untypedSupabase(await createClient());
 
   const {
     data: { user },
@@ -101,12 +103,20 @@ export default async function LinkBuilderPage() {
     redirect("/login");
   }
 
+  const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+  if (!workspace) {
+    redirect("/accounts");
+  }
+
+  const activeWorkspace = workspace!;
+
   const [profileResult, opportunitiesResult, submissionsResult, backlinksResult] =
     await Promise.all([
       supabase
         .from("directory_profiles")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", activeWorkspace.activeAccountId)
         .eq("active", true)
         .order("updated_at", { ascending: false })
         .limit(1)
@@ -115,21 +125,21 @@ export default async function LinkBuilderPage() {
       supabase
         .from("directory_opportunities")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", activeWorkspace.activeAccountId)
         .order("updated_at", { ascending: false })
         .limit(50),
 
       supabase
         .from("directory_submissions")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", activeWorkspace.activeAccountId)
         .order("updated_at", { ascending: false })
         .limit(50),
 
       supabase
         .from("acquired_backlinks")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", activeWorkspace.activeAccountId)
         .order("updated_at", { ascending: false })
         .limit(50),
     ]);
@@ -149,9 +159,9 @@ export default async function LinkBuilderPage() {
   return (
     <WebsitePage>
       <WebsiteHero
-        eyebrow="Directory Link Builder"
+        eyebrow={`Directory Link Builder • ${activeWorkspace.activeAccountName}`}
         title="Build legitimate directory backlinks with a controlled workflow."
-        description="Find relevant directories, prepare submission copy, track statuses, and verify live backlinks without turning VIP into a spam bot."
+        description="Find relevant directories, prepare submission copy, track statuses, and verify live backlinks inside the active workspace without turning VIP into a spam bot."
         primaryAction={{ label: "Discover Opportunities", href: "#discover-opportunities" }}
         secondaryAction={{ label: "Verify Backlink", href: "#verify-backlink" }}
       />
@@ -160,7 +170,7 @@ export default async function LinkBuilderPage() {
         <WebsiteMetric
           label="Opportunities"
           value={opportunities.length}
-          description="Directories and listing pages in review."
+          description="Workspace directories and listing pages in review."
           dot="blue"
         />
         <WebsiteMetric

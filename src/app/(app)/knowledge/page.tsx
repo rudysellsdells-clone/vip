@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { KnowledgeSourceForm } from "@/components/knowledge/KnowledgeSourceForm";
 import { ContentExampleForm } from "@/components/knowledge/ContentExampleForm";
+import { KnowledgeSourceForm } from "@/components/knowledge/KnowledgeSourceForm";
 import {
   WebsiteHero,
   WebsiteMetric,
@@ -9,6 +8,9 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
+import { getActiveWorkspaceForUser } from "@/lib/accounts/active-workspace";
+import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
 
 function formatDate(value: string | null) {
   if (!value) return "No date";
@@ -22,15 +24,21 @@ function truncate(value: string, maxLength: number) {
 }
 
 export default async function KnowledgePage() {
-  const supabase = await createClient();
+  const supabase = untypedSupabase(await createClient());
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
 
+  const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+  if (!workspace) redirect("/accounts");
+
+  const activeWorkspace = workspace!;
+
   const { data: knowledgeSources } = await supabase
     .from("knowledge_sources")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("account_id", activeWorkspace.activeAccountId)
     .eq("active", true)
     .order("updated_at", { ascending: false })
     .limit(25);
@@ -38,7 +46,7 @@ export default async function KnowledgePage() {
   const { data: contentExamples } = await supabase
     .from("content_examples")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("account_id", activeWorkspace.activeAccountId)
     .eq("approved", true)
     .order("updated_at", { ascending: false })
     .limit(25);
@@ -49,15 +57,15 @@ export default async function KnowledgePage() {
   return (
     <WebsitePage>
       <WebsiteHero
-        eyebrow="Business Memory"
+        eyebrow={`Business Memory • ${activeWorkspace.activeAccountName}`}
         title="Give VIP better source material."
-        description="Store service pages, website copy, examples, proof points, testimonials, and notes so every campaign becomes more specific."
+        description="Store service pages, website copy, examples, proof points, testimonials, and notes inside the active workspace so every campaign becomes more specific."
         primaryAction={{ label: "Brand Voice", href: "/brand-voice" }}
         secondaryAction={{ label: "Dashboard", href: "/dashboard" }}
       />
 
       <section className={websiteStyles.metricsGrid}>
-        <WebsiteMetric label="Knowledge Sources" value={sources.length} description="Business memory entries." dot="blue" />
+        <WebsiteMetric label="Knowledge Sources" value={sources.length} description="Workspace memory entries." dot="blue" />
         <WebsiteMetric label="Content Examples" value={examples.length} description="Approved style examples." dot="purple" />
         <WebsiteMetric label="Memory Status" value={sources.length || examples.length ? "Growing" : "Empty"} description="More context creates better outputs." dot={sources.length || examples.length ? "green" : "gold"} />
         <WebsiteMetric label="Next Step" value="Add" description="Paste useful sales or service material." dot="gold" />
@@ -91,7 +99,7 @@ export default async function KnowledgePage() {
                 </article>
               ))
             ) : (
-              <div className={websiteStyles.empty}>No knowledge sources yet.</div>
+              <div className={websiteStyles.empty}>No knowledge sources yet for this workspace.</div>
             )}
           </div>
         </WebsiteSection>
@@ -99,7 +107,7 @@ export default async function KnowledgePage() {
         <WebsiteSection
           eyebrow="Examples"
           title="Content examples"
-          description="Approved examples of Rudy's style, sales language, and campaign tone."
+          description="Approved examples of style, sales language, and campaign tone."
         >
           <div className={websiteStyles.cardGrid}>
             {examples.length ? (
@@ -112,7 +120,7 @@ export default async function KnowledgePage() {
                 </article>
               ))
             ) : (
-              <div className={websiteStyles.empty}>No content examples yet.</div>
+              <div className={websiteStyles.empty}>No content examples yet for this workspace.</div>
             )}
           </div>
         </WebsiteSection>

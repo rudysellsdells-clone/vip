@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
+import { getActiveWorkspaceForUser, activeWorkspaceManageRequiredMessage, activeWorkspaceRequiredMessage } from "@/lib/accounts/active-workspace";
 import { logActivity } from "@/lib/security/auditLog";
 
 const PROSPECT_STATUSES = [
@@ -34,7 +36,7 @@ function getProspectStatus(value: unknown) {
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = untypedSupabase(await createClient());
     const body = await request.json().catch(() => ({}));
 
     const {
@@ -44,6 +46,16 @@ export async function POST(request: Request) {
 
     if (userError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+    if (!workspace) {
+      return NextResponse.json({ error: activeWorkspaceRequiredMessage() }, { status: 400 });
+    }
+
+    if (!workspace.canManageActiveAccount) {
+      return NextResponse.json({ error: activeWorkspaceManageRequiredMessage() }, { status: 403 });
     }
 
     const companyName = getString(body.company_name);
@@ -59,6 +71,7 @@ export async function POST(request: Request) {
       .from("prospects")
       .insert({
         user_id: user.id,
+        account_id: workspace.activeAccountId,
         company_name: companyName,
         contact_name: getOptionalString(body.contact_name),
         email: getOptionalString(body.email),
@@ -84,6 +97,7 @@ export async function POST(request: Request) {
       description: companyName,
       metadata: {
         prospectId: prospect.id,
+        accountId: workspace.activeAccountId,
         status: prospect.status,
         buyerSegment: prospect.buyer_segment,
       },

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getActiveWorkspaceForUser, activeWorkspaceManageRequiredMessage, activeWorkspaceRequiredMessage } from "@/lib/accounts/active-workspace";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -14,10 +15,16 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+  if (!workspace) {
+    return NextResponse.json({ error: activeWorkspaceRequiredMessage() }, { status: 400 });
+  }
+
   const { data, error } = await supabase
     .from("directory_submissions")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("account_id", workspace.activeAccountId)
     .order("updated_at", { ascending: false })
     .limit(100);
 
@@ -38,6 +45,16 @@ export async function POST(request: Request) {
 
   if (userError || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+  if (!workspace) {
+    return NextResponse.json({ error: activeWorkspaceRequiredMessage() }, { status: 400 });
+  }
+
+  if (!workspace.canManageActiveAccount) {
+    return NextResponse.json({ error: activeWorkspaceManageRequiredMessage() }, { status: 403 });
   }
 
   const formData = await request.formData();
@@ -66,7 +83,7 @@ export async function POST(request: Request) {
     .from("directory_submissions")
     .update(updatePayload)
     .eq("id", submissionId)
-    .eq("user_id", user.id)
+    .eq("account_id", workspace.activeAccountId)
     .select("*")
     .single();
 

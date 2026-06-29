@@ -90,7 +90,7 @@ export async function POST(_request: Request, context: RouteContext) {
       );
     }
 
-    const cloneContext = await loadDigitalCloneContext(user.id);
+    const cloneContext = await loadDigitalCloneContext(user.id, accountId);
 
     const assetPack = await generateMarketingAssetPackWithCloneMemory({
       campaign: normalizeCampaignForPrompt(campaign),

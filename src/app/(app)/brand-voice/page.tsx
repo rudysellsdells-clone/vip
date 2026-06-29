@@ -1,8 +1,6 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { DigitalCloneProfileForm } from "@/components/clone/DigitalCloneProfileForm";
 import { BrandRuleForm } from "@/components/clone/BrandRuleForm";
-import { DEFAULT_DIGITAL_CLONE_PROFILE } from "@/lib/clone/defaults";
+import { DigitalCloneProfileForm } from "@/components/clone/DigitalCloneProfileForm";
 import {
   WebsiteHero,
   WebsiteMetric,
@@ -10,17 +8,27 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
+import { getActiveWorkspaceForUser } from "@/lib/accounts/active-workspace";
+import { DEFAULT_DIGITAL_CLONE_PROFILE } from "@/lib/clone/defaults";
+import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
 
 export default async function BrandVoicePage() {
-  const supabase = await createClient();
+  const supabase = untypedSupabase(await createClient());
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
 
+  const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+  if (!workspace) redirect("/accounts");
+
+  const activeWorkspace = workspace!;
+
   const { data: profile } = await supabase
     .from("digital_clone_profiles")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("account_id", activeWorkspace.activeAccountId)
     .eq("active", true)
     .order("updated_at", { ascending: false })
     .limit(1)
@@ -29,7 +37,7 @@ export default async function BrandVoicePage() {
   const { data: brandRules } = await supabase
     .from("brand_rules")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("account_id", activeWorkspace.activeAccountId)
     .eq("active", true)
     .order("priority", { ascending: true })
     .order("created_at", { ascending: true });
@@ -40,9 +48,9 @@ export default async function BrandVoicePage() {
   return (
     <WebsitePage>
       <WebsiteHero
-        eyebrow="Business Memory"
+        eyebrow={`Business Memory • ${activeWorkspace.activeAccountName}`}
         title="Shape how VIP thinks and writes."
-        description="Manage the brand voice, positioning, rules, and guardrails that make VIP sound more like Rudy and less like generic AI."
+        description="Manage the brand voice, positioning, rules, and guardrails for the active workspace so VIP sounds specific instead of generic."
         primaryAction={{ label: "Knowledge Library", href: "/knowledge" }}
         secondaryAction={{ label: "Dashboard", href: "/dashboard" }}
       />
@@ -73,7 +81,7 @@ export default async function BrandVoicePage() {
               </article>
             ))
           ) : (
-            <div className={websiteStyles.empty}>No brand rules yet. Add a few rules below.</div>
+            <div className={websiteStyles.empty}>No brand rules yet for this workspace. Add a few rules below.</div>
           )}
         </div>
 

@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 import { OpportunityForm } from "@/components/opportunities/OpportunityForm";
 import {
   WebsiteBadge,
@@ -9,6 +8,9 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
+import { getActiveWorkspaceForUser } from "@/lib/accounts/active-workspace";
+import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
 
 type Option = {
   id: string;
@@ -31,16 +33,22 @@ function formatLabel(value: string | null | undefined) {
 }
 
 export default async function OpportunitiesPage() {
-  const supabase = await createClient();
+  const supabase = untypedSupabase(await createClient());
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
 
+  const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+  if (!workspace) redirect("/accounts");
+
+  const activeWorkspace = workspace!;
+
   const [opportunitiesResult, prospectsResult, serviceLinesResult, offersResult] = await Promise.all([
-    supabase.from("opportunities").select("*").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(100),
-    supabase.from("prospects").select("id,company_name").eq("user_id", user.id).order("company_name", { ascending: true }),
-    supabase.from("service_lines").select("id,name").eq("user_id", user.id).eq("active", true).order("sort_order", { ascending: true }),
-    supabase.from("offers").select("id,name").eq("user_id", user.id).eq("active", true).order("name", { ascending: true }),
+    supabase.from("opportunities").select("*").eq("account_id", activeWorkspace.activeAccountId).order("updated_at", { ascending: false }).limit(100),
+    supabase.from("prospects").select("id,company_name").eq("account_id", activeWorkspace.activeAccountId).order("company_name", { ascending: true }),
+    supabase.from("service_lines").select("id,name").eq("account_id", activeWorkspace.activeAccountId).eq("active", true).order("sort_order", { ascending: true }),
+    supabase.from("offers").select("id,name").eq("account_id", activeWorkspace.activeAccountId).eq("active", true).order("name", { ascending: true }),
   ]);
 
   if (opportunitiesResult.error) console.error("Failed to load opportunities", opportunitiesResult.error);
@@ -60,9 +68,9 @@ export default async function OpportunitiesPage() {
   return (
     <WebsitePage>
       <WebsiteHero
-        eyebrow="Revenue Pipeline"
+        eyebrow={`Revenue Pipeline • ${activeWorkspace.activeAccountName}`}
         title="Turn marketing activity into real opportunities."
-        description="Track project, retainer, audit, and consulting opportunities that come from campaigns, prospecting, and follow-up."
+        description="Track project, retainer, audit, and consulting opportunities inside the active workspace so pipeline data stays separated by account."
         primaryAction={{ label: "Add Prospects", href: "/prospects" }}
         secondaryAction={{ label: "Dashboard", href: "/dashboard" }}
       />
@@ -71,7 +79,7 @@ export default async function OpportunitiesPage() {
         <WebsiteMetric label="Open Deals" value={openOpportunities.length} description="Active sales conversations." dot="blue" />
         <WebsiteMetric label="Open Value" value={formatCurrency(totalOpenValue)} description="Estimated pipeline value." dot="green" />
         <WebsiteMetric label="Won" value={wonOpportunities.length} description="Closed successful opportunities." dot="purple" />
-        <WebsiteMetric label="Tracked" value={opportunities.length} description="All opportunities in VIP." dot="gold" />
+        <WebsiteMetric label="Tracked" value={opportunities.length} description="All opportunities in this workspace." dot="gold" />
       </section>
 
       <div className={websiteStyles.formFrame}>
@@ -115,7 +123,7 @@ export default async function OpportunitiesPage() {
           </div>
         ) : (
           <div className={websiteStyles.empty}>
-            No opportunities yet. Create the first opportunity when a prospect becomes a real sales conversation.
+            No opportunities yet for this workspace. Create the first opportunity when a prospect becomes a real sales conversation.
           </div>
         )}
       </WebsiteSection>

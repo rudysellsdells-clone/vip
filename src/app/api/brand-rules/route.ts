@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { getActiveWorkspaceForUser, activeWorkspaceManageRequiredMessage, activeWorkspaceRequiredMessage } from "@/lib/accounts/active-workspace";
 import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
 import { logActivity } from "@/lib/security/auditLog";
 
 function getString(value: unknown, fallback = "") {
@@ -8,7 +10,7 @@ function getString(value: unknown, fallback = "") {
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = untypedSupabase(await createClient());
     const body = await request.json().catch(() => ({}));
 
     const {
@@ -18,6 +20,16 @@ export async function POST(request: Request) {
 
     if (userError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+    if (!workspace) {
+      return NextResponse.json({ error: activeWorkspaceRequiredMessage() }, { status: 400 });
+    }
+
+    if (!workspace.canManageActiveAccount) {
+      return NextResponse.json({ error: activeWorkspaceManageRequiredMessage() }, { status: 403 });
     }
 
     const category = getString(body.category, "voice");
@@ -35,6 +47,7 @@ export async function POST(request: Request) {
       .from("brand_rules")
       .insert({
         user_id: user.id,
+        account_id: workspace.activeAccountId,
         category,
         rule_text: ruleText,
         priority,
@@ -54,6 +67,7 @@ export async function POST(request: Request) {
       description: ruleText,
       metadata: {
         ruleId: rule.id,
+        accountId: workspace.activeAccountId,
         category,
       },
     });

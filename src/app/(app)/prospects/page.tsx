@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 import { ProspectForm } from "@/components/prospects/ProspectForm";
 import {
   WebsiteBadge,
@@ -10,6 +9,9 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
+import { getActiveWorkspaceForUser } from "@/lib/accounts/active-workspace";
+import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
 
 function formatDate(value: string | null) {
   if (!value) return "No date";
@@ -17,15 +19,21 @@ function formatDate(value: string | null) {
 }
 
 export default async function ProspectsPage() {
-  const supabase = await createClient();
+  const supabase = untypedSupabase(await createClient());
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
 
+  const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+  if (!workspace) redirect("/accounts");
+
+  const activeWorkspace = workspace!;
+
   const { data: prospectsData, error } = await supabase
     .from("prospects")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("account_id", activeWorkspace.activeAccountId)
     .order("updated_at", { ascending: false })
     .limit(100);
 
@@ -39,15 +47,15 @@ export default async function ProspectsPage() {
   return (
     <WebsitePage>
       <WebsiteHero
-        eyebrow="Revenue Pipeline"
+        eyebrow={`Revenue Pipeline • ${activeWorkspace.activeAccountName}`}
         title="Track prospects worth pursuing."
-        description="Keep your best-fit businesses organized so campaigns can turn into conversations, opportunities, projects, and retainers."
+        description="Keep your best-fit businesses organized inside the active workspace so campaigns can turn into conversations, opportunities, projects, and retainers."
         primaryAction={{ label: "View Opportunities", href: "/opportunities" }}
         secondaryAction={{ label: "Create Campaign", href: "/campaigns" }}
       />
 
       <section className={websiteStyles.metricsGrid}>
-        <WebsiteMetric label="Total Prospects" value={prospects.length} description="Businesses in your working list." dot="blue" />
+        <WebsiteMetric label="Total Prospects" value={prospects.length} description="Businesses in this workspace list." dot="blue" />
         <WebsiteMetric label="New" value={newCount} description="Added but not worked yet." dot="gold" />
         <WebsiteMetric label="Qualified" value={qualifiedCount} description="Good-fit potential buyers." dot="green" />
         <WebsiteMetric label="Active Opportunity" value={activeCount} description="Already connected to pipeline." href="/opportunities" dot="purple" />
@@ -60,7 +68,7 @@ export default async function ProspectsPage() {
       <WebsiteSection
         eyebrow="Working List"
         title="Prospect list"
-        description="Use this as the practical list for targeting, outreach, and follow-up."
+        description="Use this as the practical account-scoped list for targeting, outreach, and follow-up."
       >
         {prospects.length ? (
           <div className={websiteStyles.cardGrid}>
@@ -97,7 +105,7 @@ export default async function ProspectsPage() {
           </div>
         ) : (
           <div className={websiteStyles.empty}>
-            No prospects yet. Add the first company you want to pursue.
+            No prospects yet for this workspace. Add the first company you want to pursue.
           </div>
         )}
       </WebsiteSection>

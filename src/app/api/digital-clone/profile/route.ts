@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getActiveWorkspaceForUser, activeWorkspaceManageRequiredMessage, activeWorkspaceRequiredMessage } from "@/lib/accounts/active-workspace";
 import { DEFAULT_DIGITAL_CLONE_PROFILE } from "@/lib/clone/defaults";
 import { logActivity } from "@/lib/security/auditLog";
+import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
 
 function getString(value: unknown, fallback = "") {
   return typeof value === "string" && value.trim().length ? value.trim() : fallback;
@@ -9,7 +11,7 @@ function getString(value: unknown, fallback = "") {
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = untypedSupabase(await createClient());
     const body = await request.json().catch(() => ({}));
 
     const {
@@ -21,8 +23,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+    if (!workspace) {
+      return NextResponse.json({ error: activeWorkspaceRequiredMessage() }, { status: 400 });
+    }
+
+    if (!workspace.canManageActiveAccount) {
+      return NextResponse.json({ error: activeWorkspaceManageRequiredMessage() }, { status: 403 });
+    }
+
     const payload = {
       user_id: user.id,
+      account_id: workspace.activeAccountId,
       name: getString(body.name, DEFAULT_DIGITAL_CLONE_PROFILE.name),
       purpose: getString(body.purpose, DEFAULT_DIGITAL_CLONE_PROFILE.purpose),
       voice_summary: getString(body.voice_summary, DEFAULT_DIGITAL_CLONE_PROFILE.voice_summary),
@@ -42,7 +55,7 @@ export async function POST(request: Request) {
     const { data: existingProfile } = await supabase
       .from("digital_clone_profiles")
       .select("id")
-      .eq("user_id", user.id)
+      .eq("account_id", workspace.activeAccountId)
       .eq("active", true)
       .order("updated_at", { ascending: false })
       .limit(1)
@@ -53,7 +66,7 @@ export async function POST(request: Request) {
           .from("digital_clone_profiles")
           .update(payload)
           .eq("id", existingProfile.id)
-          .eq("user_id", user.id)
+          .eq("account_id", workspace.activeAccountId)
           .select("*")
           .single()
       : supabase.from("digital_clone_profiles").insert(payload).select("*").single();
@@ -68,9 +81,10 @@ export async function POST(request: Request) {
       userId: user.id,
       activityType: "digital_clone_profile_updated",
       title: "Digital clone profile updated",
-      description: "Updated Rudy's Marketing Twin profile.",
+      description: "Updated the active workspace Marketing Twin profile.",
       metadata: {
         profileId: profile.id,
+        accountId: workspace.activeAccountId,
       },
     });
 

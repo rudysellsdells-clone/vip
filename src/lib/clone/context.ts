@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
 
 export type DigitalCloneContext = {
   profile: unknown | null;
@@ -149,8 +150,12 @@ export function formatDigitalCloneContext(input: {
     .join("\n\n");
 }
 
-export async function loadDigitalCloneContext(userId: string): Promise<DigitalCloneContext> {
-  const supabase = await createClient();
+export async function loadDigitalCloneContext(userId: string, accountId?: string | null): Promise<DigitalCloneContext> {
+  const supabase = untypedSupabase(await createClient());
+  const scoped = (table: string) => {
+    const query = supabase.from(table).select("*");
+    return accountId ? query.eq("account_id", accountId) : query.eq("user_id", userId);
+  };
 
   const [
     profileResult,
@@ -161,57 +166,36 @@ export async function loadDigitalCloneContext(userId: string): Promise<DigitalCl
     buyerSegmentsResult,
     offersResult,
   ] = await Promise.all([
-    supabase
-      .from("digital_clone_profiles")
-      .select("*")
-      .eq("user_id", userId)
+    scoped("digital_clone_profiles")
       .eq("active", true)
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
 
-    supabase
-      .from("brand_rules")
-      .select("*")
-      .eq("user_id", userId)
+    scoped("brand_rules")
       .eq("active", true)
       .order("priority", { ascending: true })
       .order("created_at", { ascending: true }),
 
-    supabase
-      .from("content_examples")
-      .select("*")
-      .eq("user_id", userId)
+    scoped("content_examples")
       .eq("approved", true)
       .order("updated_at", { ascending: false })
       .limit(12),
 
-    supabase
-      .from("knowledge_sources")
-      .select("*")
-      .eq("user_id", userId)
+    scoped("knowledge_sources")
       .eq("active", true)
       .order("updated_at", { ascending: false })
       .limit(12),
 
-    supabase
-      .from("service_lines")
-      .select("*")
-      .eq("user_id", userId)
+    scoped("service_lines")
       .eq("active", true)
       .order("sort_order", { ascending: true }),
 
-    supabase
-      .from("buyer_segments")
-      .select("*")
-      .eq("user_id", userId)
+    scoped("buyer_segments")
       .eq("active", true)
       .order("sort_order", { ascending: true }),
 
-    supabase
-      .from("offers")
-      .select("*")
-      .eq("user_id", userId)
+    scoped("offers")
       .eq("active", true)
       .order("created_at", { ascending: false }),
   ]);

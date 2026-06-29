@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { getActiveWorkspaceForUser, activeWorkspaceManageRequiredMessage, activeWorkspaceRequiredMessage } from "@/lib/accounts/active-workspace";
 import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
 import { CONTENT_EXAMPLE_TYPES } from "@/lib/clone/defaults";
 import { logActivity } from "@/lib/security/auditLog";
 
@@ -15,7 +17,7 @@ function getTags(value: unknown) {
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = untypedSupabase(await createClient());
     const body = await request.json().catch(() => ({}));
 
     const {
@@ -25,6 +27,16 @@ export async function POST(request: Request) {
 
     if (userError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+    if (!workspace) {
+      return NextResponse.json({ error: activeWorkspaceRequiredMessage() }, { status: 400 });
+    }
+
+    if (!workspace.canManageActiveAccount) {
+      return NextResponse.json({ error: activeWorkspaceManageRequiredMessage() }, { status: 403 });
     }
 
     const title = getString(body.title);
@@ -46,6 +58,7 @@ export async function POST(request: Request) {
       .from("content_examples")
       .insert({
         user_id: user.id,
+        account_id: workspace.activeAccountId,
         title,
         source: getString(body.source, ""),
         content,
@@ -67,6 +80,7 @@ export async function POST(request: Request) {
       description: title,
       metadata: {
         exampleId: example.id,
+        accountId: workspace.activeAccountId,
         contentType,
       },
     });

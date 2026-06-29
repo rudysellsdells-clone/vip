@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getAccountAccessForUser } from "@/lib/accounts/account-context";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { untypedSupabase } from "@/lib/supabase/untyped";
@@ -205,6 +206,7 @@ async function uploadGalaxyAiImageToStorage(input: {
 async function createGalaxyAiMediaAssetIfNeeded(input: {
   supabase: Awaited<ReturnType<typeof createClient>>;
   userId: string;
+  accountId: string | null;
   campaignId: string | null;
   localRunId: string;
   galaxyRunId: string;
@@ -219,7 +221,7 @@ async function createGalaxyAiMediaAssetIfNeeded(input: {
   const { data: existingAssets, error: existingError } = await input.supabase
     .from("generated_assets")
     .select("id, metadata")
-    .eq("user_id", input.userId)
+    .eq("account_id", input.accountId)
     .eq("campaign_id", input.campaignId)
     .eq("asset_type", "galaxyai_media");
 
@@ -246,6 +248,7 @@ async function createGalaxyAiMediaAssetIfNeeded(input: {
     .from("generated_assets")
     .insert({
       user_id: input.userId,
+      account_id: input.accountId,
       campaign_id: input.campaignId,
       asset_type: "galaxyai_media",
       title: "GalaxyAI Generated Media",
@@ -273,6 +276,7 @@ async function createGalaxyAiMediaAssetIfNeeded(input: {
 async function createGeneratedSocialImageAssetIfNeeded(input: {
   supabase: Awaited<ReturnType<typeof createClient>>;
   userId: string;
+  accountId: string | null;
   campaignId: string | null;
   localRun: Record<string, unknown>;
   localRunId: string;
@@ -307,7 +311,7 @@ async function createGeneratedSocialImageAssetIfNeeded(input: {
     .from("generated_assets")
     .select("*")
     .eq("id", promptAssetId)
-    .eq("user_id", input.userId)
+    .eq("account_id", input.accountId)
     .maybeSingle();
 
   if (promptAssetError || !promptAsset) {
@@ -330,7 +334,7 @@ async function createGeneratedSocialImageAssetIfNeeded(input: {
   const { data: existingAssets, error: existingError } = await readSupabase
     .from("generated_assets")
     .select("id, metadata")
-    .eq("user_id", input.userId)
+    .eq("account_id", input.accountId)
     .eq("asset_type", "generated_social_image")
     .eq("parent_asset_id", parentSocialAssetId ?? promptAsset.id);
 
@@ -478,7 +482,7 @@ async function createGeneratedSocialImageAssetIfNeeded(input: {
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const { runId } = await context.params;
-    const supabase = await createClient();
+    const supabase = untypedSupabase(await createClient());
 
     const {
       data: { user },
@@ -493,7 +497,6 @@ export async function GET(_request: Request, context: RouteContext) {
       .from("galaxyai_runs")
       .select("*")
       .eq("id", runId)
-      .eq("user_id", user.id)
       .maybeSingle();
 
     if (!localRun && !localRunError) {
@@ -501,7 +504,6 @@ export async function GET(_request: Request, context: RouteContext) {
         .from("galaxyai_runs")
         .select("*")
         .eq("galaxy_run_id", runId)
-        .eq("user_id", user.id)
         .maybeSingle();
 
       localRun = fallbackResult.data;
@@ -514,6 +516,28 @@ export async function GET(_request: Request, context: RouteContext) {
 
     if (!localRun || !localRun.galaxy_run_id || !localRun.galaxy_workflow_id) {
       return NextResponse.json({ error: "GalaxyAI run not found." }, { status: 404 });
+    }
+
+    const localRunAccountId = stringOrNull(localRun.account_id);
+
+    if (!localRunAccountId) {
+      return NextResponse.json(
+        { error: "This GalaxyAI run is not assigned to a workspace." },
+        { status: 400 }
+      );
+    }
+
+    const accountAccess = await getAccountAccessForUser({
+      supabase,
+      accountId: localRunAccountId,
+      userId: user.id,
+    });
+
+    if (!accountAccess.canManage) {
+      return NextResponse.json(
+        { error: "You do not have permission to update this GalaxyAI run." },
+        { status: 403 }
+      );
     }
 
     const galaxyRun = await getGalaxyAiRun(localRun.galaxy_run_id);
@@ -533,6 +557,7 @@ export async function GET(_request: Request, context: RouteContext) {
       createdSocialImageAsset = await createGeneratedSocialImageAssetIfNeeded({
         supabase,
         userId: user.id,
+        accountId: localRunAccountId,
         campaignId: localRun.campaign_id,
         localRun: localRun as Record<string, unknown>,
         localRunId: localRun.id,
@@ -546,6 +571,7 @@ export async function GET(_request: Request, context: RouteContext) {
         createdMediaAsset = await createGalaxyAiMediaAssetIfNeeded({
           supabase,
           userId: user.id,
+          accountId: localRunAccountId,
           campaignId: localRun.campaign_id,
           localRunId: localRun.id,
           galaxyRunId: localRun.galaxy_run_id,
@@ -581,7 +607,7 @@ export async function GET(_request: Request, context: RouteContext) {
         completed_at: isFinished ? getFinishedAt(galaxyRunRecord) : null,
       })
       .eq("id", localRun.id)
-      .eq("user_id", user.id)
+      .eq("account_id", localRunAccountId)
       .select("*")
       .single();
 
@@ -605,6 +631,7 @@ export async function GET(_request: Request, context: RouteContext) {
           : `GalaxyAI run is ${status}.`,
       metadata: toJson({
         localRunId: stringOrNull(localRun.id),
+        accountId: localRunAccountId,
         galaxyRunId: stringOrNull(localRun.galaxy_run_id),
         status,
         mediaCount: matchedMedia.length,

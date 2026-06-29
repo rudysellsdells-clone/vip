@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getActiveWorkspaceForUser, activeWorkspaceManageRequiredMessage, activeWorkspaceRequiredMessage } from "@/lib/accounts/active-workspace";
 import { listGalaxyAiWorkflows } from "@/lib/galaxyai/client";
 import { logActivity } from "@/lib/security/auditLog";
+import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
 import type { Json } from "@/types/database.types";
 
 function toJson(value: unknown): Json {
@@ -36,7 +38,7 @@ function getWorkflowDescription(workflow: Record<string, unknown>) {
 
 export async function GET() {
   try {
-    const supabase = await createClient();
+    const supabase = untypedSupabase(await createClient());
 
     const {
       data: { user },
@@ -45,6 +47,16 @@ export async function GET() {
 
     if (userError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+    if (!workspace) {
+      return NextResponse.json({ error: activeWorkspaceRequiredMessage() }, { status: 400 });
+    }
+
+    if (!workspace.canManageActiveAccount) {
+      return NextResponse.json({ error: activeWorkspaceManageRequiredMessage() }, { status: 403 });
     }
 
     const workflows = await listGalaxyAiWorkflows();
@@ -56,6 +68,7 @@ export async function GET() {
       const { error } = await supabase.from("galaxyai_workflows").upsert(
         {
           user_id: user.id,
+          account_id: workspace.activeAccountId,
           galaxy_workflow_id: workflowId,
           name: getWorkflowName(workflowRecord),
           description: getWorkflowDescription(workflowRecord),
@@ -64,7 +77,7 @@ export async function GET() {
           last_synced_at: new Date().toISOString(),
         },
         {
-          onConflict: "user_id,galaxy_workflow_id",
+          onConflict: "account_id,galaxy_workflow_id",
         }
       );
 
@@ -79,6 +92,7 @@ export async function GET() {
       title: "GalaxyAI workflows synced",
       description: `Synced ${workflows.length} GalaxyAI workflows.`,
       metadata: {
+        accountId: workspace.activeAccountId,
         workflowCount: workflows.length,
       },
     });

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getActiveWorkspaceForUser, activeWorkspaceManageRequiredMessage, activeWorkspaceRequiredMessage } from "@/lib/accounts/active-workspace";
 import { splitTextareaList } from "@/lib/link-builder/listing-profile";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
@@ -15,10 +16,16 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+  if (!workspace) {
+    return NextResponse.json({ error: activeWorkspaceRequiredMessage() }, { status: 400 });
+  }
+
   const { data, error } = await supabase
     .from("directory_profiles")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("account_id", workspace.activeAccountId)
     .eq("active", true)
     .order("updated_at", { ascending: false })
     .limit(1)
@@ -43,10 +50,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+  if (!workspace) {
+    return NextResponse.json({ error: activeWorkspaceRequiredMessage() }, { status: 400 });
+  }
+
+  if (!workspace.canManageActiveAccount) {
+    return NextResponse.json({ error: activeWorkspaceManageRequiredMessage() }, { status: 403 });
+  }
+
   const formData = await request.formData();
 
   const payload = {
     user_id: user.id,
+    account_id: workspace.activeAccountId,
     profile_name: String(formData.get("profile_name") || "Web Search Pros Directory Profile"),
     business_name: String(formData.get("business_name") || ""),
     website_url: String(formData.get("website_url") || ""),
@@ -82,7 +100,7 @@ export async function POST(request: Request) {
         .from("directory_profiles")
         .update(payload)
         .eq("id", existingId)
-        .eq("user_id", user.id)
+        .eq("account_id", workspace.activeAccountId)
         .select("*")
         .single()
     : await supabase.from("directory_profiles").insert(payload).select("*").single();
@@ -93,6 +111,7 @@ export async function POST(request: Request) {
 
   await supabase.from("activity_log").insert({
     user_id: user.id,
+    account_id: workspace.activeAccountId,
     activity_type: "directory_profile_saved",
     title: "Directory profile saved",
     description: payload.business_name,

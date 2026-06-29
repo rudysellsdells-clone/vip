@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getActiveWorkspaceForUser, activeWorkspaceManageRequiredMessage, activeWorkspaceRequiredMessage } from "@/lib/accounts/active-workspace";
 import {
   buildSubmissionDescription,
   chooseAnchorText,
@@ -25,11 +26,21 @@ export async function POST(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+  if (!workspace) {
+    return NextResponse.json({ error: activeWorkspaceRequiredMessage() }, { status: 400 });
+  }
+
+  if (!workspace.canManageActiveAccount) {
+    return NextResponse.json({ error: activeWorkspaceManageRequiredMessage() }, { status: 403 });
+  }
+
   const { data: opportunity, error: opportunityError } = await supabase
     .from("directory_opportunities")
     .select("*")
     .eq("id", opportunityId)
-    .eq("user_id", user.id)
+    .eq("account_id", workspace.activeAccountId)
     .single();
 
   if (opportunityError || !opportunity) {
@@ -39,7 +50,7 @@ export async function POST(_request: Request, context: RouteContext) {
   const { data: profile, error: profileError } = await supabase
     .from("directory_profiles")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("account_id", workspace.activeAccountId)
     .eq("active", true)
     .order("updated_at", { ascending: false })
     .limit(1)
@@ -67,6 +78,7 @@ export async function POST(_request: Request, context: RouteContext) {
     .from("directory_submissions")
     .insert({
       user_id: user.id,
+      account_id: workspace.activeAccountId,
       opportunity_id: opportunity.id,
       profile_id: profile.id,
       submission_url: opportunity.submit_url ?? opportunity.url,
@@ -90,10 +102,11 @@ export async function POST(_request: Request, context: RouteContext) {
       status: "approved",
     })
     .eq("id", opportunity.id)
-    .eq("user_id", user.id);
+    .eq("account_id", workspace.activeAccountId);
 
   await supabase.from("activity_log").insert({
     user_id: user.id,
+    account_id: workspace.activeAccountId,
     activity_type: "directory_opportunity_approved",
     title: "Directory opportunity approved",
     description: opportunity.directory_name ?? opportunity.domain,

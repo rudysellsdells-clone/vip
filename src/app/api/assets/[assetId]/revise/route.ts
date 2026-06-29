@@ -86,6 +86,7 @@ export async function POST(request: Request, context: RouteContext) {
 
     const revision = await generateAssetRevision({
       userId: user.id,
+      accountId,
       asset: {
         id: asset.id,
         asset_type: asset.asset_type,

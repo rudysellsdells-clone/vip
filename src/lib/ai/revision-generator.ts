@@ -22,6 +22,7 @@ type RevisionCampaign = {
 
 export type GenerateAssetRevisionInput = {
   userId: string;
+  accountId?: string | null;
   asset: RevisionAsset;
   campaign: RevisionCampaign | null;
   instructions: string;
@@ -239,7 +240,7 @@ async function callOpenAiForRevision(input: {
 export async function generateAssetRevision(
   input: GenerateAssetRevisionInput
 ): Promise<GeneratedAssetRevision> {
-  const cloneContext = await loadDigitalCloneContext(input.userId);
+  const cloneContext = await loadDigitalCloneContext(input.userId, input.accountId);
 
   const cloneMemorySnapshot = {
     profileLoaded: Boolean(cloneContext.profile),

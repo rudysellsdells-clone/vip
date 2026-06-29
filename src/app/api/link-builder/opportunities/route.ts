@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getActiveWorkspaceForUser, activeWorkspaceManageRequiredMessage, activeWorkspaceRequiredMessage } from "@/lib/accounts/active-workspace";
 import {
   extractDomain,
   normalizeUrl,
@@ -19,13 +20,19 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+  if (!workspace) {
+    return NextResponse.json({ error: activeWorkspaceRequiredMessage() }, { status: 400 });
+  }
+
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status");
 
   let query = supabase
     .from("directory_opportunities")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("account_id", workspace.activeAccountId)
     .order("updated_at", { ascending: false })
     .limit(100);
 
@@ -54,6 +61,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+  if (!workspace) {
+    return NextResponse.json({ error: activeWorkspaceRequiredMessage() }, { status: 400 });
+  }
+
+  if (!workspace.canManageActiveAccount) {
+    return NextResponse.json({ error: activeWorkspaceManageRequiredMessage() }, { status: 403 });
+  }
+
   const formData = await request.formData();
   const url = normalizeUrl(String(formData.get("url") || ""));
   const submitUrl = String(formData.get("submit_url") || "").trim();
@@ -80,6 +97,7 @@ export async function POST(request: Request) {
     .from("directory_opportunities")
     .insert({
       user_id: user.id,
+      account_id: workspace.activeAccountId,
       domain,
       url,
       submit_url: submitUrl ? normalizeUrl(submitUrl) : null,
@@ -103,6 +121,7 @@ export async function POST(request: Request) {
 
   await supabase.from("activity_log").insert({
     user_id: user.id,
+    account_id: workspace.activeAccountId,
     activity_type: "directory_opportunity_created",
     title: "Directory opportunity created",
     description: data.directory_name ?? data.domain,

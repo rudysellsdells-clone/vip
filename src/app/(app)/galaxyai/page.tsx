@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 import { SyncGalaxyWorkflowsButton } from "@/components/galaxyai/SyncGalaxyWorkflowsButton";
 import {
   WebsiteBadge,
@@ -9,6 +8,9 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
+import { getActiveWorkspaceForUser } from "@/lib/accounts/active-workspace";
+import { createClient } from "@/lib/supabase/server";
+import { untypedSupabase } from "@/lib/supabase/untyped";
 
 function formatDate(value: string | null) {
   if (!value) return "No date";
@@ -16,14 +18,20 @@ function formatDate(value: string | null) {
 }
 
 export default async function GalaxyAiPage() {
-  const supabase = await createClient();
+  const supabase = untypedSupabase(await createClient());
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
 
+  const workspace = await getActiveWorkspaceForUser({ supabase, userId: user.id });
+
+  if (!workspace) redirect("/accounts");
+
+  const activeWorkspace = workspace!;
+
   const [workflowsResult, runsResult] = await Promise.all([
-    supabase.from("galaxyai_workflows").select("*").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(50),
-    supabase.from("galaxyai_runs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(50),
+    supabase.from("galaxyai_workflows").select("*").eq("account_id", activeWorkspace.activeAccountId).order("updated_at", { ascending: false }).limit(50),
+    supabase.from("galaxyai_runs").select("*").eq("account_id", activeWorkspace.activeAccountId).order("created_at", { ascending: false }).limit(50),
   ]);
 
   const workflows = (workflowsResult.data ?? []) as Array<Record<string, any>>;
@@ -35,9 +43,9 @@ export default async function GalaxyAiPage() {
   return (
     <WebsitePage>
       <WebsiteHero
-        eyebrow="GalaxyAI"
+        eyebrow={`GalaxyAI • ${activeWorkspace.activeAccountName}`}
         title="Creative workflow control center."
-        description="Sync workflows, monitor creative runs, and pull finished GalaxyAI outputs back into VIP."
+        description="Sync workflows, monitor creative runs, and pull finished GalaxyAI outputs back into the active VIP workspace."
         primaryAction={{ label: "Review Assets", href: "/approvals" }}
         secondaryAction={{ label: "Dashboard", href: "/dashboard" }}
       />
@@ -52,7 +60,7 @@ export default async function GalaxyAiPage() {
       <WebsiteSection
         eyebrow="Sync"
         title="Workflow library"
-        description="Keep VIP aligned with the workflows available in GalaxyAI."
+        description="Keep VIP aligned with the workflows available in GalaxyAI for this workspace."
       >
         <div className={websiteStyles.actionRow}>
           <SyncGalaxyWorkflowsButton />
@@ -72,7 +80,7 @@ export default async function GalaxyAiPage() {
           </div>
         ) : (
           <div className={websiteStyles.empty} style={{ marginTop: 24 }}>
-            No GalaxyAI workflows synced yet.
+            No GalaxyAI workflows synced yet for this workspace.
           </div>
         )}
       </WebsiteSection>
@@ -98,7 +106,7 @@ export default async function GalaxyAiPage() {
             ))}
           </div>
         ) : (
-          <div className={websiteStyles.empty}>No GalaxyAI runs yet.</div>
+          <div className={websiteStyles.empty}>No GalaxyAI runs yet for this workspace.</div>
         )}
       </WebsiteSection>
     </WebsitePage>
