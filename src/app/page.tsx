@@ -155,7 +155,7 @@ export default function HomePage() {
             </p>
 
             <div className={styles.buttonRow}>
-              <Link href="https://www.web-search-pros.com/contact-us/" className={styles.primaryButton}>
+              <Link href="https://web-search-pros.com/contact-us-2" className={styles.primaryButton}>
                 Book Your Setup Call
               </Link>
               <Link href="/login" className={styles.secondaryButton}>
@@ -263,7 +263,7 @@ export default function HomePage() {
               channel, and campaign goal.
             </p>
             <div className={styles.buttonRow}>
-              <Link href="https://www.web-search-pros.com/contact-us/" className={styles.primaryButton}>
+              <Link href="https://web-search-pros.com/contact-us-2" className={styles.primaryButton}>
                 Request a VIP Content Audit
               </Link>
             </div>
@@ -341,7 +341,7 @@ export default function HomePage() {
               <li>✓ Monthly strategy, calendar, and asset generation</li>
               <li>✓ Quality scoring, approval workflow, and publishing support</li>
             </ul>
-            <Link href="https://www.web-search-pros.com/contact-us/" className={styles.fullButton}>
+            <Link href="https://web-search-pros.com/contact-us-2" className={styles.fullButton}>
               Book Your Setup Call
             </Link>
           </article>
@@ -449,7 +449,7 @@ export default function HomePage() {
               workflow, and help you publish consistent, brand-aligned marketing every month.
             </p>
             <div className={styles.buttonRow} style={{ justifyContent: "center" }}>
-              <Link href="https://www.web-search-pros.com/contact-us/" className={styles.primaryButton}>
+              <Link href="https://web-search-pros.com/contact-us-2" className={styles.primaryButton}>
                 Book Your Setup Call
               </Link>
               <Link href="/login" className={styles.secondaryButton}>
