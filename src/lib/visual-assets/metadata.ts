@@ -39,6 +39,58 @@ export function isPrimaryVisual(asset: Record<string, unknown>, primaryVisualAss
   );
 }
 
+export function buildPublishingImageMetadataFromVisual(asset: Record<string, unknown>): JsonRecord {
+  const metadata = jsonRecord(asset.metadata);
+  const publicUrl = visualUrlFromAsset(asset);
+  const visualAssetId = stringOrNull(asset.id);
+  const imageUse = stringOrNull(metadata.imageUse);
+
+  const patch: JsonRecord = {
+    primaryVisualAssetId: visualAssetId,
+    primaryVisualUrl: publicUrl,
+    primaryVisualStoragePath: stringOrNull(metadata.storagePath),
+    primaryVisualProvider: stringOrNull(metadata.provider) ?? "unknown",
+    primaryVisualUse: imageUse,
+    selectedVisualAssetId: visualAssetId,
+    selectedVisualUrl: publicUrl,
+    selectedImageUse: imageUse,
+    imageReadyForPublishing: Boolean(publicUrl),
+    hostedImageUrl: publicUrl,
+    imageUrl: publicUrl,
+    mediaUrl: publicUrl,
+  };
+
+  if (publicUrl) {
+    patch.generatedSocialImageAssetId = visualAssetId;
+    patch.generatedSocialImageUrl = publicUrl;
+    patch.socialImageAssetId = visualAssetId;
+    patch.socialImageUrl = publicUrl;
+  }
+
+  if (imageUse === "blog_featured_image") {
+    patch.featuredImageAssetId = visualAssetId;
+    patch.featuredImageUrl = publicUrl;
+    patch.blogFeaturedImageUrl = publicUrl;
+  }
+
+  if (imageUse === "email_banner") {
+    patch.emailBannerAssetId = visualAssetId;
+    patch.emailBannerUrl = publicUrl;
+  }
+
+  if (imageUse === "linkedin_post") {
+    patch.linkedinImageAssetId = visualAssetId;
+    patch.linkedinImageUrl = publicUrl;
+  }
+
+  if (imageUse === "facebook_post") {
+    patch.facebookImageAssetId = visualAssetId;
+    patch.facebookImageUrl = publicUrl;
+  }
+
+  return patch;
+}
+
 export function safePathSegment(value: unknown, fallback: string) {
   const text = String(value ?? "")
     .trim()
