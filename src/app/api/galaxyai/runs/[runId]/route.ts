@@ -218,7 +218,9 @@ async function createGalaxyAiMediaAssetIfNeeded(input: {
     return null;
   }
 
-  const { data: existingAssets, error: existingError } = await input.supabase
+  const readSupabase = untypedSupabase(input.supabase);
+
+  const { data: existingAssets, error: existingError } = await readSupabase
     .from("generated_assets")
     .select("id, metadata")
     .eq("account_id", input.accountId)
@@ -244,7 +246,7 @@ async function createGalaxyAiMediaAssetIfNeeded(input: {
     ? urls.join("\n")
     : "GalaxyAI completed the run, but no media URLs were returned.";
 
-  const { data: createdAsset, error: insertError } = await input.supabase
+  const { data: createdAsset, error: insertError } = await readSupabase
     .from("generated_assets")
     .insert({
       user_id: input.userId,
