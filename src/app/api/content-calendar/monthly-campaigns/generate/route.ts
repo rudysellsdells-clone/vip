@@ -222,6 +222,7 @@ export async function POST(request: Request) {
     targetAudience: textValue(body.targetAudience),
     primaryOffer: textValue(body.primaryOffer),
     keyTopics: textValue(body.keyTopics),
+    tone: textValue(body.brandTone) || textValue(body.tone),
     callToAction: textValue(body.callToAction),
     differentiator: textValue(body.differentiator),
     proofPoints: textValue(body.proofPoints),

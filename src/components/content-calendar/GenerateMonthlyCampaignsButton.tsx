@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import formStyles from "@/components/forms/VipForm.module.css";
 import { websiteStyles } from "@/components/website-ui/WebsitePage";
 import type { AccountMarketProfile } from "@/lib/accounts/account-market-profile";
+import type { BrandVoiceMonthlyOptions } from "@/lib/accounts/brand-voice-monthly-options";
 
 function currentMonthValue() {
   const now = new Date();
@@ -47,32 +48,86 @@ async function readJson(response: Response) {
   }
 }
 
+function hasBrandVoiceOptions(options?: BrandVoiceMonthlyOptions) {
+  return Boolean(
+    options &&
+      (options.audiences.length ||
+        options.offers.length ||
+        options.tones.length ||
+        options.ctas.length ||
+        options.differentiators.length ||
+        options.proofPoints.length ||
+        options.businessContextDefault ||
+        options.monthlyObjectiveDefault),
+  );
+}
+
+function OptionPicker({
+  label,
+  helper,
+  options,
+  onPick,
+}: {
+  label: string;
+  helper?: string;
+  options: BrandVoiceMonthlyOptions["audiences"];
+  onPick: (value: string) => void;
+}) {
+  if (!options.length) return null;
+
+  return (
+    <label className={formStyles.field}>
+      <span className={formStyles.label}>{label}</span>
+      <select
+        value=""
+        onChange={(event) => {
+          const value = event.target.value;
+          if (value) onPick(value);
+        }}
+        className={formStyles.input}
+      >
+        <option value="">Choose from Brand Voice settings</option>
+        {options.map((option) => (
+          <option key={option.id} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      {helper ? <span className={formStyles.help}>{helper}</span> : null}
+    </label>
+  );
+}
+
 export function GenerateMonthlyCampaignsButton({
   defaultMonth,
   activeAccountId,
   activeAccountName,
   marketProfile,
+  brandVoiceOptions,
 }: {
   defaultMonth?: string;
   activeAccountId?: string | null;
   activeAccountName?: string | null;
   marketProfile?: AccountMarketProfile;
+  brandVoiceOptions?: BrandVoiceMonthlyOptions;
 }) {
   const router = useRouter();
   const initialMonth = useMemo(() => defaultMonth || currentMonthValue(), [defaultMonth]);
+  const brandDefaults = useMemo(() => brandVoiceOptions, [brandVoiceOptions]);
   const [month, setMonth] = useState(initialMonth);
   const [campaignTheme, setCampaignTheme] = useState("Authority Growth");
   const [serviceLineId, setServiceLineId] = useState("");
   const [audienceId, setAudienceId] = useState("");
   const [offerId, setOfferId] = useState("");
-  const [monthlyObjective, setMonthlyObjective] = useState("");
+  const [monthlyObjective, setMonthlyObjective] = useState(brandDefaults?.monthlyObjectiveDefault ?? "");
   const [targetAudience, setTargetAudience] = useState("");
   const [primaryOffer, setPrimaryOffer] = useState("");
   const [keyTopics, setKeyTopics] = useState("");
+  const [brandTone, setBrandTone] = useState("");
   const [callToAction, setCallToAction] = useState("");
   const [differentiator, setDifferentiator] = useState("");
   const [proofPoints, setProofPoints] = useState("");
-  const [businessContext, setBusinessContext] = useState("");
+  const [businessContext, setBusinessContext] = useState(brandDefaults?.businessContextDefault ?? "");
   const [overwriteExisting, setOverwriteExisting] = useState(false);
   const [running, setRunning] = useState(false);
   const [summary, setSummary] = useState<Record<string, any> | null>(null);
@@ -91,6 +146,7 @@ export function GenerateMonthlyCampaignsButton({
       targetAudience,
       primaryOffer,
       keyTopics,
+      brandTone,
       callToAction,
       differentiator,
       proofPoints,
@@ -224,10 +280,52 @@ export function GenerateMonthlyCampaignsButton({
           </div>
         ) : (
           <p className={formStyles.description}>
-            Add service lines, audiences, and offers in the account Strategy section to make monthly campaign generation account-specific.
+            Add service lines, audiences, and offers in the account Strategy section, or use the Brand Voice shortcuts below, to make monthly campaign generation account-specific.
           </p>
         )}
       </div>
+
+      {hasBrandVoiceOptions(brandVoiceOptions) ? (
+        <div className={websiteStyles.card}>
+          <h4 className={websiteStyles.cardTitle}>Brand Voice shortcuts</h4>
+          <p className={websiteStyles.cardMeta}>
+            These choices come from the active workspace&apos;s Brand Voice settings. Pick one to fill the campaign fields below, then edit the wording if needed.
+          </p>
+
+          <div className={[formStyles.row, formStyles.grid2].join(" ")}>
+            <OptionPicker
+              label="Audience from Brand Voice"
+              options={brandVoiceOptions?.audiences ?? []}
+              onPick={setTargetAudience}
+            />
+            <OptionPicker
+              label="Offer from Brand Voice"
+              options={brandVoiceOptions?.offers ?? []}
+              onPick={setPrimaryOffer}
+            />
+            <OptionPicker
+              label="Tone from Brand Voice"
+              options={brandVoiceOptions?.tones ?? []}
+              onPick={setBrandTone}
+            />
+            <OptionPicker
+              label="CTA from Brand Voice"
+              options={brandVoiceOptions?.ctas ?? []}
+              onPick={setCallToAction}
+            />
+            <OptionPicker
+              label="Differentiator from Brand Voice"
+              options={brandVoiceOptions?.differentiators ?? []}
+              onPick={setDifferentiator}
+            />
+            <OptionPicker
+              label="Proof point from Brand Voice"
+              options={brandVoiceOptions?.proofPoints ?? []}
+              onPick={setProofPoints}
+            />
+          </div>
+        </div>
+      ) : null}
 
       <div className={[formStyles.row, formStyles.grid2].join(" ")}>
         <label className={formStyles.field}>
@@ -293,6 +391,19 @@ export function GenerateMonthlyCampaignsButton({
           placeholder="One per line or comma-separated. Example: AI search visibility, Google Business Profile, local authority signals, content consistency"
           rows={4}
         />
+      </label>
+
+      <label className={formStyles.field}>
+        <span className={formStyles.label}>Brand Tone</span>
+        <input
+          value={brandTone}
+          onChange={(event) => setBrandTone(event.target.value)}
+          className={formStyles.input}
+          placeholder="Example: practical, credible, premium, human, direct"
+        />
+        <span className={formStyles.help}>
+          This can be filled from Brand Voice and is passed into the monthly campaign strategy.
+        </span>
       </label>
 
       <div className={[formStyles.row, formStyles.grid2].join(" ")}>

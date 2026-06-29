@@ -14,6 +14,7 @@ export type MonthlyCampaignStrategyInput = {
   targetAudience?: string;
   primaryOffer?: string;
   keyTopics?: string;
+  tone?: string;
   callToAction?: string;
   differentiator?: string;
   proofPoints?: string;
@@ -141,6 +142,7 @@ function cleanStrategy(strategy?: MonthlyCampaignStrategyInput): MonthlyCampaign
     targetAudience: strategy?.targetAudience?.trim() || "",
     primaryOffer: strategy?.primaryOffer?.trim() || "",
     keyTopics: strategy?.keyTopics?.trim() || "",
+    tone: strategy?.tone?.trim() || "",
     callToAction: strategy?.callToAction?.trim() || "",
     differentiator: strategy?.differentiator?.trim() || "",
     proofPoints: strategy?.proofPoints?.trim() || "",
@@ -272,6 +274,7 @@ function privateGenerationPrompt({
     strategy.targetAudience ? `Target Audience: ${strategy.targetAudience}` : "",
     strategy.primaryOffer ? `Primary Offer: ${strategy.primaryOffer}` : "",
     strategy.keyTopics ? `Key Topics / Weekly Angles: ${strategy.keyTopics}` : "",
+    strategy.tone ? `Brand Tone: ${strategy.tone}` : "",
     strategy.differentiator ? `Differentiator: ${strategy.differentiator}` : "",
     strategy.callToAction ? `Call To Action: ${strategy.callToAction}` : "",
     strategy.proofPoints ? `Proof Points / Supporting Context: ${strategy.proofPoints}` : "",

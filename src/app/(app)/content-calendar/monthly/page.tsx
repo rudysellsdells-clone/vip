@@ -17,6 +17,7 @@ import { pageVisibleAssets, safeRows } from "@/lib/calendar/page-assets";
 import { GenerateMonthlyCampaignsButton } from "@/components/content-calendar/GenerateMonthlyCampaignsButton";
 import { getUserAccountContext } from "@/lib/accounts/account-context";
 import { fetchAccountMarketProfile } from "@/lib/accounts/account-market-profile";
+import { buildBrandVoiceMonthlyOptions } from "@/lib/accounts/brand-voice-monthly-options";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -45,6 +46,41 @@ export default async function MonthlyContentCalendarPage({ searchParams }: PageP
   const marketProfile = await fetchAccountMarketProfile({
     supabase,
     accountId: accountContext.activeAccountId,
+  });
+
+  const [{ data: cloneProfile }, { data: accountBrandProfile }, { data: brandRules }] = await Promise.all([
+    accountContext.activeAccountId
+      ? supabase
+          .from("digital_clone_profiles")
+          .select("*")
+          .eq("account_id", accountContext.activeAccountId)
+          .eq("active", true)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    accountContext.activeAccountId
+      ? supabase
+          .from("account_brand_profiles")
+          .select("*")
+          .eq("account_id", accountContext.activeAccountId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    accountContext.activeAccountId
+      ? supabase
+          .from("brand_rules")
+          .select("rule_text,category,priority")
+          .eq("account_id", accountContext.activeAccountId)
+          .eq("active", true)
+          .order("priority", { ascending: true })
+          .order("created_at", { ascending: true })
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const brandVoiceOptions = buildBrandVoiceMonthlyOptions({
+    cloneProfile,
+    accountBrandProfile,
+    brandRules: (brandRules ?? []) as Array<Record<string, unknown>>,
   });
 
   const baseQuery = supabase
@@ -82,6 +118,7 @@ export default async function MonthlyContentCalendarPage({ searchParams }: PageP
           activeAccountId={accountContext.activeAccountId}
           activeAccountName={accountContext.activeAccountName}
           marketProfile={marketProfile}
+          brandVoiceOptions={brandVoiceOptions}
         />
       </WebsiteSection>
 
