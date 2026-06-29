@@ -9,11 +9,11 @@ import { getPublicSupabaseConfig } from "@/lib/supabase/config";
 
 type LoginMode = "password" | "magic-link";
 
-const trustItems = [
-  "Monthly planning",
-  "Quality scoring",
-  "Approval workflow",
-  "Publishing readiness",
+const platformPoints = [
+  "Monthly strategy and calendar planning",
+  "AI-generated content from approved brand inputs",
+  "VIP Content Score before approval",
+  "Publishing workflow for connected channels",
 ];
 
 const scoreRows = [
@@ -99,29 +99,29 @@ export default function LoginPage() {
 
   if (!isConfigured) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#f4f9fd] px-6 py-12 text-slate-950">
-        <section className="w-full max-w-2xl rounded-[2rem] border border-[#d9edf8] bg-white p-8 shadow-2xl shadow-[#0d4d80]/10">
+      <main className="flex min-h-screen items-center justify-center bg-[#f6fbff] px-6 py-16 text-slate-900 sm:px-10">
+        <section className="w-full max-w-2xl rounded-[2.5rem] border border-[#d9edf8] bg-white p-8 shadow-2xl shadow-[#0b5d95]/10 sm:p-12">
           <Image
             src="/wsp-logo.png"
             alt="Web Search Professionals"
-            width={250}
-            height={84}
+            width={260}
+            height={87}
             priority
-            className="h-auto w-[230px]"
+            className="h-auto w-[240px]"
           />
-          <p className="mt-8 text-sm font-black uppercase tracking-[0.24em] text-[#0d4d80]">
+          <p className="mt-10 text-sm font-black uppercase tracking-[0.24em] text-[#148ac0]">
             Setup required
           </p>
-          <h1 className="mt-3 text-3xl font-black tracking-tight text-[#082f51]">
+          <h1 className="mt-4 text-4xl font-black leading-tight tracking-[-0.04em] text-[#082f51]">
             Marketing VIP needs Supabase configuration
           </h1>
-          <p className="mt-3 text-sm font-medium leading-6 text-slate-600">
+          <p className="mt-5 text-base font-medium leading-8 text-slate-600">
             Supabase is not fully configured in this deployed environment. Add the missing public configuration values in Vercel before logging in.
           </p>
 
-          <div className="mt-6 rounded-2xl border border-[#d9edf8] bg-[#f8fcff] p-4 text-sm">
-            <p className="font-black text-slate-950">Missing configuration:</p>
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-slate-700">
+          <div className="mt-8 rounded-3xl border border-[#d9edf8] bg-[#f8fcff] p-6 text-sm">
+            <p className="font-black text-[#082f51]">Missing configuration:</p>
+            <ul className="mt-3 list-disc space-y-2 pl-5 text-slate-700">
               {!config.hasUrl && <li>NEXT_PUBLIC_SUPABASE_URL</li>}
               {!config.hasKey && (
                 <li>
@@ -136,69 +136,75 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f4f9fd] text-slate-950">
-      <div className="h-2 bg-gradient-to-r from-[#0d4d80] via-[#25aee4] to-[#7fd6f6]" />
-
-      <div className="mx-auto flex min-h-[calc(100vh-0.5rem)] w-full max-w-7xl flex-col px-6 py-8 sm:px-8 lg:px-10">
-        <header className="flex items-center justify-between gap-6">
+    <main className="min-h-screen bg-white text-slate-900">
+      <header className="border-b border-[#d9edf8] bg-white">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-6 px-6 py-5 sm:px-10 lg:px-12">
           <Link href="/" className="flex items-center">
             <Image
               src="/wsp-logo.png"
               alt="Web Search Professionals"
-              width={250}
-              height={84}
+              width={260}
+              height={87}
               priority
-              className="h-auto w-[210px] sm:w-[240px]"
+              className="h-auto w-[210px] sm:w-[250px]"
             />
           </Link>
           <Link
             href="/"
-            className="rounded-full border border-[#b9d9ea] bg-white px-4 py-2.5 text-sm font-black text-[#0d4d80] shadow-sm transition hover:-translate-y-0.5 hover:border-[#25aee4]"
+            className="rounded-full border border-[#b9d9ea] bg-white px-5 py-3 text-sm font-black text-[#0b5d95] shadow-sm transition hover:-translate-y-0.5 hover:border-[#25aee4] hover:bg-[#f7fcff]"
           >
-            Home
+            Back to landing
           </Link>
-        </header>
+        </div>
+      </header>
 
-        <section className="grid flex-1 items-center gap-10 py-10 lg:grid-cols-[1.05fr_0.95fr] lg:py-14">
-          <div className="rounded-[2.25rem] border border-[#d8ebf5] bg-white p-6 shadow-2xl shadow-[#0d4d80]/10 sm:p-8 lg:p-10">
-            <p className="inline-flex rounded-full border border-[#b9d9ea] bg-[#f4f9fd] px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-[#0d4d80]">
+      <section className="bg-white px-6 py-16 sm:px-10 sm:py-20 lg:px-12 lg:py-24">
+        <div className="mx-auto grid w-full max-w-7xl items-start gap-12 lg:grid-cols-[1.02fr_0.98fr]">
+          <div className="rounded-[2.5rem] border border-[#d9edf8] bg-[#f8fcff] p-7 shadow-xl shadow-[#0b5d95]/8 sm:p-10 lg:p-12">
+            <p className="text-sm font-black uppercase tracking-[0.24em] text-[#148ac0]">
               Managed AI Marketing Platform
             </p>
-            <h1 className="mt-7 max-w-3xl text-4xl font-black leading-[0.98] tracking-[-0.05em] text-[#082f51] sm:text-5xl lg:text-6xl">
-              Sign in to your AI marketing team in a box.
+            <h1 className="mt-5 max-w-3xl text-5xl font-black leading-[0.96] tracking-[-0.055em] text-[#082f51] sm:text-6xl">
+              Sign in to your AI marketing team in a box
             </h1>
-            <p className="mt-5 max-w-2xl text-base font-semibold leading-7 text-slate-700 sm:text-lg">
+            <p className="mt-7 max-w-2xl text-lg font-semibold leading-8 text-slate-700">
               Plan monthly strategy, review generated content, score every asset, approve work, and publish with confidence from one workspace-aware platform.
             </p>
 
-            <div className="mt-8 grid gap-3 sm:grid-cols-2">
-              {trustItems.map((item) => (
-                <div key={item} className="rounded-2xl border border-[#d9edf8] bg-[#f8fcff] p-4 text-sm font-black text-[#082f51]">
+            <div className="mt-10 grid gap-4 sm:grid-cols-2">
+              {platformPoints.map((item) => (
+                <div
+                  key={item}
+                  className="rounded-3xl border border-[#d9edf8] bg-white p-5 text-sm font-black leading-6 text-[#082f51] shadow-sm"
+                >
                   <span className="mr-2 text-[#25aee4]">✓</span>
                   {item}
                 </div>
               ))}
             </div>
 
-            <div className="mt-8 rounded-[1.75rem] border border-[#c6e5f4] bg-[#eaf7fd] p-5">
-              <div className="flex items-end justify-between gap-5 border-b border-[#b9d9ea] pb-5">
+            <div className="mt-10 rounded-[2rem] border border-[#d9edf8] bg-white p-6 shadow-sm">
+              <div className="flex flex-col gap-5 border-b border-[#e6f2f8] pb-6 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                  <p className="text-xs font-black uppercase tracking-[0.22em] text-[#0d4d80]">
+                  <p className="text-xs font-black uppercase tracking-[0.22em] text-[#148ac0]">
                     VIP Content Score
                   </p>
-                  <h2 className="mt-2 text-2xl font-black tracking-tight text-[#082f51]">Publishing confidence</h2>
+                  <h2 className="mt-3 text-2xl font-black tracking-tight text-[#082f51]">
+                    Publishing confidence
+                  </h2>
                 </div>
-                <div className="text-right">
-                  <p className="text-5xl font-black tracking-[-0.08em] text-[#0d4d80]">92</p>
+                <div className="rounded-[2rem] border border-[#b9d9ea] bg-[#eef9ff] px-6 py-4 text-center">
+                  <p className="text-5xl font-black tracking-[-0.08em] text-[#0b5d95]">92</p>
                   <p className="text-xs font-black uppercase tracking-[0.18em] text-[#148ac0]">Ready</p>
                 </div>
               </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
                 {scoreRows.map(([label, score]) => (
-                  <div key={label} className="rounded-2xl border border-[#d9edf8] bg-white p-3">
+                  <div key={label} className="rounded-3xl border border-[#e0f0f8] bg-[#f8fcff] p-4">
                     <div className="flex items-center justify-between gap-3 text-sm font-black text-[#082f51]">
                       <span>{label}</span>
-                      <span className="text-[#0d4d80]">{score}</span>
+                      <span className="text-[#0b5d95]">{score}</span>
                     </div>
                   </div>
                 ))}
@@ -206,139 +212,126 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <section className="mx-auto w-full max-w-lg rounded-[2.25rem] border border-[#c6e5f4] bg-white p-4 shadow-2xl shadow-[#0d4d80]/12">
-            <div className="rounded-[1.75rem] bg-white p-5 sm:p-7">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.22em] text-[#25aee4]">
-                  Welcome back
-                </p>
-                <h2 className="mt-3 text-3xl font-black tracking-tight text-[#082f51] sm:text-4xl">
-                  Enter Marketing VIP
-                </h2>
-                <p className="mt-3 text-sm font-medium leading-6 text-slate-600">
-                  Sign in to continue planning, approving, and publishing content.
-                </p>
-              </div>
+          <section className="rounded-[2.5rem] border border-[#d9edf8] bg-white p-7 shadow-2xl shadow-[#0b5d95]/10 sm:p-10 lg:p-12">
+            <p className="text-sm font-black uppercase tracking-[0.24em] text-[#148ac0]">
+              Welcome back
+            </p>
+            <h2 className="mt-4 text-4xl font-black tracking-[-0.04em] text-[#082f51]">
+              Enter Marketing VIP
+            </h2>
+            <p className="mt-4 text-base font-medium leading-7 text-slate-600">
+              Use your account email and password, or request a magic link.
+            </p>
 
-              <div className="mt-7 grid grid-cols-2 rounded-2xl bg-[#f1f8fc] p-1 text-sm">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("password");
-                    setMessage(null);
-                    setErrorMessage(null);
-                  }}
-                  className={`rounded-xl px-3 py-3 font-black transition ${
-                    mode === "password"
-                      ? "bg-white text-[#082f51] shadow-sm"
-                      : "text-slate-500 hover:text-[#082f51]"
-                  }`}
-                >
-                  Password
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("magic-link");
-                    setMessage(null);
-                    setErrorMessage(null);
-                  }}
-                  className={`rounded-xl px-3 py-3 font-black transition ${
-                    mode === "magic-link"
-                      ? "bg-white text-[#082f51] shadow-sm"
-                      : "text-slate-500 hover:text-[#082f51]"
-                  }`}
-                >
-                  Magic Link
-                </button>
-              </div>
-
-              {mode === "password" ? (
-                <form onSubmit={handlePasswordLogin} className="mt-6 space-y-4">
-                  <div>
-                    <label className="block text-sm font-black text-slate-800">Email</label>
-                    <input
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(event) => setEmail(event.target.value)}
-                      className="mt-2 w-full rounded-2xl border border-[#d9edf8] bg-[#f8fcff] px-4 py-3.5 font-semibold text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-[#25aee4] focus:bg-white focus:ring-4 focus:ring-[#25aee4]/15"
-                      placeholder="rudy@example.com"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-black text-slate-800">Password</label>
-                    <input
-                      type="password"
-                      required
-                      value={password}
-                      onChange={(event) => setPassword(event.target.value)}
-                      className="mt-2 w-full rounded-2xl border border-[#d9edf8] bg-[#f8fcff] px-4 py-3.5 font-semibold text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-[#25aee4] focus:bg-white focus:ring-4 focus:ring-[#25aee4]/15"
-                      placeholder="Enter your password"
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full rounded-2xl bg-[#0d4d80] px-4 py-4 font-black text-white shadow-xl shadow-[#0d4d80]/20 transition hover:-translate-y-0.5 hover:bg-[#083b63] disabled:translate-y-0 disabled:opacity-60"
-                  >
-                    {loading ? "Signing in..." : "Sign in"}
-                  </button>
-                </form>
-              ) : (
-                <form onSubmit={handleMagicLink} className="mt-6 space-y-4">
-                  <div>
-                    <label className="block text-sm font-black text-slate-800">Email</label>
-                    <input
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(event) => setEmail(event.target.value)}
-                      className="mt-2 w-full rounded-2xl border border-[#d9edf8] bg-[#f8fcff] px-4 py-3.5 font-semibold text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-[#25aee4] focus:bg-white focus:ring-4 focus:ring-[#25aee4]/15"
-                      placeholder="rudy@example.com"
-                    />
-                  </div>
-
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold leading-6 text-amber-900">
-                    Magic links use Supabase email sending and may be rate limited. Password login is still the fastest testing path.
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full rounded-2xl bg-[#0d4d80] px-4 py-4 font-black text-white shadow-xl shadow-[#0d4d80]/20 transition hover:-translate-y-0.5 hover:bg-[#083b63] disabled:translate-y-0 disabled:opacity-60"
-                  >
-                    {loading ? "Sending..." : "Send magic link"}
-                  </button>
-                </form>
-              )}
-
-              {message && (
-                <p className="mt-4 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm font-bold text-green-700">
-                  {message}
-                </p>
-              )}
-
-              {errorMessage && (
-                <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
-                  {errorMessage}
-                </p>
-              )}
-
-              <div className="mt-6 rounded-2xl border border-[#d9edf8] bg-[#f8fcff] p-4">
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#25aee4]">
-                  Protected workflow
-                </p>
-                <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">
-                  After login, workspace and role rules control what each user can see and do.
-                </p>
-              </div>
+            <div className="mt-8 grid grid-cols-2 rounded-full border border-[#d9edf8] bg-[#f8fcff] p-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("password");
+                  setMessage(null);
+                  setErrorMessage(null);
+                }}
+                className={`rounded-full px-4 py-3 text-sm font-black transition ${
+                  mode === "password"
+                    ? "bg-white text-[#0b5d95] shadow-sm"
+                    : "text-slate-500 hover:text-[#0b5d95]"
+                }`}
+              >
+                Password
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("magic-link");
+                  setMessage(null);
+                  setErrorMessage(null);
+                }}
+                className={`rounded-full px-4 py-3 text-sm font-black transition ${
+                  mode === "magic-link"
+                    ? "bg-white text-[#0b5d95] shadow-sm"
+                    : "text-slate-500 hover:text-[#0b5d95]"
+                }`}
+              >
+                Magic link
+              </button>
             </div>
+
+            {mode === "password" ? (
+              <form onSubmit={handlePasswordLogin} className="mt-8 space-y-5">
+                <label className="block">
+                  <span className="text-sm font-black text-[#082f51]">Email</span>
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    className="mt-2 w-full rounded-2xl border border-[#c6e5f4] bg-white px-4 py-4 text-base font-semibold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#25aee4] focus:ring-4 focus:ring-[#25aee4]/15"
+                    placeholder="you@example.com"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-black text-[#082f51]">Password</span>
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    className="mt-2 w-full rounded-2xl border border-[#c6e5f4] bg-white px-4 py-4 text-base font-semibold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#25aee4] focus:ring-4 focus:ring-[#25aee4]/15"
+                    placeholder="••••••••"
+                  />
+                </label>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full rounded-full bg-[#0b5d95] px-6 py-4 text-base font-black text-white shadow-lg shadow-[#0b5d95]/20 transition hover:-translate-y-0.5 hover:bg-[#084a78] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
+                >
+                  {loading ? "Signing in..." : "Sign in"}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleMagicLink} className="mt-8 space-y-5">
+                <label className="block">
+                  <span className="text-sm font-black text-[#082f51]">Email</span>
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    className="mt-2 w-full rounded-2xl border border-[#c6e5f4] bg-white px-4 py-4 text-base font-semibold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#25aee4] focus:ring-4 focus:ring-[#25aee4]/15"
+                    placeholder="you@example.com"
+                  />
+                </label>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full rounded-full bg-[#0b5d95] px-6 py-4 text-base font-black text-white shadow-lg shadow-[#0b5d95]/20 transition hover:-translate-y-0.5 hover:bg-[#084a78] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
+                >
+                  {loading ? "Sending link..." : "Send magic link"}
+                </button>
+              </form>
+            )}
+
+            {message && (
+              <div className="mt-6 rounded-3xl border border-[#b9d9ea] bg-[#eef9ff] p-4 text-sm font-black text-[#0b5d95]">
+                {message}
+              </div>
+            )}
+
+            {errorMessage && (
+              <div className="mt-6 rounded-3xl border border-red-200 bg-red-50 p-4 text-sm font-black text-red-700">
+                {errorMessage}
+              </div>
+            )}
+
+            <p className="mt-8 text-center text-sm font-medium leading-6 text-slate-500">
+              Access is managed by Web Search Professionals. Contact your workspace admin if you need an invite.
+            </p>
           </section>
-        </section>
-      </div>
+        </div>
+      </section>
     </main>
   );
 }
