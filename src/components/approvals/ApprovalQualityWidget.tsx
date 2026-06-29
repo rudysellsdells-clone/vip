@@ -3,8 +3,11 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { QualityGateActionPanel } from "@/components/content-quality/QualityGateActionPanel";
+import { buildQualityReviewerGuidance } from "@/lib/content-quality/reviewer-guidance";
 import formStyles from "@/components/forms/VipForm.module.css";
 import { websiteStyles } from "@/components/website-ui/WebsitePage";
+
+type QualityAsset = Record<string, any>;
 
 type QualityReview = {
   id: string;
@@ -58,6 +61,7 @@ export function ApprovalQualityWidget({
 }: {
   assetId: string;
 }) {
+  const [asset, setAsset] = useState<QualityAsset | null>(null);
   const [review, setReview] = useState<QualityReview | null>(null);
   const [loading, setLoading] = useState(true);
   const [runningReview, setRunningReview] = useState(false);
@@ -68,6 +72,8 @@ export function ApprovalQualityWidget({
   const [error, setError] = useState<string | null>(null);
 
   const overallScore = review?.overall_score ?? null;
+
+  const guidance = useMemo(() => buildQualityReviewerGuidance({ asset, review }), [asset, review]);
 
   const improvements = useMemo(() => {
     if (!Array.isArray(review?.improvements)) return [];
@@ -89,6 +95,7 @@ export function ApprovalQualityWidget({
         throw new Error(result.error ?? "Unable to load quality review.");
       }
 
+      setAsset(result.asset ?? null);
       setReview(result.review ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected quality review load error.");
@@ -123,6 +130,7 @@ export function ApprovalQualityWidget({
         throw new Error(result.error ?? "Unable to review asset quality.");
       }
 
+      setAsset(result.asset ?? asset);
       setReview(result.review ?? null);
       setGateRefreshKey((value) => value + 1);
       setMessage(`Quality review complete. Score: ${result.review?.overall_score ?? "N/A"}`);
@@ -219,6 +227,51 @@ export function ApprovalQualityWidget({
               This asset has not been scored yet.
             </p>
           )}
+
+          <div
+            className={websiteStyles.card}
+            style={{ marginTop: 12, padding: 18, background: "#ffffff" }}
+          >
+            <div className="flex flex-wrap gap-2">
+              <span className={websiteStyles.badge}>Reviewer focus: {guidance.readinessLabel}</span>
+              <span className={websiteStyles.badge}>{guidance.scoreSummary}</span>
+              <span className={websiteStyles.badge}>{guidance.detailDensityLabel}</span>
+            </div>
+
+            <p className={websiteStyles.cardText}>{guidance.headline}</p>
+
+            {guidance.genericFlags.length ? (
+              <div style={{ marginTop: 10 }}>
+                <p className={websiteStyles.cardMeta}>Generic language warning</p>
+                <div className="flex flex-wrap gap-2" style={{ marginTop: 8 }}>
+                  {guidance.genericFlags.map((phrase) => (
+                    <span key={phrase} className={websiteStyles.badge}>
+                      “{phrase}”
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {guidance.nextSteps.length ? (
+              <div style={{ marginTop: 10 }}>
+                <p className={websiteStyles.cardMeta}>Reviewer next steps</p>
+                <div className="grid gap-1">
+                  {guidance.nextSteps.slice(0, 4).map((step) => (
+                    <p key={step} className={websiteStyles.cardText}>
+                      • {step}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {guidance.missingSignals.length ? (
+              <p className={websiteStyles.cardMeta}>
+                Missing detail signals: {guidance.missingSignals.slice(0, 3).join(", ")}
+              </p>
+            ) : null}
+          </div>
         </>
       )}
 

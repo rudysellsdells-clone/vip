@@ -1,3 +1,4 @@
+import { buildQualityReviewerGuidance } from "@/lib/content-quality/reviewer-guidance";
 import { websiteStyles } from "@/components/website-ui/WebsitePage";
 import {
   normalizeReviewList,
@@ -29,6 +30,92 @@ function miniScore(label: string, value: unknown) {
     <span className={websiteStyles.badge}>
       {label}: {score === null ? "—" : score}
     </span>
+  );
+}
+
+function listBlock({
+  title,
+  items,
+  max = 4,
+}: {
+  title: string;
+  items: string[];
+  max?: number;
+}) {
+  if (!items.length) return null;
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <p className={websiteStyles.cardMeta}>{title}</p>
+      <ul style={{ marginTop: 6, paddingLeft: 18 }}>
+        {items.slice(0, max).map((item) => (
+          <li key={item} className={websiteStyles.cardText} style={{ marginTop: 4 }}>
+            {item}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ReviewerGuidancePanel({
+  asset,
+  review,
+  compact,
+}: {
+  asset: Record<string, any>;
+  review?: Record<string, any> | null;
+  compact: boolean;
+}) {
+  const guidance = buildQualityReviewerGuidance({ asset, review });
+
+  return (
+    <div
+      className={websiteStyles.card}
+      style={{
+        marginTop: 12,
+        padding: compact ? 16 : 20,
+        background: "#ffffff",
+      }}
+    >
+      <div className="flex flex-wrap gap-2">
+        <span className={websiteStyles.badge}>Reviewer focus: {guidance.readinessLabel}</span>
+        <span className={websiteStyles.badge}>{guidance.scoreSummary}</span>
+        <span className={websiteStyles.badge}>{guidance.detailDensityLabel}</span>
+      </div>
+
+      <p className={websiteStyles.cardText} style={{ marginTop: 10 }}>
+        {guidance.headline}
+      </p>
+
+      {compact ? (
+        guidance.nextSteps.length ? (
+          <p className={websiteStyles.cardMeta}>
+            Next check: {guidance.nextSteps[0]}
+          </p>
+        ) : null
+      ) : (
+        <>
+          {guidance.genericFlags.length ? (
+            <div style={{ marginTop: 12 }}>
+              <p className={websiteStyles.cardMeta}>Generic language warning</p>
+              <div className="flex flex-wrap gap-2" style={{ marginTop: 8 }}>
+                {guidance.genericFlags.map((phrase) => (
+                  <span key={phrase} className={websiteStyles.badge}>
+                    “{phrase}”
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {listBlock({ title: "Missing specificity signals", items: guidance.missingSignals, max: 4 })}
+          {listBlock({ title: "Reviewer next steps", items: guidance.nextSteps, max: 5 })}
+          {listBlock({ title: "Asset-type checklist", items: guidance.checklist, max: 5 })}
+          {listBlock({ title: "Questions before approval", items: guidance.reviewerQuestions, max: 3 })}
+        </>
+      )}
+    </div>
   );
 }
 
@@ -71,6 +158,8 @@ export function QualityScorePanel({
             </p>
           ) : null}
 
+          <ReviewerGuidancePanel asset={asset} review={review} compact={compact} />
+
           {!compact && improvements.length ? (
             <div style={{ marginTop: 10 }}>
               <p className={websiteStyles.cardMeta}>Needs attention</p>
@@ -98,9 +187,12 @@ export function QualityScorePanel({
           ) : null}
         </>
       ) : (
-        <p className={websiteStyles.cardText} style={{ marginTop: 10 }}>
-          This asset has not been quality tested yet.
-        </p>
+        <>
+          <p className={websiteStyles.cardText} style={{ marginTop: 10 }}>
+            This asset has not been quality tested yet.
+          </p>
+          <ReviewerGuidancePanel asset={asset} review={null} compact={compact} />
+        </>
       )}
     </div>
   );

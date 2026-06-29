@@ -7,6 +7,7 @@ import {
   qualityScoreText,
 } from "@/lib/content-quality/score-gates";
 import { loadLatestQualityReview } from "@/lib/content-quality/latest-review";
+import { buildQualityReviewerGuidance } from "@/lib/content-quality/reviewer-guidance";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 import { websiteStyles } from "@/components/website-ui/WebsitePage";
@@ -47,6 +48,7 @@ export async function ApprovalQualityPanel({
   }
 
   const score = review?.overall_score ?? null;
+  const guidance = buildQualityReviewerGuidance({ review });
 
   return (
     <div className={websiteStyles.card} style={{ marginTop: 16 }}>
@@ -93,6 +95,28 @@ export async function ApprovalQualityPanel({
               </div>
             </div>
           ) : null}
+
+          <div
+            className={websiteStyles.card}
+            style={{ marginTop: 12, padding: 18, background: "#ffffff" }}
+          >
+            <div className="flex flex-wrap gap-2">
+              <span className={websiteStyles.badge}>Reviewer focus: {guidance.readinessLabel}</span>
+              <span className={websiteStyles.badge}>{guidance.scoreSummary}</span>
+            </div>
+
+            <p className={websiteStyles.cardText}>{guidance.headline}</p>
+
+            {guidance.nextSteps.length ? (
+              <div className="grid gap-1" style={{ marginTop: 10 }}>
+                {guidance.nextSteps.slice(0, 3).map((step) => (
+                  <p key={step} className={websiteStyles.cardText}>
+                    • {step}
+                  </p>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
       ) : (
         <p className={websiteStyles.cardText}>
