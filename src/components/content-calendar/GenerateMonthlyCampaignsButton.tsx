@@ -83,6 +83,18 @@ function MiniSpineField({ label, value }: { label: string; value: string }) {
   );
 }
 
+function spineStatusLabel({
+  reviewed,
+  stale,
+}: {
+  reviewed: boolean;
+  stale: boolean;
+}) {
+  if (reviewed) return "Spine reviewed + locked";
+  if (stale) return "Inputs changed — rebuild spine";
+  return "Review gate open";
+}
+
 function OptionPicker({
   label,
   helper,
@@ -162,6 +174,9 @@ export function GenerateMonthlyCampaignsButton({
   const [running, setRunning] = useState(false);
   const [summary, setSummary] = useState<Record<string, any> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reviewedSpineSignature, setReviewedSpineSignature] = useState<
+    string | null
+  >(null);
 
   const marketingSpine = useMemo(
     () =>
@@ -199,6 +214,55 @@ export function GenerateMonthlyCampaignsButton({
     ],
   );
 
+  const marketingSpineSignature = useMemo(
+    () =>
+      JSON.stringify({
+        month,
+        campaignTheme,
+        serviceLineId,
+        audienceId,
+        offerId,
+        businessContext,
+        monthlyObjective,
+        targetAudience,
+        primaryOffer,
+        keyTopics,
+        brandTone,
+        callToAction,
+        differentiator,
+        proofPoints,
+        originalityAngle,
+        objections,
+      }),
+    [
+      audienceId,
+      brandTone,
+      businessContext,
+      callToAction,
+      campaignTheme,
+      differentiator,
+      keyTopics,
+      month,
+      monthlyObjective,
+      objections,
+      offerId,
+      originalityAngle,
+      primaryOffer,
+      proofPoints,
+      serviceLineId,
+      targetAudience,
+    ],
+  );
+
+  const spineReviewed = reviewedSpineSignature === marketingSpineSignature;
+  const spineNeedsRebuild = Boolean(reviewedSpineSignature && !spineReviewed);
+
+  function reviewMarketingSpine() {
+    setError(null);
+    setSummary(null);
+    setReviewedSpineSignature(marketingSpineSignature);
+  }
+
   function requestPayload() {
     return {
       month,
@@ -219,12 +283,24 @@ export function GenerateMonthlyCampaignsButton({
       originalityAngle,
       objections,
       overwriteExisting,
+      marketingSpineReviewed: spineReviewed,
+      marketingSpineGateStatus: marketingSpine.gateStatus,
+      marketingSpineReadinessScore: marketingSpine.readinessScore,
     };
   }
 
   async function generate() {
+    if (!spineReviewed) {
+      setError(
+        spineNeedsRebuild
+          ? "Your campaign inputs changed after the Marketing Spine was reviewed. Rebuild the spine, then generate from that locked strategy."
+          : "Build and review the Marketing Spine before generating the monthly campaign package.",
+      );
+      return;
+    }
+
     const confirmed = window.confirm(
-      `Generate one campaign per week using this Marketing Spine? Gate status: ${gateLabel(marketingSpine.gateStatus)} (${marketingSpine.readinessScore}/100).`,
+      `Generate one campaign per week from the reviewed Marketing Spine? Gate status: ${gateLabel(marketingSpine.gateStatus)} (${marketingSpine.readinessScore}/100).`,
     );
 
     if (!confirmed) return;
@@ -568,6 +644,7 @@ export function GenerateMonthlyCampaignsButton({
 
       <div className={websiteStyles.card}>
         <div className="flex flex-wrap gap-2">
+          <span className={websiteStyles.badge}>Step 2</span>
           <span className={websiteStyles.badge}>Marketing Spine</span>
           <span className={websiteStyles.badge}>
             {gateLabel(marketingSpine.gateStatus)}
@@ -575,23 +652,43 @@ export function GenerateMonthlyCampaignsButton({
           <span className={websiteStyles.badge}>
             {marketingSpine.readinessScore}/100 ready
           </span>
+          <span className={websiteStyles.badge}>
+            {spineStatusLabel({ reviewed: spineReviewed, stale: spineNeedsRebuild })}
+          </span>
         </div>
         <h4 className={websiteStyles.cardTitle} style={{ marginTop: 12 }}>
-          Brand → Strategy → Channels → Plan → Briefs → Assets → Quality →
-          Publishing
+          Review the spine before VIP moves from strategy to execution
         </h4>
         <p className={websiteStyles.cardMeta}>
-          VIP will use this spine as the campaign chain of custody. It is
-          generated from the fields above and passed into every weekly campaign,
-          asset brief, quality review, and publishing-ready record.
+          This is the gate between planning and asset creation. Review the
+          spine below, then lock it before generating. If you edit strategy
+          inputs afterward, VIP will ask you to rebuild the spine so execution
+          cannot drift away from the approved strategy.
         </p>
 
         {marketingSpine.missingRequired.length ? (
           <p className={formStyles.description} style={{ marginTop: 10 }}>
             Missing context: {marketingSpine.missingRequired.join(", ")}. You
-            can still generate, but the campaign may be less specific.
+            can still lock the spine, but the campaign may be less specific.
           </p>
         ) : null}
+
+        {spineReviewed ? (
+          <p className={formStyles.message} style={{ marginTop: 10 }}>
+            Marketing Spine is locked for this generation run. Execution will
+            inherit this strategy.
+          </p>
+        ) : spineNeedsRebuild ? (
+          <p className={formStyles.error} style={{ marginTop: 10 }}>
+            Inputs changed after the spine was reviewed. Rebuild the spine
+            before generating.
+          </p>
+        ) : (
+          <p className={formStyles.description} style={{ marginTop: 10 }}>
+            Review this strategy bridge, then click Build / Lock Marketing
+            Spine before generating assets.
+          </p>
+        )}
 
         <div
           className={[formStyles.row, formStyles.grid2].join(" ")}
@@ -615,6 +712,28 @@ export function GenerateMonthlyCampaignsButton({
           style={{ marginTop: 14 }}
         >
           <MiniSpineField
+            label="Campaign Objective"
+            value={marketingSpine.campaignObjective}
+          />
+          <MiniSpineField
+            label="Positioning Angle"
+            value={marketingSpine.positioningAngle}
+          />
+          <MiniSpineField
+            label="Proof Point"
+            value={marketingSpine.proofPoints[0] ?? "No proof supplied yet"}
+          />
+          <MiniSpineField
+            label="Objection"
+            value={marketingSpine.objections[0] ?? "No objection supplied yet"}
+          />
+        </div>
+
+        <div
+          className={[formStyles.row, formStyles.grid2].join(" ")}
+          style={{ marginTop: 14 }}
+        >
+          <MiniSpineField
             label="LinkedIn Role"
             value={marketingSpine.channelRoles.linkedin.role}
           />
@@ -631,6 +750,20 @@ export function GenerateMonthlyCampaignsButton({
             value={marketingSpine.channelRoles.visual.role}
           />
         </div>
+
+        <div className={formStyles.actions}>
+          <button
+            type="button"
+            onClick={reviewMarketingSpine}
+            disabled={running || spineReviewed}
+            className={formStyles.secondaryButton}
+          >
+            {spineReviewed ? "Marketing Spine Locked" : "Build / Lock Marketing Spine"}
+          </button>
+          <span className={formStyles.help}>
+            This is the visible gate between strategy and execution.
+          </span>
+        </div>
       </div>
 
       <label className={formStyles.field}>
@@ -645,12 +778,17 @@ export function GenerateMonthlyCampaignsButton({
       </label>
 
       <div className={websiteStyles.card}>
-        <h4 className={websiteStyles.cardTitle}>Generation Mode</h4>
+        <div className="flex flex-wrap gap-2">
+          <span className={websiteStyles.badge}>Step 3</span>
+          <span className={websiteStyles.badge}>Execution</span>
+        </div>
+        <h4 className={websiteStyles.cardTitle} style={{ marginTop: 12 }}>
+          Generate from the reviewed Marketing Spine
+        </h4>
         <p className={websiteStyles.cardMeta}>
-          Marketing Spine fast batch mode is active. This keeps the route
-          reliable by avoiding extra OpenAI calls inside monthly generation,
-          while still passing a structured strategy spine and asset brief into
-          every generated asset.
+          Marketing Spine fast batch mode is active. VIP does not add an extra
+          OpenAI call here, but it does pass the locked spine and asset briefs
+          into every generated campaign asset.
         </p>
       </div>
 
@@ -669,11 +807,16 @@ export function GenerateMonthlyCampaignsButton({
         <button
           type="button"
           onClick={generate}
-          disabled={running}
+          disabled={running || !spineReviewed}
           className={formStyles.submit}
         >
-          {running ? "Generating..." : "Generate Monthly Campaigns"}
+          {running ? "Generating..." : "Generate From Reviewed Spine"}
         </button>
+        {!spineReviewed ? (
+          <span className={formStyles.help}>
+            Build / Lock the Marketing Spine first.
+          </span>
+        ) : null}
       </div>
 
       {summary ? (
@@ -682,7 +825,8 @@ export function GenerateMonthlyCampaignsButton({
             Created {summary.campaignCount ?? 0} campaign(s) and{" "}
             {summary.assetCount ?? 0} asset(s)
             {summary.durationMs ? ` in ${summary.durationMs}ms` : ""}. Marketing
-            Spine: {summary.marketingSpine?.gateStatus ?? "saved"}.
+            Spine gate: {summary.marketingSpine?.gateStatus ?? "saved"}; review
+            step: {summary.marketingSpineReviewGate ?? "confirmed"}.
           </p>
           {Array.isArray(summary.warnings) && summary.warnings.length ? (
             <p className={formStyles.description}>

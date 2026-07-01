@@ -204,6 +204,7 @@ export async function POST(request: Request) {
   const campaignTheme = textValue(body.campaignTheme) || "Authority Growth";
   const enteredBusinessContext = textValue(body.businessContext);
   const overwriteExisting = Boolean(body.overwriteExisting);
+  const marketingSpineReviewed = Boolean(body.marketingSpineReviewed);
 
   const accountContext = await getUserAccountContext({
     supabase,
@@ -534,6 +535,9 @@ export async function POST(request: Request) {
 
   const warnings = [
     "Fast batch generation mode is active. The route does not call OpenAI or memory, which prevents Vercel function timeouts during monthly package creation.",
+    marketingSpineReviewed
+      ? "Marketing Spine review gate was confirmed before generation."
+      : "Marketing Spine review gate was not confirmed by the client before generation; server rebuilt the spine from submitted inputs.",
     ...linkWarnings,
   ];
 
@@ -554,6 +558,7 @@ export async function POST(request: Request) {
       marketingSpine: marketingSpineSummary(marketingSpine),
       marketingSpineGateStatus: marketingSpine.gateStatus,
       marketingSpineReadinessScore: marketingSpine.readinessScore,
+      marketingSpineReviewGate: marketingSpineReviewed ? "confirmed" : "server_rebuilt_unconfirmed",
       privateStrategy: strategy,
       campaignCount: createdCampaigns.length,
       assetCount: createdAssets.length,
@@ -570,6 +575,7 @@ export async function POST(request: Request) {
     activeAccountId,
     marketProfile: resolvedMarketProfile.metadata,
     marketingSpine: marketingSpineSummary(marketingSpine),
+    marketingSpineReviewGate: marketingSpineReviewed ? "confirmed" : "server_rebuilt_unconfirmed",
     generationMode: "marketing_spine_fast_batch_planner",
     campaignCount: createdCampaigns.length,
     assetCount: createdAssets.length,

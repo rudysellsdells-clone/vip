@@ -21,7 +21,7 @@ export type MarketingSpineChannelRole = {
 
 export type MarketingSpine = {
   featureName: "Marketing Spine";
-  version: "h1.6a";
+  version: "h1.6a2";
   gateStatus: "ready" | "weak_context" | "needs_context";
   readinessScore: number;
   missingRequired: string[];
@@ -410,7 +410,7 @@ export function buildMarketingSpine(
 
   return {
     featureName: "Marketing Spine",
-    version: "h1.6a",
+    version: "h1.6a2",
     gateStatus: gate.gateStatus,
     readinessScore: gate.readinessScore,
     missingRequired: gate.missingRequired,

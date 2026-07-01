@@ -37,6 +37,44 @@ function uniqueRowsById(rows: Array<Record<string, any>>) {
   return Array.from(map.values());
 }
 
+function metadataRecord(value: unknown): Record<string, any> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, any>)
+    : {};
+}
+
+function shortText(value: unknown, fallback = "Not supplied") {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function firstListItem(value: unknown, fallback = "Not supplied") {
+  return Array.isArray(value) && value.length
+    ? shortText(value[0], fallback)
+    : fallback;
+}
+
+function marketingSpinesFromAssets(assets: Array<Record<string, any>>) {
+  const map = new Map<string, Record<string, any>>();
+
+  for (const asset of assets) {
+    const metadata = metadataRecord(asset.metadata);
+    const spine = metadataRecord(metadata.marketingSpine);
+    const key = [
+      shortText(spine.campaignObjective, ""),
+      shortText(spine.audience, ""),
+      shortText(spine.offer, ""),
+      shortText(spine.originalityAngle, ""),
+    ].join("|");
+
+    if (key.replace(/\|/g, "").trim() && !map.has(key)) {
+      map.set(key, spine);
+    }
+  }
+
+  return Array.from(map.values()).slice(0, 6);
+}
+
 export default async function MonthlyReviewPage({ searchParams }: PageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const range = buildCalendarViewRangeFromSearchParams({
@@ -98,6 +136,7 @@ export default async function MonthlyReviewPage({ searchParams }: PageProps) {
     userId: user.id,
     assetIds: visibleAssets.map((asset) => String(asset.id)),
   });
+  const marketingSpines = marketingSpinesFromAssets(visibleAssets);
 
   return (
     <WebsitePage>
@@ -122,6 +161,48 @@ export default async function MonthlyReviewPage({ searchParams }: PageProps) {
             {legacyUnassignedCount ? <span className={websiteStyles.badge}>{legacyUnassignedCount} legacy unassigned item(s)</span> : null}
           </div>
         </article>
+      </WebsiteSection>
+
+      <WebsiteSection
+        eyebrow="Marketing Spine"
+        title="Strategy bridge used by this review set"
+        description="This shows the visible strategy spine that sat between campaign planning and asset execution. Generated assets should inherit this context through their asset briefs and quality review."
+      >
+        {marketingSpines.length ? (
+          <div className={websiteStyles.cardGrid}>
+            {marketingSpines.map((spine, index) => (
+              <article key={`${shortText(spine.audience)}-${index}`} className={websiteStyles.card}>
+                <div className="flex flex-wrap gap-2">
+                  <span className={websiteStyles.badge}>Marketing Spine</span>
+                  <span className={websiteStyles.badge}>{shortText(spine.gateStatus, "saved")}</span>
+                  <span className={websiteStyles.badge}>{shortText(spine.readinessScore, "?")}/100</span>
+                </div>
+                <h3 className={websiteStyles.cardTitle} style={{ marginTop: 12 }}>
+                  {shortText(spine.campaignObjective, "Campaign strategy")}
+                </h3>
+                <p className={websiteStyles.cardText}>
+                  <strong>Audience:</strong> {shortText(spine.audience)}
+                </p>
+                <p className={websiteStyles.cardText}>
+                  <strong>Offer:</strong> {shortText(spine.offer)}
+                </p>
+                <p className={websiteStyles.cardText}>
+                  <strong>Originality angle:</strong> {shortText(spine.originalityAngle)}
+                </p>
+                <p className={websiteStyles.cardText}>
+                  <strong>Proof:</strong> {firstListItem(spine.proofPoints)}
+                </p>
+                <p className={websiteStyles.cardText}>
+                  <strong>CTA:</strong> {shortText(spine.primaryCta)}
+                </p>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className={websiteStyles.empty}>
+            No Marketing Spine metadata found in this view yet. Generate a new month through the visible spine gate to populate this section.
+          </div>
+        )}
       </WebsiteSection>
 
       <WebsiteSection

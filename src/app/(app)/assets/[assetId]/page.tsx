@@ -61,6 +61,23 @@ function metadataRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function shortText(value: unknown, fallback = "Not supplied") {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function firstListItem(value: unknown, fallback = "Not supplied") {
+  return Array.isArray(value) && value.length
+    ? shortText(value[0], fallback)
+    : fallback;
+}
+
+function stringList(value: unknown) {
+  return Array.isArray(value)
+    ? value.map((item) => String(item ?? "").trim()).filter(Boolean).slice(0, 6)
+    : [];
+}
+
 function primaryVisualAssetIdFromMetadata(value: unknown) {
   const metadata = metadataRecord(value);
   const text = String(metadata.primaryVisualAssetId ?? "").trim();
@@ -142,6 +159,17 @@ export default async function AssetDetailPage({ params }: PageProps) {
   const visualRows = (visualAssets ?? []) as VisualAssetRow[];
   const approvalRows = (approvals ?? []) as Array<Record<string, any>>;
   const primaryVisualAssetId = primaryVisualAssetIdFromMetadata(asset.metadata);
+  const assetMetadata = metadataRecord(asset.metadata);
+  const campaignMetadata = metadataRecord(campaign?.metadata);
+  const marketingSpine = metadataRecord(
+    assetMetadata.marketingSpine || campaignMetadata.marketingSpine,
+  );
+  const assetBrief = metadataRecord(assetMetadata.assetBrief);
+  const inheritancePath = stringList(assetMetadata.strategyInheritancePath);
+  const channelRoles = metadataRecord(marketingSpine.channelRoles);
+  const assetChannelRole = metadataRecord(
+    channelRoles[String(assetBrief.channel ?? "")] ?? null,
+  );
   const canRevise = asset.status !== "published" && asset.status !== "sent";
   const canExecuteZapierMcp =
     asset.status === "approved" && isCanonicalZapierMcpAsset(asset.asset_type);
@@ -202,6 +230,79 @@ export default async function AssetDetailPage({ params }: PageProps) {
           dot="green"
         />
       </section>
+
+      <WebsiteSection
+        eyebrow="Marketing Spine"
+        title="Strategy spine used for this asset"
+        description="This shows how the asset inherited strategy before execution. Use it to judge whether the content followed the campaign spine or drifted into generic output."
+      >
+        {Object.keys(marketingSpine).length ? (
+          <div className={websiteStyles.cardGrid}>
+            <article className={websiteStyles.card}>
+              <div className="flex flex-wrap gap-2">
+                <span className={websiteStyles.badge}>Marketing Spine</span>
+                <span className={websiteStyles.badge}>{shortText(marketingSpine.gateStatus, "saved")}</span>
+                <span className={websiteStyles.badge}>{shortText(marketingSpine.readinessScore, "?")}/100</span>
+              </div>
+              <h3 className={websiteStyles.cardTitle} style={{ marginTop: 12 }}>
+                {shortText(marketingSpine.campaignObjective, "Campaign strategy")}
+              </h3>
+              <p className={websiteStyles.cardText}>
+                <strong>Audience:</strong> {shortText(marketingSpine.audience)}
+              </p>
+              <p className={websiteStyles.cardText}>
+                <strong>Offer:</strong> {shortText(marketingSpine.offer)}
+              </p>
+              <p className={websiteStyles.cardText}>
+                <strong>Originality angle:</strong> {shortText(marketingSpine.originalityAngle)}
+              </p>
+              <p className={websiteStyles.cardText}>
+                <strong>Proof:</strong> {firstListItem(marketingSpine.proofPoints)}
+              </p>
+              <p className={websiteStyles.cardText}>
+                <strong>Objection:</strong> {firstListItem(marketingSpine.objections)}
+              </p>
+              <p className={websiteStyles.cardText}>
+                <strong>CTA:</strong> {shortText(marketingSpine.primaryCta)}
+              </p>
+            </article>
+
+            <article className={websiteStyles.card}>
+              <div className="flex flex-wrap gap-2">
+                <span className={websiteStyles.badge}>Asset Brief</span>
+                <span className={websiteStyles.badge}>{shortText(assetBrief.channel, "channel")}</span>
+              </div>
+              <h3 className={websiteStyles.cardTitle} style={{ marginTop: 12 }}>
+                {shortText(assetBrief.goal, "Asset goal")}
+              </h3>
+              <p className={websiteStyles.cardText}>
+                <strong>Hook:</strong> {shortText(assetBrief.hook)}
+              </p>
+              <p className={websiteStyles.cardText}>
+                <strong>Key message:</strong> {shortText(assetBrief.keyMessage)}
+              </p>
+              <p className={websiteStyles.cardText}>
+                <strong>Proof point:</strong> {shortText(assetBrief.proofPoint)}
+              </p>
+              <p className={websiteStyles.cardText}>
+                <strong>Objection:</strong> {shortText(assetBrief.objectionToAddress)}
+              </p>
+              <p className={websiteStyles.cardText}>
+                <strong>Channel role:</strong> {shortText(assetChannelRole.role, "Inherited from channel plan")}
+              </p>
+              {inheritancePath.length ? (
+                <p className={websiteStyles.cardMeta}>
+                  Inheritance path: {inheritancePath.join(" → ")}
+                </p>
+              ) : null}
+            </article>
+          </div>
+        ) : (
+          <div className={websiteStyles.empty}>
+            No Marketing Spine metadata found on this asset yet. Generate new monthly content through the visible spine gate to populate this section.
+          </div>
+        )}
+      </WebsiteSection>
 
       <section className={websiteStyles.twoColumn}>
         <WebsiteSection
