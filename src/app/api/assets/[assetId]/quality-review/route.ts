@@ -10,6 +10,33 @@ type RouteContext = {
   }>;
 };
 
+function assetStrategyContext(asset: Record<string, any>) {
+  const metadata =
+    asset.metadata &&
+    typeof asset.metadata === "object" &&
+    !Array.isArray(asset.metadata)
+      ? asset.metadata
+      : {};
+
+  const pieces: string[] = [];
+
+  if (metadata.marketingSpine) {
+    pieces.push(`Marketing Spine: ${JSON.stringify(metadata.marketingSpine)}`);
+  }
+
+  if (metadata.assetBrief) {
+    pieces.push(`Asset Brief: ${JSON.stringify(metadata.assetBrief)}`);
+  }
+
+  if (Array.isArray(metadata.strategyInheritancePath)) {
+    pieces.push(
+      `Strategy Inheritance Path: ${metadata.strategyInheritancePath.join(" → ")}`,
+    );
+  }
+
+  return pieces.join("\n\n");
+}
+
 async function loadBrandContext(supabase: any, userId: string) {
   const pieces: string[] = [];
 
@@ -58,23 +85,35 @@ export async function POST(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const assetAccess = await getAssetAccessForUser({ supabase, assetId, userId: user.id });
+  const assetAccess = await getAssetAccessForUser({
+    supabase,
+    assetId,
+    userId: user.id,
+  });
 
   if (!assetAccess.asset || assetAccess.asset.archived_at) {
     return NextResponse.json(
       { error: "Asset not found or has been archived." },
-      { status: 404 }
+      { status: 404 },
     );
   }
 
   if (!assetAccess.canManage) {
-    return NextResponse.json({ error: "You do not have permission to quality-review this asset." }, { status: 403 });
+    return NextResponse.json(
+      { error: "You do not have permission to quality-review this asset." },
+      { status: 403 },
+    );
   }
 
   const asset = assetAccess.asset;
 
   try {
-    const brandContext = await loadBrandContext(supabase, user.id);
+    const brandContext = [
+      await loadBrandContext(supabase, user.id),
+      assetStrategyContext(asset),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
 
     const result = await reviewAssetQuality({
       assetId: asset.id,
@@ -106,6 +145,7 @@ export async function POST(_request: Request, context: RouteContext) {
           model: result.model,
           assetTitle: asset.title,
           assetType: asset.asset_type,
+          marketingSpineIncluded: Boolean(assetStrategyContext(asset)),
           reviewedAt: new Date().toISOString(),
           accountId: assetAccess.accountId,
         },
@@ -116,7 +156,7 @@ export async function POST(_request: Request, context: RouteContext) {
     if (reviewError || !savedReview) {
       return NextResponse.json(
         { error: reviewError?.message ?? "Unable to save quality review." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -142,7 +182,10 @@ export async function POST(_request: Request, context: RouteContext) {
       review: savedReview,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unexpected quality review error.";
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unexpected quality review error.";
 
     return NextResponse.json({ error: message }, { status: 400 });
   }

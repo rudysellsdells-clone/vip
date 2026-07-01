@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { buildMonthlyCampaignPlan } from "@/lib/content-calendar/monthly-campaign-planner";
-import { canManageAccountRole, getUserAccountContext } from "@/lib/accounts/account-context";
+import {
+  buildMarketingSpine,
+  marketingSpineSummary,
+} from "@/lib/content-calendar/marketing-spine";
+import {
+  canManageAccountRole,
+  getUserAccountContext,
+} from "@/lib/accounts/account-context";
 import {
   fetchAccountMarketProfile,
   marketProfileSummary,
@@ -34,11 +41,15 @@ function toJson(value: unknown): Json {
   return JSON.parse(JSON.stringify(value)) as Json;
 }
 
-function campaignIdea(week: ReturnType<typeof buildMonthlyCampaignPlan>[number]) {
+function campaignIdea(
+  week: ReturnType<typeof buildMonthlyCampaignPlan>[number],
+) {
   return `${week.campaignName}: ${week.campaignAngle}`.trim();
 }
 
-function campaignSummary(week: ReturnType<typeof buildMonthlyCampaignPlan>[number]) {
+function campaignSummary(
+  week: ReturnType<typeof buildMonthlyCampaignPlan>[number],
+) {
   return [
     week.campaignAngle,
     "",
@@ -79,11 +90,16 @@ function campaignPayload({
     planned_end_date: week.weekEndDate,
     metadata: {
       generatedFrom: "monthly_campaign_calendar",
-      generationMode: "fast_batch_stable_planner",
+      generationMode: "marketing_spine_fast_batch_planner",
       campaignTheme,
       businessContext,
       accountId,
       marketProfile,
+      marketingSpine: week.marketingSpine
+        ? marketingSpineSummary(week.marketingSpine)
+        : null,
+      marketingSpineUsage:
+        "Marketing Spine is the strategy chain of custody for this campaign: brand to strategy to channel roles to asset briefs to quality review to publishing.",
       campaignName: week.campaignName,
       campaignIdea: idea,
       campaignAngle: week.campaignAngle,
@@ -138,15 +154,17 @@ function assetPayload({
     }),
     metadata: toJson({
       generatedBy: "monthly_campaign_calendar",
-      generationMode: "fast_batch_stable_planner",
+      generationMode: "marketing_spine_fast_batch_planner",
       accountId,
       marketProfile,
       companionAssetFlow:
         asset.assetType === "galaxyai_prompt"
           ? "review_prompt_then_send_prompt_only_to_galaxyai"
           : null,
-      sourceAssetType: asset.assetType === "galaxyai_prompt" ? "video_script" : null,
-      galaxyAiPromptDerivedFromVideoScript: asset.assetType === "galaxyai_prompt",
+      sourceAssetType:
+        asset.assetType === "galaxyai_prompt" ? "video_script" : null,
+      galaxyAiPromptDerivedFromVideoScript:
+        asset.assetType === "galaxyai_prompt",
       ...(asset.metadata ?? {}),
     }),
     status: "needs_review",
@@ -187,20 +205,36 @@ export async function POST(request: Request) {
   const enteredBusinessContext = textValue(body.businessContext);
   const overwriteExisting = Boolean(body.overwriteExisting);
 
-  const accountContext = await getUserAccountContext({ supabase, userId: user.id });
+  const accountContext = await getUserAccountContext({
+    supabase,
+    userId: user.id,
+  });
   const requestedAccountId = textValue(body.accountId);
   const activeAccount =
-    accountContext.accounts.find((account) => account.id === requestedAccountId) ??
-    accountContext.accounts.find((account) => account.id === accountContext.activeAccountId) ??
+    accountContext.accounts.find(
+      (account) => account.id === requestedAccountId,
+    ) ??
+    accountContext.accounts.find(
+      (account) => account.id === accountContext.activeAccountId,
+    ) ??
     null;
   const activeAccountId = activeAccount?.id ?? null;
 
   if (!activeAccountId) {
-    return NextResponse.json({ error: "No active workspace selected." }, { status: 400 });
+    return NextResponse.json(
+      { error: "No active workspace selected." },
+      { status: 400 },
+    );
   }
 
   if (!(accountContext.isMaster || canManageAccountRole(activeAccount?.role))) {
-    return NextResponse.json({ error: "You do not have permission to generate monthly campaigns for this workspace." }, { status: 403 });
+    return NextResponse.json(
+      {
+        error:
+          "You do not have permission to generate monthly campaigns for this workspace.",
+      },
+      { status: 403 },
+    );
   }
 
   const marketProfileOptions = await fetchAccountMarketProfile({
@@ -226,6 +260,8 @@ export async function POST(request: Request) {
     callToAction: textValue(body.callToAction),
     differentiator: textValue(body.differentiator),
     proofPoints: textValue(body.proofPoints),
+    originalityAngle: textValue(body.originalityAngle),
+    objections: textValue(body.objections),
   };
 
   const strategy = mergeStrategyWithMarketDefaults({
@@ -233,9 +269,19 @@ export async function POST(request: Request) {
     defaults: resolvedMarketProfile.strategyDefaults,
   });
 
-  const businessContext = [enteredBusinessContext, resolvedMarketProfile.businessContext]
+  const businessContext = [
+    enteredBusinessContext,
+    resolvedMarketProfile.businessContext,
+  ]
     .filter(Boolean)
     .join("\n\n");
+
+  const marketingSpine = buildMarketingSpine({
+    campaignTheme,
+    businessContext,
+    accountName: activeAccount?.name,
+    strategy,
+  });
 
   if (!overwriteExisting) {
     const { count, error: countError } = await supabase
@@ -256,7 +302,7 @@ export async function POST(request: Request) {
             "Campaigns already exist for this month. Enable overwrite if you intentionally want to create another set.",
           existingCount: count,
         },
-        { status: 409 }
+        { status: 409 },
       );
     }
   }
@@ -266,6 +312,7 @@ export async function POST(request: Request) {
     campaignTheme,
     businessContext,
     strategy,
+    marketingSpine,
   });
 
   if (!plan.length) {
@@ -274,7 +321,7 @@ export async function POST(request: Request) {
         error: "No campaign weeks were created for this month.",
         month,
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -293,7 +340,7 @@ export async function POST(request: Request) {
       businessContext,
       marketProfile: resolvedMarketProfile.metadata,
       week,
-    })
+    }),
   );
 
   const { data: createdCampaigns, error: campaignInsertError } = await supabase
@@ -304,10 +351,11 @@ export async function POST(request: Request) {
   if (campaignInsertError || !Array.isArray(createdCampaigns)) {
     return NextResponse.json(
       {
-        error: campaignInsertError?.message ?? "Unable to create monthly campaigns.",
+        error:
+          campaignInsertError?.message ?? "Unable to create monthly campaigns.",
         stage: "campaign_batch_insert",
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -331,7 +379,7 @@ export async function POST(request: Request) {
         week,
         asset,
         marketProfile: resolvedMarketProfile.metadata,
-      })
+      }),
     );
   });
 
@@ -342,7 +390,7 @@ export async function POST(request: Request) {
         stage: "asset_prepare",
         campaignCount: createdCampaigns.length,
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -354,36 +402,40 @@ export async function POST(request: Request) {
   if (assetInsertError || !Array.isArray(createdAssets)) {
     return NextResponse.json(
       {
-        error: assetInsertError?.message ?? "Unable to create generated assets.",
+        error:
+          assetInsertError?.message ?? "Unable to create generated assets.",
         stage: "asset_batch_insert",
         campaignCount: createdCampaigns.length,
         attemptedAssetCount: assetRows.length,
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
   const linkWarnings: string[] = [];
 
   for (const promptAsset of createdAssets.filter(
-    (asset) => asset.asset_type === "galaxyai_prompt"
+    (asset) => asset.asset_type === "galaxyai_prompt",
   )) {
     const companionVideoScript = createdAssets.find(
       (asset) =>
         asset.asset_type === "video_script" &&
         asset.campaign_id === promptAsset.campaign_id &&
-        Number(asset.campaign_week_number) === Number(promptAsset.campaign_week_number)
+        Number(asset.campaign_week_number) ===
+          Number(promptAsset.campaign_week_number),
     );
 
     if (!companionVideoScript?.id) {
       linkWarnings.push(
-        `GalaxyAI prompt ${promptAsset.id} was created, but no matching Friday video script was found for parent linking.`
+        `GalaxyAI prompt ${promptAsset.id} was created, but no matching Friday video script was found for parent linking.`,
       );
       continue;
     }
 
     const metadata =
-      promptAsset.metadata && typeof promptAsset.metadata === "object" && !Array.isArray(promptAsset.metadata)
+      promptAsset.metadata &&
+      typeof promptAsset.metadata === "object" &&
+      !Array.isArray(promptAsset.metadata)
         ? promptAsset.metadata
         : {};
 
@@ -397,7 +449,8 @@ export async function POST(request: Request) {
           display_with_asset_id: companionVideoScript.id,
           companion_to_asset_type: "video_script",
           galaxyAiExecutionAsset: true,
-          executionRule: "Only the approved galaxyai_prompt asset should be sent to GalaxyAI.",
+          executionRule:
+            "Only the approved galaxyai_prompt asset should be sent to GalaxyAI.",
         }),
       })
       .eq("id", promptAsset.id)
@@ -405,14 +458,13 @@ export async function POST(request: Request) {
 
     if (linkError) {
       linkWarnings.push(
-        `Unable to link GalaxyAI prompt ${promptAsset.id} to video script ${companionVideoScript.id}: ${linkError.message}`
+        `Unable to link GalaxyAI prompt ${promptAsset.id} to video script ${companionVideoScript.id}: ${linkError.message}`,
       );
     }
   }
 
-
   for (const imagePromptAsset of createdAssets.filter(
-    (asset) => asset.asset_type === "galaxyai_image_prompt"
+    (asset) => asset.asset_type === "galaxyai_image_prompt",
   )) {
     const imagePromptMetadata =
       imagePromptAsset.metadata &&
@@ -421,27 +473,33 @@ export async function POST(request: Request) {
         ? imagePromptAsset.metadata
         : {};
 
-    const sourceSocialAssetType = String(imagePromptMetadata.sourceSocialAssetType ?? "");
-    const sourceSocialAssetSortOrder = Number(imagePromptMetadata.sourceSocialAssetSortOrder ?? 0);
+    const sourceSocialAssetType = String(
+      imagePromptMetadata.sourceSocialAssetType ?? "",
+    );
+    const sourceSocialAssetSortOrder = Number(
+      imagePromptMetadata.sourceSocialAssetSortOrder ?? 0,
+    );
 
     const companionSocialPost = createdAssets.find(
       (asset) =>
         asset.campaign_id === imagePromptAsset.campaign_id &&
-        Number(asset.campaign_week_number) === Number(imagePromptAsset.campaign_week_number) &&
+        Number(asset.campaign_week_number) ===
+          Number(imagePromptAsset.campaign_week_number) &&
         asset.asset_type === sourceSocialAssetType &&
-        Number(asset.calendar_sort_order) === sourceSocialAssetSortOrder
+        Number(asset.calendar_sort_order) === sourceSocialAssetSortOrder,
     );
 
     const visualDirectionAsset = createdAssets.find(
       (asset) =>
         asset.campaign_id === imagePromptAsset.campaign_id &&
-        Number(asset.campaign_week_number) === Number(imagePromptAsset.campaign_week_number) &&
-        asset.asset_type === "campaign_visual_direction"
+        Number(asset.campaign_week_number) ===
+          Number(imagePromptAsset.campaign_week_number) &&
+        asset.asset_type === "campaign_visual_direction",
     );
 
     if (!companionSocialPost?.id) {
       linkWarnings.push(
-        `GalaxyAI image prompt ${imagePromptAsset.id} was created, but no matching social post was found for parent linking.`
+        `GalaxyAI image prompt ${imagePromptAsset.id} was created, but no matching social post was found for parent linking.`,
       );
       continue;
     }
@@ -469,7 +527,7 @@ export async function POST(request: Request) {
 
     if (imageLinkError) {
       linkWarnings.push(
-        `Unable to link GalaxyAI image prompt ${imagePromptAsset.id} to social post ${companionSocialPost.id}: ${imageLinkError.message}`
+        `Unable to link GalaxyAI image prompt ${imagePromptAsset.id} to social post ${companionSocialPost.id}: ${imageLinkError.message}`,
       );
     }
   }
@@ -487,12 +545,15 @@ export async function POST(request: Request) {
     description: `${createdCampaigns.length} campaign(s) and ${createdAssets.length} generated asset(s) created for ${month}.`,
     metadata: {
       month,
-      generationMode: "fast_batch_stable_planner",
+      generationMode: "marketing_spine_fast_batch_planner",
       campaignTheme,
       businessContext,
       activeAccountId,
       marketProfile: resolvedMarketProfile.metadata,
       marketProfileSummary: marketProfileSummary(marketProfileOptions),
+      marketingSpine: marketingSpineSummary(marketingSpine),
+      marketingSpineGateStatus: marketingSpine.gateStatus,
+      marketingSpineReadinessScore: marketingSpine.readinessScore,
       privateStrategy: strategy,
       campaignCount: createdCampaigns.length,
       assetCount: createdAssets.length,
@@ -508,7 +569,8 @@ export async function POST(request: Request) {
     month,
     activeAccountId,
     marketProfile: resolvedMarketProfile.metadata,
-    generationMode: "fast_batch_stable_planner",
+    marketingSpine: marketingSpineSummary(marketingSpine),
+    generationMode: "marketing_spine_fast_batch_planner",
     campaignCount: createdCampaigns.length,
     assetCount: createdAssets.length,
     expectedAssetCount: assetRows.length,

@@ -3,6 +3,12 @@ import {
   WeeklyAssetBlueprint,
   assetTypeLabel,
 } from "@/lib/content-calendar/monthly-campaign-blueprint";
+import {
+  buildMarketingSpineAssetBrief,
+  formatMarketingSpineForPrompt,
+  marketingSpineSummary,
+  type MarketingSpine,
+} from "@/lib/content-calendar/marketing-spine";
 import { buildGalaxyAiPromptFromVideoScript } from "@/lib/galaxyai/prompt-builder";
 import {
   buildCampaignVisualDirection,
@@ -18,6 +24,8 @@ export type MonthlyCampaignStrategyInput = {
   callToAction?: string;
   differentiator?: string;
   proofPoints?: string;
+  originalityAngle?: string;
+  objections?: string;
 };
 
 export type MonthlyCampaignPlanInput = {
@@ -25,6 +33,7 @@ export type MonthlyCampaignPlanInput = {
   businessContext?: string;
   campaignTheme?: string;
   strategy?: MonthlyCampaignStrategyInput;
+  marketingSpine?: MarketingSpine | null;
 };
 
 export type WeeklyCampaignPlan = {
@@ -37,6 +46,7 @@ export type WeeklyCampaignPlan = {
   weekStartDate: string;
   weekEndDate: string;
   strategy: MonthlyCampaignStrategyInput;
+  marketingSpine?: MarketingSpine | null;
   assets: Array<{
     assetType: WeeklyAssetBlueprint["assetType"];
     title: string;
@@ -136,7 +146,9 @@ function campaignWeeksForMonth(month: string) {
   return weeks;
 }
 
-function cleanStrategy(strategy?: MonthlyCampaignStrategyInput): MonthlyCampaignStrategyInput {
+function cleanStrategy(
+  strategy?: MonthlyCampaignStrategyInput,
+): MonthlyCampaignStrategyInput {
   return {
     monthlyObjective: strategy?.monthlyObjective?.trim() || "",
     targetAudience: strategy?.targetAudience?.trim() || "",
@@ -146,16 +158,25 @@ function cleanStrategy(strategy?: MonthlyCampaignStrategyInput): MonthlyCampaign
     callToAction: strategy?.callToAction?.trim() || "",
     differentiator: strategy?.differentiator?.trim() || "",
     proofPoints: strategy?.proofPoints?.trim() || "",
+    originalityAngle: strategy?.originalityAngle?.trim() || "",
+    objections: strategy?.objections?.trim() || "",
   };
 }
 
-function topicList(strategy: MonthlyCampaignStrategyInput) {
-  return strategy.keyTopics
+function topicList(
+  strategy: MonthlyCampaignStrategyInput,
+  marketingSpine?: MarketingSpine | null,
+) {
+  const explicitTopics = strategy.keyTopics
     ? strategy.keyTopics
         .split(/\n|,/)
         .map((topic) => topic.trim())
         .filter(Boolean)
     : [];
+
+  return explicitTopics.length
+    ? explicitTopics
+    : (marketingSpine?.contentPillars ?? []);
 }
 
 function titleCase(value: string) {
@@ -166,8 +187,12 @@ function titleCase(value: string) {
     .join(" ");
 }
 
-function topicForWeek(strategy: MonthlyCampaignStrategyInput, weekNumber: number) {
-  const topics = topicList(strategy);
+function topicForWeek(
+  strategy: MonthlyCampaignStrategyInput,
+  weekNumber: number,
+  marketingSpine?: MarketingSpine | null,
+) {
+  const topics = topicList(strategy, marketingSpine);
 
   if (topics.length) {
     return topics[(weekNumber - 1) % topics.length];
@@ -184,7 +209,10 @@ function topicForWeek(strategy: MonthlyCampaignStrategyInput, weekNumber: number
   return defaults[(weekNumber - 1) % defaults.length];
 }
 
-function publicTitleForTopic(topic: string, strategy: MonthlyCampaignStrategyInput) {
+function publicTitleForTopic(
+  topic: string,
+  strategy: MonthlyCampaignStrategyInput,
+) {
   const audience = strategy.targetAudience || "local businesses";
 
   if (/ai|search/i.test(topic)) {
@@ -207,14 +235,19 @@ function internalCampaignName({
   weekNumber,
   campaignTheme,
   strategy,
+  marketingSpine,
 }: {
   month: string;
   weekNumber: number;
   campaignTheme?: string;
   strategy: MonthlyCampaignStrategyInput;
+  marketingSpine?: MarketingSpine | null;
 }) {
-  const baseTheme = campaignTheme?.trim() || "Authority Growth";
-  const topic = topicForWeek(strategy, weekNumber);
+  const baseTheme =
+    campaignTheme?.trim() ||
+    marketingSpine?.campaignTheme ||
+    "Authority Growth";
+  const topic = topicForWeek(strategy, weekNumber, marketingSpine);
 
   return `${monthLabel(month)} Week ${weekNumber}: ${baseTheme} — ${topic}`;
 }
@@ -222,16 +255,34 @@ function internalCampaignName({
 function publicCampaignAngle({
   weekNumber,
   strategy,
+  marketingSpine,
 }: {
   weekNumber: number;
   strategy: MonthlyCampaignStrategyInput;
+  marketingSpine?: MarketingSpine | null;
 }) {
-  const topic = topicForWeek(strategy, weekNumber);
-  const audience = strategy.targetAudience || "the right customers";
-  const offer = strategy.primaryOffer || "the right next step";
-  const differentiator = strategy.differentiator || "a practical service plan";
+  const topic = topicForWeek(strategy, weekNumber, marketingSpine);
+  const audience =
+    marketingSpine?.audience ||
+    strategy.targetAudience ||
+    "the right customers";
+  const offer =
+    marketingSpine?.offer || strategy.primaryOffer || "the right next step";
+  const differentiator =
+    strategy.differentiator ||
+    marketingSpine?.positioningAngle ||
+    "a practical service plan";
+  const originality =
+    marketingSpine?.originalityAngle || strategy.originalityAngle || "";
+  const buyerPain = marketingSpine?.buyerPain || topic;
 
   const angles = [
+    originality
+      ? `${originality} This week turns that point of view into useful content around ${topic}.`
+      : "",
+    buyerPain
+      ? `${audience} are dealing with ${buyerPain}. This week shows why that matters and how ${offer} creates a practical next step.`
+      : "",
     `${audience} are paying closer attention to ${topic}, and the service businesses that explain it clearly are more likely to earn trust before the first conversation.`,
     `Improving how people understand ${topic} does not have to be complicated. The right plan connects helpful education, clear proof, and a simple next step for the customer.`,
     `Many businesses waste time creating disconnected content. A better approach is to use ${topic} as the weekly anchor and turn it into useful posts, emails, and video ideas.`,
@@ -239,7 +290,8 @@ function publicCampaignAngle({
     `A strong month of content should not feel random. It should reinforce the same message, build confidence, and point people toward ${offer}.`,
   ];
 
-  return angles[(weekNumber - 1) % angles.length];
+  const usableAngles = angles.filter(Boolean);
+  return usableAngles[(weekNumber - 1) % usableAngles.length];
 }
 
 function privateGenerationPrompt({
@@ -250,6 +302,7 @@ function privateGenerationPrompt({
   campaignAngle,
   businessContext,
   strategy,
+  marketingSpine,
 }: {
   month: string;
   weekNumber: number;
@@ -258,6 +311,7 @@ function privateGenerationPrompt({
   campaignAngle: string;
   businessContext?: string;
   strategy: MonthlyCampaignStrategyInput;
+  marketingSpine?: MarketingSpine | null;
 }) {
   return [
     "PRIVATE GENERATION BRIEF — DO NOT PRINT THIS BRIEF IN THE FINAL CONTENT.",
@@ -268,17 +322,28 @@ function privateGenerationPrompt({
     `Public Title Direction: ${publicTitle}`,
     "",
     "Use the following strategy inputs to guide the angle, examples, offer positioning, and CTA.",
+    marketingSpine ? formatMarketingSpineForPrompt(marketingSpine) : "",
     "Do not publish these labels, raw notes, internal month, campaign name, week number, or planning identifiers in the content.",
     "",
-    strategy.monthlyObjective ? `Monthly Objective: ${strategy.monthlyObjective}` : "",
-    strategy.targetAudience ? `Target Audience: ${strategy.targetAudience}` : "",
+    strategy.monthlyObjective
+      ? `Monthly Objective: ${strategy.monthlyObjective}`
+      : "",
+    strategy.targetAudience
+      ? `Target Audience: ${strategy.targetAudience}`
+      : "",
     strategy.primaryOffer ? `Primary Offer: ${strategy.primaryOffer}` : "",
-    strategy.keyTopics ? `Key Topics / Weekly Angles: ${strategy.keyTopics}` : "",
+    strategy.keyTopics
+      ? `Key Topics / Weekly Angles: ${strategy.keyTopics}`
+      : "",
     strategy.tone ? `Brand Tone: ${strategy.tone}` : "",
     strategy.differentiator ? `Differentiator: ${strategy.differentiator}` : "",
     strategy.callToAction ? `Call To Action: ${strategy.callToAction}` : "",
-    strategy.proofPoints ? `Proof Points / Supporting Context: ${strategy.proofPoints}` : "",
-    businessContext?.trim() ? `Additional Business Context: ${businessContext.trim()}` : "",
+    strategy.proofPoints
+      ? `Proof Points / Supporting Context: ${strategy.proofPoints}`
+      : "",
+    businessContext?.trim()
+      ? `Additional Business Context: ${businessContext.trim()}`
+      : "",
     "",
     "Public-facing campaign angle:",
     campaignAngle,
@@ -302,7 +367,12 @@ function hashtagFromPhrase(value: string) {
     .split(/\s+/)
     .map((word) => word.trim())
     .filter(Boolean)
-    .filter((word) => !["and", "the", "for", "with", "from", "this", "that"].includes(word.toLowerCase()))
+    .filter(
+      (word) =>
+        !["and", "the", "for", "with", "from", "this", "that"].includes(
+          word.toLowerCase(),
+        ),
+    )
     .slice(0, 4);
 
   if (!words.length) return "";
@@ -322,7 +392,12 @@ function topicEmoji(topic: string) {
   if (lower.includes("ai") || lower.includes("search")) return "🔎";
   if (lower.includes("local") || lower.includes("google")) return "📍";
   if (lower.includes("content") || lower.includes("blog")) return "✍️";
-  if (lower.includes("lead") || lower.includes("sales") || lower.includes("growth")) return "📈";
+  if (
+    lower.includes("lead") ||
+    lower.includes("sales") ||
+    lower.includes("growth")
+  )
+    return "📈";
   if (lower.includes("authority") || lower.includes("trust")) return "🏆";
   if (lower.includes("video")) return "🎥";
   if (lower.includes("email")) return "📬";
@@ -371,7 +446,8 @@ function socialHashtags({
     "#ServiceBusiness",
   ];
 
-  const channelTag = assetType === "linkedin_post" ? "#BusinessGrowth" : "#LocalBusiness";
+  const channelTag =
+    assetType === "linkedin_post" ? "#BusinessGrowth" : "#LocalBusiness";
 
   return uniqueValues([...topicTags, ...defaults, channelTag])
     .slice(0, assetType === "linkedin_post" ? 6 : 5)
@@ -385,6 +461,7 @@ function contentForAsset({
   label,
   strategy,
   weekNumber,
+  marketingSpine,
 }: {
   assetType: string;
   publicTitle: string;
@@ -392,10 +469,24 @@ function contentForAsset({
   label: string;
   strategy: MonthlyCampaignStrategyInput;
   weekNumber: number;
+  marketingSpine?: MarketingSpine | null;
 }): string {
-  const callToAction = cta(strategy);
-  const topic = topicForWeek(strategy, weekNumber);
-  const offer = publicOfferPhrase(strategy);
+  const callToAction = marketingSpine?.primaryCta || cta(strategy);
+  const topic = topicForWeek(strategy, weekNumber, marketingSpine);
+  const offer = marketingSpine?.offer || publicOfferPhrase(strategy);
+  const buyerPain = marketingSpine?.buyerPain || topic;
+  const originalityAngle =
+    marketingSpine?.originalityAngle ||
+    strategy.originalityAngle ||
+    campaignAngle;
+  const proofPoint =
+    marketingSpine?.proofPoints?.[0] ||
+    strategy.proofPoints ||
+    "a practical proof point";
+  const objection =
+    marketingSpine?.objections?.[0] ||
+    strategy.objections ||
+    "why this matters now";
 
   switch (assetType) {
     case "blog_post":
@@ -405,13 +496,15 @@ function contentForAsset({
         "## Why This Matters",
         campaignAngle,
         "",
+        `The core buyer problem this campaign is built around: ${buyerPain}`,
+        "",
         "## What Business Owners Should Know",
-        `A clear plan around ${topic} helps people understand why your service is relevant before they ever reach out.`,
+        `A clear plan around ${topic} helps people understand why your service is relevant before they ever reach out. The proof point to keep in view: ${proofPoint}`,
         "",
         "The strongest content does not try to say everything at once. It focuses on one useful idea, explains it clearly, and connects that idea to the next step.",
         "",
         "## How to Put This Into Action",
-        `Start by turning this topic into a practical message across your website, social posts, email, and video content. Keep the message useful, direct, and tied to ${offer}.`,
+        `Start by turning this topic into a practical message across your website, social posts, email, and video content. Keep the message useful, direct, and tied to ${offer}. Address this objection directly: ${objection}`,
         "",
         "## Next Step",
         callToAction,
@@ -420,6 +513,8 @@ function contentForAsset({
     case "linkedin_post":
       return [
         `${socialEmojiSet({ topic, assetType })} ${campaignAngle}`,
+        "",
+        `Strategic spine: ${originalityAngle}`,
         "",
         "A good campaign does more than fill the calendar. It gives the right audience a clear reason to trust you, remember you, and take the next step.",
         "",
@@ -434,7 +529,7 @@ function contentForAsset({
         "",
         campaignAngle,
         "",
-        "When your content is built around one clear service idea, it becomes easier for people to understand what you do and why it matters.",
+        `When your content is built around one clear service idea, it becomes easier for people to understand what you do and why it matters. The key objection to handle here: ${objection}`,
         "",
         callToAction,
         "",
@@ -449,7 +544,7 @@ function contentForAsset({
         "",
         campaignAngle,
         "",
-        `This is a good time to look at how ${topic} supports the customer's decision and how it connects to the next step you want people to take.`,
+        `This is a good time to look at how ${topic} supports the customer's decision and how it connects to the next step you want people to take. The key issue is ${buyerPain}.`,
         "",
         callToAction,
         "",
@@ -463,7 +558,7 @@ function contentForAsset({
         "",
         "20-second video script:",
         "",
-        `Hook: Most service businesses do not need more random content. They need a clearer message around ${topic}.`,
+        `Hook: Most businesses do not need more random content. They need a clearer strategy spine around ${topic}.`,
         "",
         `Main point: ${campaignAngle}`,
         "",
@@ -480,10 +575,11 @@ function contentForAsset({
           label: "Friday video script",
           strategy,
           weekNumber,
+          marketingSpine,
         }),
         campaignAngle,
         callToAction,
-        audience: strategy.targetAudience,
+        audience: marketingSpine?.audience || strategy.targetAudience,
       });
 
     default:
@@ -491,12 +587,15 @@ function contentForAsset({
   }
 }
 
-export function buildMonthlyCampaignPlan(input: MonthlyCampaignPlanInput): WeeklyCampaignPlan[] {
+export function buildMonthlyCampaignPlan(
+  input: MonthlyCampaignPlanInput,
+): WeeklyCampaignPlan[] {
   const weeks = campaignWeeksForMonth(input.month);
   const strategy = cleanStrategy(input.strategy);
+  const marketingSpine = input.marketingSpine ?? null;
 
   return weeks.map((week) => {
-    const publicTopic = topicForWeek(strategy, week.weekNumber);
+    const publicTopic = topicForWeek(strategy, week.weekNumber, marketingSpine);
     const publicTitle = publicTitleForTopic(publicTopic, strategy);
 
     const campaignName = internalCampaignName({
@@ -504,11 +603,13 @@ export function buildMonthlyCampaignPlan(input: MonthlyCampaignPlanInput): Weekl
       weekNumber: week.weekNumber,
       campaignTheme: input.campaignTheme,
       strategy,
+      marketingSpine,
     });
 
     const campaignAngle = publicCampaignAngle({
       weekNumber: week.weekNumber,
       strategy,
+      marketingSpine,
     });
 
     const generationPrompt = privateGenerationPrompt({
@@ -519,6 +620,7 @@ export function buildMonthlyCampaignPlan(input: MonthlyCampaignPlanInput): Weekl
       campaignAngle,
       businessContext: input.businessContext,
       strategy,
+      marketingSpine,
     });
 
     return {
@@ -529,6 +631,7 @@ export function buildMonthlyCampaignPlan(input: MonthlyCampaignPlanInput): Weekl
       campaignAngle,
       generationPrompt,
       strategy,
+      marketingSpine,
       weekStartDate: dateKey(week.start),
       weekEndDate: dateKey(week.end),
       assets: (() => {
@@ -539,6 +642,7 @@ export function buildMonthlyCampaignPlan(input: MonthlyCampaignPlanInput): Weekl
           label: "Friday video script",
           strategy,
           weekNumber: week.weekNumber,
+          marketingSpine,
         });
 
         const campaignVisualDirectionContent = buildCampaignVisualDirection({
@@ -561,15 +665,20 @@ export function buildMonthlyCampaignPlan(input: MonthlyCampaignPlanInput): Weekl
                 label: label.replace(/ image prompt$/i, " post"),
                 strategy,
                 weekNumber: week.weekNumber,
+                marketingSpine,
               })
             : "";
 
           const content =
             slot.assetType === "campaign_visual_direction"
               ? campaignVisualDirectionContent
-              : slot.assetType === "galaxyai_image_prompt" && sourceSocialAssetType
+              : slot.assetType === "galaxyai_image_prompt" &&
+                  sourceSocialAssetType
                 ? buildGalaxyAiSocialImagePrompt({
-                    platform: sourceSocialAssetType === "linkedin_post" ? "linkedin" : "facebook",
+                    platform:
+                      sourceSocialAssetType === "linkedin_post"
+                        ? "linkedin"
+                        : "facebook",
                     publicTitle,
                     campaignAngle,
                     campaignVisualDirection: campaignVisualDirectionContent,
@@ -581,8 +690,9 @@ export function buildMonthlyCampaignPlan(input: MonthlyCampaignPlanInput): Weekl
                       title: publicTitle,
                       videoScript: videoScriptContent,
                       campaignAngle,
-                      callToAction: cta(strategy),
-                      audience: strategy.targetAudience,
+                      callToAction: marketingSpine?.primaryCta || cta(strategy),
+                      audience:
+                        marketingSpine?.audience || strategy.targetAudience,
                     })
                   : slot.assetType === "video_script"
                     ? videoScriptContent
@@ -593,27 +703,60 @@ export function buildMonthlyCampaignPlan(input: MonthlyCampaignPlanInput): Weekl
                         label,
                         strategy,
                         weekNumber: week.weekNumber,
+                        marketingSpine,
                       });
+
+          const assetBrief = buildMarketingSpineAssetBrief({
+            assetType: slot.assetType,
+            assetLabel: label,
+            publicTitle,
+            publicTopic,
+            weekNumber: week.weekNumber,
+            marketingSpine,
+          });
+
+          const baseMetadata = {
+            marketingSpine: marketingSpine
+              ? marketingSpineSummary(marketingSpine)
+              : null,
+            assetBrief,
+            strategyInheritancePath: marketingSpine?.inheritancePath ?? [
+              "Campaign strategy",
+              "Asset brief",
+              "Asset creation",
+              "Quality review",
+              "Publishing preflight",
+            ],
+          };
 
           const metadata =
             slot.assetType === "campaign_visual_direction"
               ? {
+                  ...baseMetadata,
                   visualAssetRole: "weekly_campaign_visual_direction",
-                  appliesToAssetTypes: ["linkedin_post", "facebook_post", "galaxyai_image_prompt"],
+                  appliesToAssetTypes: [
+                    "linkedin_post",
+                    "facebook_post",
+                    "galaxyai_image_prompt",
+                  ],
                 }
               : slot.assetType === "galaxyai_image_prompt"
                 ? {
+                    ...baseMetadata,
                     visualAssetRole: "social_image_prompt",
                     galaxyAiImagePrompt: true,
                     sourceSocialAssetType,
                     sourceSocialAssetSortOrder: slot.sourceSortOrder ?? null,
-                    imagePlatform: sourceSocialAssetType === "linkedin_post" ? "linkedin" : "facebook",
+                    imagePlatform:
+                      sourceSocialAssetType === "linkedin_post"
+                        ? "linkedin"
+                        : "facebook",
                     imageFormat: "square_1200x1200",
                     requiresHumanReviewBeforeGalaxyAiRun: true,
                     artifactReviewInstruction:
                       "Review the output at least three times for artifacts, distorted people, malformed text, fake metrics, and mismatched objects before accepting the generated image.",
                   }
-                : undefined;
+                : baseMetadata;
 
           return {
             assetType: slot.assetType,
@@ -632,6 +775,7 @@ export function buildMonthlyCampaignPlan(input: MonthlyCampaignPlanInput): Weekl
               "",
               `Asset Type: ${slot.assetType}`,
               `Asset Slot: ${label}`,
+              `Asset Brief: ${JSON.stringify(assetBrief)}`,
               slot.assetType === "campaign_visual_direction"
                 ? "Create the shared weekly visual direction for all campaign social images."
                 : slot.assetType === "galaxyai_image_prompt"

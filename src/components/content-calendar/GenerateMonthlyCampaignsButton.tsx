@@ -6,6 +6,7 @@ import formStyles from "@/components/forms/VipForm.module.css";
 import { websiteStyles } from "@/components/website-ui/WebsitePage";
 import type { AccountMarketProfile } from "@/lib/accounts/account-market-profile";
 import type { BrandVoiceMonthlyOptions } from "@/lib/accounts/brand-voice-monthly-options";
+import { buildMarketingSpine } from "@/lib/content-calendar/marketing-spine";
 
 function currentMonthValue() {
   const now = new Date();
@@ -51,14 +52,34 @@ async function readJson(response: Response) {
 function hasBrandVoiceOptions(options?: BrandVoiceMonthlyOptions) {
   return Boolean(
     options &&
-      (options.audiences.length ||
-        options.offers.length ||
-        options.tones.length ||
-        options.ctas.length ||
-        options.differentiators.length ||
-        options.proofPoints.length ||
-        options.businessContextDefault ||
-        options.monthlyObjectiveDefault),
+    (options.audiences.length ||
+      options.offers.length ||
+      options.tones.length ||
+      options.ctas.length ||
+      options.differentiators.length ||
+      options.proofPoints.length ||
+      options.businessContextDefault ||
+      options.monthlyObjectiveDefault),
+  );
+}
+function gateLabel(status: string) {
+  if (status === "ready") return "Spine ready";
+  if (status === "weak_context") return "Spine usable, but thin";
+  return "Needs context";
+}
+
+function previewText(value: string, fallback = "Not supplied yet") {
+  return value?.trim() || fallback;
+}
+
+function MiniSpineField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className={websiteStyles.cardMeta}>{label}</p>
+      <p className={websiteStyles.cardText} style={{ marginTop: 4 }}>
+        {previewText(value)}
+      </p>
+    </div>
   );
 }
 
@@ -112,14 +133,19 @@ export function GenerateMonthlyCampaignsButton({
   brandVoiceOptions?: BrandVoiceMonthlyOptions;
 }) {
   const router = useRouter();
-  const initialMonth = useMemo(() => defaultMonth || currentMonthValue(), [defaultMonth]);
+  const initialMonth = useMemo(
+    () => defaultMonth || currentMonthValue(),
+    [defaultMonth],
+  );
   const brandDefaults = useMemo(() => brandVoiceOptions, [brandVoiceOptions]);
   const [month, setMonth] = useState(initialMonth);
   const [campaignTheme, setCampaignTheme] = useState("Authority Growth");
   const [serviceLineId, setServiceLineId] = useState("");
   const [audienceId, setAudienceId] = useState("");
   const [offerId, setOfferId] = useState("");
-  const [monthlyObjective, setMonthlyObjective] = useState(brandDefaults?.monthlyObjectiveDefault ?? "");
+  const [monthlyObjective, setMonthlyObjective] = useState(
+    brandDefaults?.monthlyObjectiveDefault ?? "",
+  );
   const [targetAudience, setTargetAudience] = useState("");
   const [primaryOffer, setPrimaryOffer] = useState("");
   const [keyTopics, setKeyTopics] = useState("");
@@ -127,11 +153,51 @@ export function GenerateMonthlyCampaignsButton({
   const [callToAction, setCallToAction] = useState("");
   const [differentiator, setDifferentiator] = useState("");
   const [proofPoints, setProofPoints] = useState("");
-  const [businessContext, setBusinessContext] = useState(brandDefaults?.businessContextDefault ?? "");
+  const [originalityAngle, setOriginalityAngle] = useState("");
+  const [objections, setObjections] = useState("");
+  const [businessContext, setBusinessContext] = useState(
+    brandDefaults?.businessContextDefault ?? "",
+  );
   const [overwriteExisting, setOverwriteExisting] = useState(false);
   const [running, setRunning] = useState(false);
   const [summary, setSummary] = useState<Record<string, any> | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const marketingSpine = useMemo(
+    () =>
+      buildMarketingSpine({
+        campaignTheme,
+        businessContext,
+        accountName: activeAccountName,
+        strategy: {
+          monthlyObjective,
+          targetAudience,
+          primaryOffer,
+          keyTopics,
+          tone: brandTone,
+          callToAction,
+          differentiator,
+          proofPoints,
+          originalityAngle,
+          objections,
+        },
+      }),
+    [
+      activeAccountName,
+      brandTone,
+      businessContext,
+      callToAction,
+      campaignTheme,
+      differentiator,
+      keyTopics,
+      monthlyObjective,
+      objections,
+      originalityAngle,
+      primaryOffer,
+      proofPoints,
+      targetAudience,
+    ],
+  );
 
   function requestPayload() {
     return {
@@ -150,13 +216,15 @@ export function GenerateMonthlyCampaignsButton({
       callToAction,
       differentiator,
       proofPoints,
+      originalityAngle,
+      objections,
       overwriteExisting,
     };
   }
 
   async function generate() {
     const confirmed = window.confirm(
-      "Generate one campaign per week for this month, including the full asset package for each campaign?"
+      `Generate one campaign per week using this Marketing Spine? Gate status: ${gateLabel(marketingSpine.gateStatus)} (${marketingSpine.readinessScore}/100).`,
     );
 
     if (!confirmed) return;
@@ -166,13 +234,16 @@ export function GenerateMonthlyCampaignsButton({
     setError(null);
 
     try {
-      const response = await fetch("/api/content-calendar/monthly-campaigns/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const response = await fetch(
+        "/api/content-calendar/monthly-campaigns/generate",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestPayload()),
         },
-        body: JSON.stringify(requestPayload()),
-      });
+      );
 
       const result = await readJson(response);
 
@@ -180,7 +251,7 @@ export function GenerateMonthlyCampaignsButton({
         throw new Error(
           `${readableMessage(result, "Unable to generate monthly campaigns.")}${
             response.status ? ` — HTTP ${response.status}` : ""
-          }`
+          }`,
         );
       }
 
@@ -191,7 +262,7 @@ export function GenerateMonthlyCampaignsButton({
           `Generation completed with ${result.errors.length} issue(s): ${result.errors
             .map((item: unknown) => readableMessage(item, "Unknown issue"))
             .slice(0, 3)
-            .join(" | ")}`
+            .join(" | ")}`,
         );
         return;
       }
@@ -201,10 +272,14 @@ export function GenerateMonthlyCampaignsButton({
         return;
       }
 
-      router.push(`/content-calendar/monthly-review?month=${encodeURIComponent(month)}`);
+      router.push(
+        `/content-calendar/monthly-review?month=${encodeURIComponent(month)}`,
+      );
       router.refresh();
     } catch (err) {
-      setError(readableMessage(err, "Unexpected monthly campaign generation error."));
+      setError(
+        readableMessage(err, "Unexpected monthly campaign generation error."),
+      );
     } finally {
       setRunning(false);
     }
@@ -215,7 +290,8 @@ export function GenerateMonthlyCampaignsButton({
       <div className={formStyles.header}>
         <h3 className={formStyles.title}>Generate monthly campaign package</h3>
         <p className={formStyles.description}>
-          Creates one campaign per usable week and generates the full asset package using your strategy inputs.
+          Creates one campaign per usable week and generates the full asset
+          package using your strategy inputs.
         </p>
       </div>
 
@@ -228,7 +304,9 @@ export function GenerateMonthlyCampaignsButton({
         </p>
 
         {marketProfile &&
-        (marketProfile.serviceLines.length || marketProfile.audiences.length || marketProfile.offers.length) ? (
+        (marketProfile.serviceLines.length ||
+          marketProfile.audiences.length ||
+          marketProfile.offers.length) ? (
           <div className={[formStyles.row, formStyles.grid2].join(" ")}>
             <label className={formStyles.field}>
               <span className={formStyles.label}>Service Line</span>
@@ -280,7 +358,9 @@ export function GenerateMonthlyCampaignsButton({
           </div>
         ) : (
           <p className={formStyles.description}>
-            Add service lines, audiences, and offers in the account Strategy section, or use the Brand Voice shortcuts below, to make monthly campaign generation account-specific.
+            Add service lines, audiences, and offers in the account Strategy
+            section, or use the Brand Voice shortcuts below, to make monthly
+            campaign generation account-specific.
           </p>
         )}
       </div>
@@ -289,7 +369,9 @@ export function GenerateMonthlyCampaignsButton({
         <div className={websiteStyles.card}>
           <h4 className={websiteStyles.cardTitle}>Brand Voice shortcuts</h4>
           <p className={websiteStyles.cardMeta}>
-            These choices come from the active workspace&apos;s Brand Voice settings. Pick one to fill the campaign fields below, then edit the wording if needed.
+            These choices come from the active workspace&apos;s Brand Voice
+            settings. Pick one to fill the campaign fields below, then edit the
+            wording if needed.
           </p>
 
           <div className={[formStyles.row, formStyles.grid2].join(" ")}>
@@ -402,7 +484,8 @@ export function GenerateMonthlyCampaignsButton({
           placeholder="Example: practical, credible, premium, human, direct"
         />
         <span className={formStyles.help}>
-          This can be filled from Brand Voice and is passed into the monthly campaign strategy.
+          This can be filled from Brand Voice and is passed into the monthly
+          campaign strategy.
         </span>
       </label>
 
@@ -429,7 +512,9 @@ export function GenerateMonthlyCampaignsButton({
       </div>
 
       <label className={formStyles.field}>
-        <span className={formStyles.label}>Proof Points / Supporting Context</span>
+        <span className={formStyles.label}>
+          Proof Points / Supporting Context
+        </span>
         <textarea
           value={proofPoints}
           onChange={(event) => setProofPoints(event.target.value)}
@@ -438,6 +523,115 @@ export function GenerateMonthlyCampaignsButton({
           rows={3}
         />
       </label>
+
+      <details
+        className={websiteStyles.card}
+        open={Boolean(originalityAngle || objections)}
+      >
+        <summary
+          className={websiteStyles.cardTitle}
+          style={{ cursor: "pointer" }}
+        >
+          Optional Marketing Spine refinements
+        </summary>
+        <p className={websiteStyles.cardMeta} style={{ marginTop: 8 }}>
+          These are not required. VIP will infer them if left blank, but adding
+          them can make the campaign sharper.
+        </p>
+        <div
+          className={[formStyles.row, formStyles.grid2].join(" ")}
+          style={{ marginTop: 12 }}
+        >
+          <label className={formStyles.field}>
+            <span className={formStyles.label}>Originality Angle</span>
+            <textarea
+              value={originalityAngle}
+              onChange={(event) => setOriginalityAngle(event.target.value)}
+              className={formStyles.textarea}
+              placeholder="Example: Most businesses do not have a content problem. They have a strategy inheritance problem."
+              rows={3}
+            />
+          </label>
+
+          <label className={formStyles.field}>
+            <span className={formStyles.label}>Objections to Address</span>
+            <textarea
+              value={objections}
+              onChange={(event) => setObjections(event.target.value)}
+              className={formStyles.textarea}
+              placeholder="One per line. Example: I do not have time, I am not sure this matters yet, I tried marketing before and it did not work."
+              rows={3}
+            />
+          </label>
+        </div>
+      </details>
+
+      <div className={websiteStyles.card}>
+        <div className="flex flex-wrap gap-2">
+          <span className={websiteStyles.badge}>Marketing Spine</span>
+          <span className={websiteStyles.badge}>
+            {gateLabel(marketingSpine.gateStatus)}
+          </span>
+          <span className={websiteStyles.badge}>
+            {marketingSpine.readinessScore}/100 ready
+          </span>
+        </div>
+        <h4 className={websiteStyles.cardTitle} style={{ marginTop: 12 }}>
+          Brand → Strategy → Channels → Plan → Briefs → Assets → Quality →
+          Publishing
+        </h4>
+        <p className={websiteStyles.cardMeta}>
+          VIP will use this spine as the campaign chain of custody. It is
+          generated from the fields above and passed into every weekly campaign,
+          asset brief, quality review, and publishing-ready record.
+        </p>
+
+        {marketingSpine.missingRequired.length ? (
+          <p className={formStyles.description} style={{ marginTop: 10 }}>
+            Missing context: {marketingSpine.missingRequired.join(", ")}. You
+            can still generate, but the campaign may be less specific.
+          </p>
+        ) : null}
+
+        <div
+          className={[formStyles.row, formStyles.grid2].join(" ")}
+          style={{ marginTop: 14 }}
+        >
+          <MiniSpineField label="Audience" value={marketingSpine.audience} />
+          <MiniSpineField label="Offer" value={marketingSpine.offer} />
+          <MiniSpineField label="Buyer Pain" value={marketingSpine.buyerPain} />
+          <MiniSpineField label="CTA" value={marketingSpine.primaryCta} />
+        </div>
+
+        <div style={{ marginTop: 14 }}>
+          <p className={websiteStyles.cardMeta}>Originality angle</p>
+          <p className={websiteStyles.cardText} style={{ marginTop: 4 }}>
+            {marketingSpine.originalityAngle}
+          </p>
+        </div>
+
+        <div
+          className={[formStyles.row, formStyles.grid2].join(" ")}
+          style={{ marginTop: 14 }}
+        >
+          <MiniSpineField
+            label="LinkedIn Role"
+            value={marketingSpine.channelRoles.linkedin.role}
+          />
+          <MiniSpineField
+            label="Email Role"
+            value={marketingSpine.channelRoles.email.role}
+          />
+          <MiniSpineField
+            label="Blog Role"
+            value={marketingSpine.channelRoles.blog.role}
+          />
+          <MiniSpineField
+            label="Visual Role"
+            value={marketingSpine.channelRoles.visual.role}
+          />
+        </div>
+      </div>
 
       <label className={formStyles.field}>
         <span className={formStyles.label}>Additional Business Context</span>
@@ -453,7 +647,10 @@ export function GenerateMonthlyCampaignsButton({
       <div className={websiteStyles.card}>
         <h4 className={websiteStyles.cardTitle}>Generation Mode</h4>
         <p className={websiteStyles.cardMeta}>
-          Fast batch mode is active. This avoids Vercel timeouts by creating the full campaign package without OpenAI calls inside the generation request. Account strategy fields are used as private generation context and are not printed as raw labels in the final assets.
+          Marketing Spine fast batch mode is active. This keeps the route
+          reliable by avoiding extra OpenAI calls inside monthly generation,
+          while still passing a structured strategy spine and asset brief into
+          every generated asset.
         </p>
       </div>
 
@@ -463,7 +660,9 @@ export function GenerateMonthlyCampaignsButton({
           checked={overwriteExisting}
           onChange={(event) => setOverwriteExisting(event.target.checked)}
         />
-        <span>Allow another campaign set even if this month already has campaigns</span>
+        <span>
+          Allow another campaign set even if this month already has campaigns
+        </span>
       </label>
 
       <div className={formStyles.actions}>
@@ -480,14 +679,18 @@ export function GenerateMonthlyCampaignsButton({
       {summary ? (
         <div className={websiteStyles.card}>
           <p className={websiteStyles.cardText}>
-            Created {summary.campaignCount ?? 0} campaign(s) and {summary.assetCount ?? 0} asset(s)
-            {summary.durationMs ? ` in ${summary.durationMs}ms` : ""}.
+            Created {summary.campaignCount ?? 0} campaign(s) and{" "}
+            {summary.assetCount ?? 0} asset(s)
+            {summary.durationMs ? ` in ${summary.durationMs}ms` : ""}. Marketing
+            Spine: {summary.marketingSpine?.gateStatus ?? "saved"}.
           </p>
           {Array.isArray(summary.warnings) && summary.warnings.length ? (
             <p className={formStyles.description}>
               {summary.warnings.length} warning(s):{" "}
               {summary.warnings
-                .map((item: unknown) => readableMessage(item, "Unknown warning"))
+                .map((item: unknown) =>
+                  readableMessage(item, "Unknown warning"),
+                )
                 .slice(0, 3)
                 .join(" | ")}
             </p>
