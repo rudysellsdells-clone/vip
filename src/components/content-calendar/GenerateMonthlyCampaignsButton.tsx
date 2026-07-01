@@ -90,7 +90,7 @@ function spineStatusLabel({
   reviewed: boolean;
   stale: boolean;
 }) {
-  if (reviewed) return "Spine reviewed + locked";
+  if (reviewed) return "Spine reviewed + locked — rebuild available";
   if (stale) return "Inputs changed — rebuild spine";
   return "Review gate open";
 }
@@ -261,6 +261,12 @@ export function GenerateMonthlyCampaignsButton({
     setError(null);
     setSummary(null);
     setReviewedSpineSignature(marketingSpineSignature);
+  }
+
+  function rebuildMarketingSpine() {
+    setError(null);
+    setSummary(null);
+    setReviewedSpineSignature(null);
   }
 
   function requestPayload() {
@@ -676,7 +682,8 @@ export function GenerateMonthlyCampaignsButton({
         {spineReviewed ? (
           <p className={formStyles.message} style={{ marginTop: 10 }}>
             Marketing Spine is locked for this generation run. Execution will
-            inherit this strategy.
+            inherit this strategy. Use Rebuild Marketing Spine if you want to
+            revise the strategy before generating.
           </p>
         ) : spineNeedsRebuild ? (
           <p className={formStyles.error} style={{ marginTop: 10 }}>
@@ -754,14 +761,20 @@ export function GenerateMonthlyCampaignsButton({
         <div className={formStyles.actions}>
           <button
             type="button"
-            onClick={reviewMarketingSpine}
-            disabled={running || spineReviewed}
+            onClick={spineReviewed ? rebuildMarketingSpine : reviewMarketingSpine}
+            disabled={running}
             className={formStyles.secondaryButton}
           >
-            {spineReviewed ? "Marketing Spine Locked" : "Build / Lock Marketing Spine"}
+            {spineReviewed
+              ? "Rebuild Marketing Spine"
+              : spineNeedsRebuild
+                ? "Rebuild / Lock Marketing Spine"
+                : "Build / Lock Marketing Spine"}
           </button>
           <span className={formStyles.help}>
-            This is the visible gate between strategy and execution.
+            {spineReviewed
+              ? "Unlocks the spine so you can adjust strategy inputs and lock it again."
+              : "This is the visible gate between strategy and execution."}
           </span>
         </div>
       </div>
