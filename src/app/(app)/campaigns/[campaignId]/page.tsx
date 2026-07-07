@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AssetTitleLink } from "@/components/assets/AssetTitleLink";
 import { RemoveAssetButton } from "@/components/assets/RemoveAssetButton";
 import { DeleteCampaignButton } from "@/components/campaigns/DeleteCampaignButton";
+import { GenerateCampaignAssetsButton } from "@/components/campaigns/GenerateCampaignAssetsButton";
 import { StartLumaYoutubeVideoButton } from "@/components/campaigns/StartLumaYoutubeVideoButton";
 import { SyncLumaVideoRunButton } from "@/components/campaigns/SyncLumaVideoRunButton";
 import {
@@ -149,37 +150,41 @@ export default async function CampaignDetailPage({ params }: PageProps) {
 
       <section className={websiteStyles.twoColumn}>
         <WebsiteSection
-          eyebrow="Marketing Spine"
-          title="Use the spine workflow for strategy-led generation"
-          description="This campaign record is retained for reference and one-off campaign history. New content generation should happen in the Content Calendar, where the Marketing Spine is reviewed and locked before execution."
+          eyebrow="One-Off Campaign Brief"
+          title="Campaign strategy inputs"
+          description="The fast campaign path is still active. These inputs, plus any Brand Voice, Knowledge, and Settings context saved with the campaign, inform the one-off asset pack."
         >
-          <article className={websiteStyles.card}>
-            <h3 className={websiteStyles.cardTitle}>Campaign snapshot</h3>
-            <p className={websiteStyles.cardText}>
-              <strong>Buyer segment:</strong> {campaign.buyer_segment ?? "Not specified"}
-            </p>
-            <p className={websiteStyles.cardText}>
-              <strong>Audience:</strong> {campaign.audience ?? "Not specified"}
-            </p>
-            <p className={websiteStyles.cardText}>
-              <strong>Goal:</strong> {campaign.goal ?? "Not specified"}
-            </p>
-            <p className={websiteStyles.cardText}>
-              <strong>CTA:</strong> {campaign.cta ?? "Not specified"}
-            </p>
-          </article>
+          <div className={websiteStyles.cardGrid}>
+            <article className={websiteStyles.card}>
+              <h3 className={websiteStyles.cardTitle}>Buyer and audience</h3>
+              <p className={websiteStyles.cardText}>
+                <strong>Buyer segment:</strong> {campaign.buyer_segment ?? "Not specified"}
+              </p>
+              <p className={websiteStyles.cardText}>
+                <strong>Audience:</strong> {campaign.audience ?? "Not specified"}
+              </p>
+            </article>
+
+            <article className={websiteStyles.card}>
+              <h3 className={websiteStyles.cardTitle}>Goal and CTA</h3>
+              <p className={websiteStyles.cardText}>
+                <strong>Goal:</strong> {campaign.goal ?? "Not specified"}
+              </p>
+              <p className={websiteStyles.cardText}>
+                <strong>CTA:</strong> {campaign.cta ?? "Not specified"}
+              </p>
+            </article>
+          </div>
 
           <div className={websiteStyles.actionRow}>
-            <Link href="/content-calendar" className={websiteStyles.primarySubmit}>
-              Open Marketing Spine Workflow
-            </Link>
+            <GenerateCampaignAssetsButton campaignId={campaign.id} />
           </div>
         </WebsiteSection>
 
         <WebsiteSection
           eyebrow="Status"
-          title="Campaign controls"
-          description="View this campaign record, create a Luma YouTube video, or delete this campaign if it was created by mistake."
+          title="One-off campaign controls"
+          description="Generate the one-off asset pack, create a Luma YouTube video, or delete this campaign if it was created by mistake."
         >
           <article className={websiteStyles.card}>
             <WebsiteBadge status={campaign.status} />

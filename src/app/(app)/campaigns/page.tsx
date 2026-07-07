@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getUserAccountContext } from "@/lib/accounts/account-context";
+import { fetchAccountMarketProfile } from "@/lib/accounts/account-market-profile";
+import { buildBrandVoiceMonthlyOptions } from "@/lib/accounts/brand-voice-monthly-options";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 import { CampaignWebsiteForm } from "@/components/campaigns/CampaignWebsiteForm";
@@ -29,7 +31,15 @@ export default async function CampaignsPage() {
 
   if (!activeAccountId) redirect("/accounts");
 
-  const [campaignsResult, serviceLinesResult, buyerSegmentsResult, offersResult] = await Promise.all([
+  const [
+    campaignsResult,
+    marketProfile,
+    cloneProfileResult,
+    accountBrandProfileResult,
+    brandRulesResult,
+    knowledgeSourcesResult,
+    contentExamplesResult,
+  ] = await Promise.all([
     supabase
       .from("campaigns")
       .select("*")
@@ -37,30 +47,82 @@ export default async function CampaignsPage() {
       .is("archived_at", null)
       .order("updated_at", { ascending: false })
       .limit(100),
+    fetchAccountMarketProfile({ supabase, accountId: activeAccountId }),
     supabase
-      .from("service_lines")
-      .select("id,name")
+      .from("digital_clone_profiles")
+      .select("*")
       .eq("account_id", activeAccountId)
       .eq("active", true)
-      .order("sort_order", { ascending: true }),
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
     supabase
-      .from("buyer_segments")
-      .select("id,name")
+      .from("account_brand_profiles")
+      .select("*")
+      .eq("account_id", activeAccountId)
+      .maybeSingle(),
+    supabase
+      .from("brand_rules")
+      .select("rule_text,category,priority")
       .eq("account_id", activeAccountId)
       .eq("active", true)
-      .order("sort_order", { ascending: true }),
+      .order("priority", { ascending: true })
+      .order("created_at", { ascending: true }),
     supabase
-      .from("offers")
-      .select("id,name")
+      .from("knowledge_sources")
+      .select("id,title,source_type,summary,content,updated_at")
       .eq("account_id", activeAccountId)
       .eq("active", true)
-      .order("name", { ascending: true }),
+      .order("updated_at", { ascending: false })
+      .limit(20),
+    supabase
+      .from("content_examples")
+      .select("id,title,content_type,content,source,updated_at")
+      .eq("account_id", activeAccountId)
+      .eq("approved", true)
+      .order("updated_at", { ascending: false })
+      .limit(12),
   ]);
 
   const campaigns = (campaignsResult.data ?? []) as Array<Record<string, any>>;
-  const serviceLines = ((serviceLinesResult.data ?? []) as Array<Record<string, any>>).map((row) => ({ id: row.id, name: row.name }));
-  const buyerSegments = ((buyerSegmentsResult.data ?? []) as Array<Record<string, any>>).map((row) => ({ id: row.id, name: row.name }));
-  const offers = ((offersResult.data ?? []) as Array<Record<string, any>>).map((row) => ({ id: row.id, name: row.name }));
+  const serviceLines = marketProfile.serviceLines;
+  const buyerSegments = marketProfile.audiences;
+  const offers = marketProfile.offers;
+
+  const brandVoiceOptions = buildBrandVoiceMonthlyOptions({
+    cloneProfile: cloneProfileResult.data as Record<string, unknown> | null,
+    accountBrandProfile: accountBrandProfileResult.data as Record<string, unknown> | null,
+    brandRules: (brandRulesResult.data ?? []) as Array<Record<string, unknown>>,
+  });
+
+  const truncateContext = (value: unknown, maxLength = 700) => {
+    const text = String(value ?? "").replace(/\s+/g, " ").trim();
+    return text.length > maxLength ? `${text.slice(0, maxLength).trim()}...` : text;
+  };
+
+  const knowledgeOptions = [
+    ...((knowledgeSourcesResult.data ?? []) as Array<Record<string, any>>).map((source) => ({
+      id: `knowledge-${source.id}`,
+      label: `${source.title} (${source.source_type ?? "knowledge"})`,
+      value: [
+        `Knowledge source: ${source.title}`,
+        source.source_type ? `Type: ${source.source_type}` : "",
+        source.summary ? `Summary: ${source.summary}` : `Content: ${truncateContext(source.content)}`,
+      ].filter(Boolean).join("\n"),
+      sourceType: "knowledge_source" as const,
+    })),
+    ...((contentExamplesResult.data ?? []) as Array<Record<string, any>>).map((example) => ({
+      id: `example-${example.id}`,
+      label: `${example.title} (${example.content_type ?? "example"})`,
+      value: [
+        `Content example: ${example.title}`,
+        example.content_type ? `Type: ${example.content_type}` : "",
+        example.source ? `Source: ${example.source}` : "",
+        `Example: ${truncateContext(example.content, 520)}`,
+      ].filter(Boolean).join("\n"),
+      sourceType: "content_example" as const,
+    })),
+  ];
 
   const inReview = campaigns.filter((campaign) => ["asset_pack_generated", "in_review"].includes(campaign.status)).length;
   const active = campaigns.filter((campaign) => campaign.status === "active").length;
@@ -71,7 +133,7 @@ export default async function CampaignsPage() {
       <WebsiteHero
         eyebrow="Campaign Builder"
         title="Create revenue-focused marketing campaigns."
-        description="Build campaigns around Rudy's services, buyer segments, offers, and calls-to-action. VIP will turn the brief into an asset pack for review."
+        description="Build one-off campaigns using Settings, Brand Voice, and Knowledge shortcuts. The monthly calendar still uses the full Marketing Spine gate."
         primaryAction={{ label: setupReady ? "Review Assets" : "Populate Dropdowns", href: setupReady ? "/approvals" : "/settings" }}
         secondaryAction={{ label: "Dashboard", href: "/dashboard" }}
       />
@@ -96,13 +158,13 @@ export default async function CampaignsPage() {
       ) : null}
 
       <div className={websiteStyles.formFrame}>
-        <CampaignWebsiteForm serviceLines={serviceLines} buyerSegments={buyerSegments} offers={offers} />
+        <CampaignWebsiteForm serviceLines={serviceLines} buyerSegments={buyerSegments} offers={offers} brandVoiceOptions={brandVoiceOptions} knowledgeOptions={knowledgeOptions} />
       </div>
 
       <WebsiteSection
         eyebrow="Campaign Library"
         title="Recent campaigns"
-        description="Open a campaign to generate assets, review outputs, and move the work into approval."
+        description="Open a one-off campaign to generate assets, review outputs, and move the work into approval."
       >
         {campaigns.length ? (
           <div className={websiteStyles.cardGrid}>

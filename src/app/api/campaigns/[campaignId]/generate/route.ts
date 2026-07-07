@@ -35,7 +35,15 @@ function normalizeCampaignForPrompt(campaign: {
   tone: string | null;
   cta: string | null;
   notes: string | null;
+  strategy?: unknown;
 }) {
+  const strategyNotes =
+    campaign.strategy &&
+    typeof campaign.strategy === "object" &&
+    !Array.isArray(campaign.strategy)
+      ? `One-off campaign strategy context:\n${JSON.stringify(campaign.strategy, null, 2)}`
+      : "";
+
   return {
     name: campaign.name,
     idea: campaign.idea,
@@ -45,7 +53,7 @@ function normalizeCampaignForPrompt(campaign: {
     platforms: campaign.platforms ?? [],
     tone: campaign.tone,
     cta: campaign.cta,
-    notes: campaign.notes,
+    notes: [campaign.notes, strategyNotes].filter(Boolean).join("\n\n"),
   };
 }
 
@@ -92,6 +100,11 @@ export async function POST(_request: Request, context: RouteContext) {
 
     const cloneContext = await loadDigitalCloneContext(user.id, accountId);
 
+    const oneOffCampaignStrategy =
+      campaign.strategy && typeof campaign.strategy === "object" && !Array.isArray(campaign.strategy)
+        ? (campaign.strategy as Record<string, unknown>)
+        : null;
+
     const assetPack = await generateMarketingAssetPackWithCloneMemory({
       campaign: normalizeCampaignForPrompt(campaign),
       digitalCloneProfile:
@@ -134,6 +147,8 @@ export async function POST(_request: Request, context: RouteContext) {
             preReviewEnrichment: true,
             cloneMemoryUsed: true,
             cloneMemorySnapshot: memorySnapshot,
+          oneOffCampaignStrategy,
+            oneOffCampaignStrategy,
             companionAssetFlow:
               asset.assetType === "galaxyai_prompt"
                 ? "review_prompt_then_send_prompt_only_to_galaxyai"
@@ -196,6 +211,7 @@ export async function POST(_request: Request, context: RouteContext) {
           audienceAngle: assetPack.audienceAngle,
           coreMessage: assetPack.coreMessage,
           cloneMemorySnapshot: memorySnapshot,
+          oneOffCampaignStrategy,
         }),
       })
       .eq("id", campaign.id);
@@ -221,6 +237,7 @@ export async function POST(_request: Request, context: RouteContext) {
         assetCount: insertedAssetRows.length,
         cloneMemoryUsed: true,
         memorySnapshot,
+        oneOffCampaignStrategy,
       }),
     });
 

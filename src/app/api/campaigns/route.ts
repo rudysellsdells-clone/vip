@@ -4,6 +4,11 @@ import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 import { createCampaignSchema } from "@/lib/validation/campaignSchemas";
 import { logActivity } from "@/lib/security/auditLog";
+import type { Json } from "@/types/database.types";
+
+function toJson(value: unknown): Json {
+  return JSON.parse(JSON.stringify(value)) as Json;
+}
 
 async function accountRecordExists({
   supabase,
@@ -83,9 +88,33 @@ export async function POST(request: Request) {
       timezone: "America/Chicago"
     });
 
+    const oneOffCampaignStrategy = {
+      source: "one_off_campaign_builder",
+      serviceLineId: input.serviceLineId ?? null,
+      offerId: input.offerId ?? null,
+      buyerSegment: input.buyerSegment,
+      audience: input.audience ?? input.buyerSegment,
+      goal: input.goal,
+      tone: input.tone ?? "Clear, practical, confident",
+      cta: input.cta,
+      differentiator: input.differentiator ?? null,
+      proofPoints: input.proofPoints ?? null,
+      originalityAngle: input.originalityAngle ?? null,
+      objections: input.objections ?? null,
+      strategyContext: input.strategyContext ?? null,
+      sourceContext: input.sourceContext ?? null,
+      capturedAt: new Date().toISOString(),
+    };
+
     const notesWithServiceLine = [
       input.serviceLine ? `Service line: ${input.serviceLine}` : null,
-      input.notes || null
+      input.notes || null,
+      input.differentiator ? `Differentiator:\n${input.differentiator}` : null,
+      input.proofPoints ? `Proof points:\n${input.proofPoints}` : null,
+      input.originalityAngle ? `Originality angle:\n${input.originalityAngle}` : null,
+      input.objections ? `Objections to address:\n${input.objections}` : null,
+      input.strategyContext ? `Strategy context selected from Settings / Brand Voice:\n${input.strategyContext}` : null,
+      input.sourceContext ? `Knowledge and source context:\n${input.sourceContext}` : null,
     ]
       .filter(Boolean)
       .join("\n\n");
@@ -106,6 +135,7 @@ export async function POST(request: Request) {
         tone: input.tone ?? "Clear, practical, confident",
         cta: input.cta,
         notes: notesWithServiceLine || null,
+        strategy: toJson(oneOffCampaignStrategy),
         status: "draft"
       })
       .select("*")

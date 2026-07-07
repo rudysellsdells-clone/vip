@@ -12,7 +12,13 @@ export const createCampaignSchema = z.object({
   platforms: z.array(z.string()).default([]),
   tone: z.string().optional(),
   cta: z.string().min(3, "CTA is required."),
-  notes: z.string().optional()
+  notes: z.string().optional(),
+  differentiator: z.string().optional(),
+  proofPoints: z.string().optional(),
+  originalityAngle: z.string().optional(),
+  objections: z.string().optional(),
+  strategyContext: z.string().optional(),
+  sourceContext: z.string().optional()
 });
 
 export type CreateCampaignInput = z.infer<typeof createCampaignSchema>;
