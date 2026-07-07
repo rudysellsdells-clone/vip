@@ -1,4 +1,5 @@
 import type { MonthlyCampaignStrategyInput } from "@/lib/content-calendar/monthly-campaign-planner";
+import { buildVisualPromptDoctrineSection } from "@/lib/ai/prompt-doctrine";
 
 export type SocialImagePlatform = "linkedin" | "facebook";
 
@@ -54,6 +55,7 @@ export function buildCampaignVisualDirection({
     `Featured offer or service: ${offer}`,
     `Primary CTA: ${cta}`,
     `Differentiator to express visually: ${differentiator}`,
+    buildVisualPromptDoctrineSection(),
     [
       "Shared visual system:",
       "- Create a consistent weekly campaign look that can be adapted for LinkedIn and Facebook.",
@@ -103,6 +105,7 @@ export function buildGalaxyAiSocialImagePrompt({
     `CTA idea: ${cta}`,
     `Use this weekly visual direction as the shared style system:\n${campaignVisualDirection}`,
     `Post copy this image supports:\n${postCopy}`,
+    buildVisualPromptDoctrineSection(),
     [
       "Creative direction:",
       "- Create a clean, professional social image that supports the post without trying to include the entire post as text.",

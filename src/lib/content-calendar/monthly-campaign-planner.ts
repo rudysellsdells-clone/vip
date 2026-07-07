@@ -14,6 +14,7 @@ import {
   buildCampaignVisualDirection,
   buildGalaxyAiSocialImagePrompt,
 } from "@/lib/galaxyai/image-prompt-builder";
+import { buildGenerationPromptDoctrineSection } from "@/lib/ai/prompt-doctrine";
 
 export type MonthlyCampaignStrategyInput = {
   monthlyObjective?: string;
@@ -323,6 +324,8 @@ function privateGenerationPrompt({
     "",
     "Use the following strategy inputs to guide the angle, examples, offer positioning, and CTA.",
     marketingSpine ? formatMarketingSpineForPrompt(marketingSpine) : "",
+    "",
+    buildGenerationPromptDoctrineSection(["blog", "email", "linkedin", "facebook", "video", "visual"]),
     "Do not publish these labels, raw notes, internal month, campaign name, week number, or planning identifiers in the content.",
     "",
     strategy.monthlyObjective
@@ -514,9 +517,11 @@ function contentForAsset({
       return [
         `${socialEmojiSet({ topic, assetType })} ${campaignAngle}`,
         "",
-        `Strategic spine: ${originalityAngle}`,
+        originalityAngle,
         "",
-        "A good campaign does more than fill the calendar. It gives the right audience a clear reason to trust you, remember you, and take the next step.",
+        `For ${marketingSpine?.audience || strategy.targetAudience || "the right audience"}, the issue is not just awareness. It is whether the message connects ${buyerPain} to a believable next step: ${offer}.`,
+        "",
+        `One useful proof point to keep in view: ${proofPoint}`,
         "",
         callToAction,
         "",
@@ -544,7 +549,11 @@ function contentForAsset({
         "",
         campaignAngle,
         "",
-        `This is a good time to look at how ${topic} supports the customer's decision and how it connects to the next step you want people to take. The key issue is ${buyerPain}.`,
+        `This is a good time to look at how ${topic} affects the customer's decision. The key issue is ${buyerPain}.`,
+        "",
+        `The practical opportunity is to connect that issue to ${offer} in a way that feels clear, credible, and easy to act on.`,
+        "",
+        `A useful proof point or angle to keep in view: ${proofPoint}`,
         "",
         callToAction,
         "",

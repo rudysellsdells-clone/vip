@@ -1,4 +1,5 @@
 import { jsonRecord, stringOrNull } from "@/lib/visual-assets/metadata";
+import { buildVisualPromptDoctrineSection } from "@/lib/ai/prompt-doctrine";
 
 export type VisualImageUse =
   | "auto"
@@ -136,6 +137,8 @@ export function buildVisualAssetPrompt(input: VisualPromptContext) {
     "",
     "Source content to visually support:",
     truncate(asset.content, 1600),
+    "",
+    buildVisualPromptDoctrineSection(),
     "",
     "Creative direction:",
     "- Make the image feel premium, useful, and business-relevant.",

@@ -1,3 +1,5 @@
+import { buildVideoPromptDoctrineSection } from "@/lib/ai/prompt-doctrine";
+
 export type GalaxyAiPromptSource = {
   title?: string | null;
   videoScript: string;
@@ -36,6 +38,8 @@ export function buildGalaxyAiPromptFromVideoScript({
     "",
     "Use this approved video script as the creative source:",
     script,
+    "",
+    buildVideoPromptDoctrineSection(),
     "",
     "Production direction:",
     "- Format: short-form social video suitable for LinkedIn, Facebook, and YouTube Shorts.",

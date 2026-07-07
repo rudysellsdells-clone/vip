@@ -1,4 +1,5 @@
 import { buildAssetTypeDetailStandardsSection, buildSpecificityContractSection } from "./content-specificity";
+import { buildGenerationPromptDoctrineSection, buildRepairPromptDoctrineSection } from "./prompt-doctrine";
 
 type PromptCampaign = {
   name: string;
@@ -60,6 +61,8 @@ Safety rules:
 - Do not create legal, medical, or financial guarantees.
 - Do not imply any action has been sent, posted, published, or launched.
 - All external actions require Rudy's approval.
+
+${buildGenerationPromptDoctrineSection()}
 
 ${buildSpecificityContractSection()}
 
@@ -123,6 +126,8 @@ ${buyerSegments}
 
 ${offers}
 
+${buildGenerationPromptDoctrineSection()}
+
 ${buildSpecificityContractSection()}
 
 ${buildAssetTypeDetailStandardsSection()}
@@ -157,6 +162,8 @@ export function buildPreReviewEnrichmentSystemPrompt() {
 Your job is to improve an already generated Marketing Asset Pack before it reaches human quality review.
 Do not change the campaign strategy or invent unsupported proof.
 Do make every asset more specific, detailed, structured, and useful.
+
+${buildRepairPromptDoctrineSection()}
 
 ${buildSpecificityContractSection()}
 
@@ -202,6 +209,8 @@ ${formatUnknownList("Offers", input.offers)}
 
 ## Current Asset Pack JSON
 ${JSON.stringify(assetPack, null, 2)}
+
+${buildRepairPromptDoctrineSection()}
 
 ## Enrichment Instructions
 - Keep the same JSON keys.

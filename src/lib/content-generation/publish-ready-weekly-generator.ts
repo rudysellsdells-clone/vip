@@ -2,6 +2,7 @@ import { preparePublicAssetContent } from "@/lib/content/public-content-cleaner"
 import { summarizeMemoryForPrompt, BusinessMemoryContext } from "@/lib/content-generation/memory-context";
 import { validatePublishReadyContent } from "@/lib/content-generation/content-sanity";
 import { buildMonthlyCampaignPlan } from "@/lib/content-calendar/monthly-campaign-planner";
+import { buildGenerationPromptDoctrineSection, buildRepairPromptDoctrineSection } from "@/lib/ai/prompt-doctrine";
 
 type WeeklyPlan = ReturnType<typeof buildMonthlyCampaignPlan>[number];
 
@@ -66,6 +67,16 @@ function normalizeAssetsPayload(raw: any): Array<Record<string, any>> {
   return [];
 }
 
+function compactJson(value: unknown) {
+  if (!value || typeof value !== "object") return "";
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "";
+  }
+}
+
 function packagePrompt({
   month,
   campaignTheme,
@@ -82,14 +93,25 @@ function packagePrompt({
   memory: BusinessMemoryContext;
 }) {
   const assetList = slots
-    .map((slot) =>
-      [
+    .map((slot) => {
+      const metadata =
+        slot.metadata && typeof slot.metadata === "object"
+          ? (slot.metadata as Record<string, unknown>)
+          : {};
+      const assetBrief = compactJson(metadata.assetBrief);
+      const channelRole = compactJson(metadata.channelRole);
+
+      return [
         `slotId: ${slot.slotId}`,
         `assetType: ${slot.assetType}`,
         `workingTitle: ${slot.title}`,
         `publishDate: ${slot.plannedPublishDate}`,
-      ].join(" | ")
-    )
+        assetBrief ? `assetBrief: ${assetBrief}` : "",
+        channelRole ? `channelRole: ${channelRole}` : "",
+      ]
+        .filter(Boolean)
+        .join(" | ");
+    })
     .join("\n");
 
   return [
@@ -112,6 +134,8 @@ function packagePrompt({
     "- Saved business memory is the source of truth when present.",
     "- Monthly strategy can add context and angle, but cannot contradict saved business memory.",
     "- Campaign strategy should guide the output; it should not appear verbatim as raw labels.",
+    "",
+    buildGenerationPromptDoctrineSection(["blog", "email", "linkedin", "facebook", "video", "visual"]),
     "",
     "PRIVATE SAVED BUSINESS MEMORY:",
     summarizeMemoryForPrompt(memory),
@@ -228,6 +252,7 @@ async function repairAsset({
     asset.content,
     "",
     "Rules:",
+    buildRepairPromptDoctrineSection(),
     "- Write the actual final public-facing content.",
     "- Do not include private labels, internal campaign names, week labels, IDs, or prompt notes.",
     "- Do not invent unsupported claims.",
