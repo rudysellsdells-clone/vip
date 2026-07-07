@@ -164,7 +164,7 @@ export default async function AccountDetailPage({
       <WebsiteHero
         eyebrow="Account Workspace"
         title={account.name}
-        description="Manage this client or brand workspace from one cleaner control panel: overview, brand memory, publishing settings, team access, and account removal."
+        description="Manage this client or brand workspace from one cleaner control panel: overview, brand memory, market strategy, publishing settings, team access, and account removal."
         primaryAction={{ label: "Back to Accounts", href: "/accounts" }}
         secondaryAction={{ label: "Dashboard", href: "/dashboard" }}
       />
@@ -174,7 +174,7 @@ export default async function AccountDetailPage({
         <WebsiteMetric label="Campaigns" value={campaignCount ?? 0} description="Campaigns tied to this account." dot="green" />
         <WebsiteMetric label="Assets" value={assetCount ?? 0} description="Generated assets tied to this account." dot="purple" />
         <WebsiteMetric label="Seats" value={`${activeMembers} active`} description={`${pendingMembers} pending invitation${pendingMembers === 1 ? "" : "s"}.`} dot="gold" />
-        <WebsiteMetric label="Strategy" value={`${serviceLineRows.length}/${audienceRows.length}/${offerRows.length}`} description="Services, audiences, and offers." dot="blue" />
+        <WebsiteMetric label="Market Strategy" value={`${serviceLineRows.length}/${audienceRows.length}/${offerRows.length}`} description="Services, audiences, and offers." dot="blue" />
       </section>
 
       <WebsiteSection
@@ -192,7 +192,7 @@ export default async function AccountDetailPage({
                 {[
                   ["Overview", "#overview"],
                   ["Brand Profile", "#brand-profile"],
-                  ["Strategy", "#strategy"],
+                  ["Market Strategy", "#strategy"],
                   ["Publishing", "#publishing"],
                   ["Team", "#team"],
                   ["Danger Zone", "#danger-zone"],
@@ -259,8 +259,8 @@ export default async function AccountDetailPage({
 
             <section id="strategy" className={`scroll-mt-28 ${accountStyles.accountSectionCard}`}>
               <SectionHeading
-                eyebrow="Strategy"
-                title="Services, offers, and audiences"
+                eyebrow="Market Strategy"
+                title="Services, audiences, and offers"
                 description="Define what this account sells and who it sells to so VIP generates account-specific campaigns instead of default marketing-agency content."
               />
               <div className="mt-6">

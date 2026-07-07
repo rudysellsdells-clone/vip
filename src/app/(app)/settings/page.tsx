@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { QualityGateSettingsForm } from "@/components/content-quality/QualityGateSettingsForm";
+import { getUserAccountContext } from "@/lib/accounts/account-context";
 import {
   WebsiteHero,
   WebsiteMetric,
@@ -27,10 +28,17 @@ export default async function SettingsPage() {
     redirect("/login");
   }
 
-  const settings = await getOrCreateQualityGateSettings({
-    supabase,
-    userId: user.id,
-  });
+  const [settings, accountContext] = await Promise.all([
+    getOrCreateQualityGateSettings({
+      supabase,
+      userId: user.id,
+    }),
+    getUserAccountContext({ supabase, userId: user.id }),
+  ]);
+
+  const accountStrategyHref = accountContext.activeAccountId
+    ? `/accounts/${accountContext.activeAccountId}#strategy`
+    : "/accounts";
 
   return (
     <WebsitePage>
@@ -90,6 +98,16 @@ export default async function SettingsPage() {
             </p>
             <Link href="/brand-voice" className={websiteStyles.link}>
               Open Brand Voice →
+            </Link>
+          </article>
+
+          <article className={websiteStyles.card}>
+            <h3 className={websiteStyles.cardTitle}>Market Strategy</h3>
+            <p className={websiteStyles.cardText}>
+              Manage the active workspace’s audiences, service lines, and offers. These populate the one-off campaign dropdowns.
+            </p>
+            <Link href={accountStrategyHref} className={websiteStyles.link}>
+              Manage Audiences & Offers →
             </Link>
           </article>
 

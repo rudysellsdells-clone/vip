@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import formStyles from "@/components/forms/VipForm.module.css";
@@ -105,12 +106,14 @@ export function CampaignWebsiteForm({
   offers,
   brandVoiceOptions,
   knowledgeOptions = [],
+  accountStrategyUrl = "/accounts",
 }: {
   serviceLines: ServiceLineOption[];
   buyerSegments: BuyerSegmentOption[];
   offers: OfferOption[];
   brandVoiceOptions?: BrandVoiceMonthlyOptions;
   knowledgeOptions?: CampaignKnowledgeOption[];
+  accountStrategyUrl?: string;
 }) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
@@ -174,10 +177,10 @@ export function CampaignWebsiteForm({
       setObjections(selected.objections.join("\n"));
     }
 
-    addStrategyContext("Selected buyer segment from Settings", audienceContext);
+    addStrategyContext("Selected audience from Account Strategy", audienceContext);
 
     if (selected.objections?.length) {
-      addStrategyContext("Buyer objections from Settings", selected.objections.join("\n"));
+      addStrategyContext("Audience objections from Account Strategy", selected.objections.join("\n"));
     }
   }
 
@@ -200,7 +203,7 @@ export function CampaignWebsiteForm({
     }
 
     addStrategyContext(
-      "Selected service line from Settings",
+      "Selected service line from Account Strategy",
       joinParts([
         selected.name,
         selected.description ?? "",
@@ -238,7 +241,7 @@ export function CampaignWebsiteForm({
     }
 
     addStrategyContext(
-      "Selected offer from Settings",
+      "Selected offer from Account Strategy",
       joinParts([
         selected.name,
         selected.description ?? "",
@@ -357,8 +360,16 @@ export function CampaignWebsiteForm({
       <div className={formStyles.header}>
         <h2 className={formStyles.title}>Create a one-off campaign</h2>
         <p className={formStyles.description}>
-          Use Settings, Brand Voice, and Knowledge shortcuts to build a focused campaign brief. VIP will keep this as a fast one-off campaign path while the monthly workflow uses the full Marketing Spine gate.
+          Use Account Strategy, Brand Voice, and Knowledge shortcuts to build a focused campaign brief. VIP will keep this as a fast one-off campaign path while the monthly workflow uses the full Marketing Spine gate.
         </p>
+        <div className={formStyles.actions}>
+          <Link href={accountStrategyUrl} className={formStyles.secondaryButton}>
+            Manage Account Strategy
+          </Link>
+          <span className={formStyles.help}>
+            Audiences, service lines, and offers are managed on the active account workspace.
+          </span>
+        </div>
       </div>
 
       <div className={[formStyles.grid, formStyles.grid2].join(" ")}>
@@ -374,7 +385,7 @@ export function CampaignWebsiteForm({
         </label>
 
         <label className={formStyles.field}>
-          <span className={formStyles.label}>Buyer Segment from Settings</span>
+          <span className={formStyles.label}>Audience from Account Strategy</span>
           <select
             name="buyer_segment"
             value={buyerSegment}
@@ -382,7 +393,7 @@ export function CampaignWebsiteForm({
             className={formStyles.select}
             required
           >
-            <option value="">Select buyer segment</option>
+            <option value="">Select audience</option>
             {buyerSegments.map((segment) => (
               <option key={segment.id} value={segment.name}>
                 {segment.name}
@@ -391,11 +402,11 @@ export function CampaignWebsiteForm({
           </select>
           {buyerSegments.length === 0 ? (
             <span className={formStyles.help}>
-              No buyer segments found. Go to Settings and populate the commercial foundation.
+              No audiences found. Use Manage Account Strategy to add the buyer groups this account serves.
             </span>
           ) : (
             <span className={formStyles.help}>
-              Pulls market/audience context from Settings.
+              Pulls audience, pain point, outcome, and objection context from Account Strategy.
             </span>
           )}
         </label>
@@ -419,7 +430,7 @@ export function CampaignWebsiteForm({
 
       <div className={[formStyles.row, formStyles.grid2].join(" ")}>
         <label className={formStyles.field}>
-          <span className={formStyles.label}>Service Line from Settings</span>
+          <span className={formStyles.label}>Service Line from Account Strategy</span>
           <select
             name="service_line_id"
             value={serviceLineId}
@@ -439,7 +450,7 @@ export function CampaignWebsiteForm({
         </label>
 
         <label className={formStyles.field}>
-          <span className={formStyles.label}>Offer from Settings</span>
+          <span className={formStyles.label}>Offer from Account Strategy</span>
           <select
             name="offer_id"
             value={offerId}
@@ -457,7 +468,7 @@ export function CampaignWebsiteForm({
             <span className={formStyles.help}>{selectedOffer.description}</span>
           ) : offers.length === 0 ? (
             <span className={formStyles.help}>
-              No offers found. Go to Settings and populate the commercial foundation.
+              No offers found. Use Manage Account Strategy to add the offers this account can promote.
             </span>
           ) : null}
         </label>
@@ -468,7 +479,7 @@ export function CampaignWebsiteForm({
       <div className={formStyles.header}>
         <h3 className={formStyles.smallTitle}>Brand Voice + Knowledge shortcuts</h3>
         <p className={formStyles.description}>
-          These dropdowns do not replace the brief. They pull reusable brand, proof, CTA, tone, and memory into the one-off campaign.
+          These dropdowns do not replace the brief. They pull reusable brand, proof, CTA, tone, and memory into the one-off campaign. Audiences, service lines, and offers come from Account Strategy.
         </p>
       </div>
 

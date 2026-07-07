@@ -28,6 +28,7 @@ export default async function CampaignsPage() {
 
   const accountContext = await getUserAccountContext({ supabase, userId: user.id });
   const activeAccountId = accountContext.activeAccountId;
+  const accountStrategyHref = activeAccountId ? `/accounts/${activeAccountId}#strategy` : "/accounts";
 
   if (!activeAccountId) redirect("/accounts");
 
@@ -133,32 +134,32 @@ export default async function CampaignsPage() {
       <WebsiteHero
         eyebrow="Campaign Builder"
         title="Create revenue-focused marketing campaigns."
-        description="Build one-off campaigns using Settings, Brand Voice, and Knowledge shortcuts. The monthly calendar still uses the full Marketing Spine gate."
-        primaryAction={{ label: setupReady ? "Review Assets" : "Populate Dropdowns", href: setupReady ? "/approvals" : "/settings" }}
+        description="Build one-off campaigns using Account Strategy, Brand Voice, and Knowledge shortcuts. The monthly calendar still uses the full Marketing Spine gate."
+        primaryAction={{ label: setupReady ? "Review Assets" : "Manage Account Strategy", href: setupReady ? "/approvals" : accountStrategyHref }}
         secondaryAction={{ label: "Dashboard", href: "/dashboard" }}
       />
 
       <section className={websiteStyles.metricsGrid}>
         <WebsiteMetric label="Campaigns" value={campaigns.length} description="Total campaigns in VIP." dot="blue" />
-        <WebsiteMetric label="Buyer Segments" value={buyerSegments.length} description="Available targeting dropdowns." dot={buyerSegments.length ? "green" : "red"} href="/settings" />
-        <WebsiteMetric label="Offers" value={offers.length} description="Available offer dropdowns." dot={offers.length ? "green" : "red"} href="/settings" />
+        <WebsiteMetric label="Audiences" value={buyerSegments.length} description="Audience dropdowns from Account Strategy." dot={buyerSegments.length ? "green" : "red"} href={accountStrategyHref} />
+        <WebsiteMetric label="Offers" value={offers.length} description="Offer dropdowns from Account Strategy." dot={offers.length ? "green" : "red"} href={accountStrategyHref} />
         <WebsiteMetric label="In Review" value={inReview} description="Campaigns with generated assets." dot="gold" />
       </section>
 
       {!setupReady ? (
         <WebsiteSection
           eyebrow="Setup Needed"
-          title="Populate buyer segments and offers first"
-          description="The campaign form uses the active account’s buyer segments and offers. Populate the commercial foundation once and the dropdowns will be ready."
+          title="Populate account audiences and offers first"
+          description="The campaign form uses the active workspace’s Account Strategy: audiences, service lines, and offers. Add them once and these dropdowns will be ready."
         >
-          <Link href="/settings" className={websiteStyles.link}>
-            Go to Settings to populate dropdowns →
+          <Link href={accountStrategyHref} className={websiteStyles.link}>
+            Manage Account Strategy →
           </Link>
         </WebsiteSection>
       ) : null}
 
       <div className={websiteStyles.formFrame}>
-        <CampaignWebsiteForm serviceLines={serviceLines} buyerSegments={buyerSegments} offers={offers} brandVoiceOptions={brandVoiceOptions} knowledgeOptions={knowledgeOptions} />
+        <CampaignWebsiteForm serviceLines={serviceLines} buyerSegments={buyerSegments} offers={offers} brandVoiceOptions={brandVoiceOptions} knowledgeOptions={knowledgeOptions} accountStrategyUrl={accountStrategyHref} />
       </div>
 
       <WebsiteSection
