@@ -4,6 +4,7 @@ import { validatePublishReadyContent } from "@/lib/content-generation/content-sa
 import { buildMonthlyCampaignPlan } from "@/lib/content-calendar/monthly-campaign-planner";
 import { buildGenerationPromptDoctrineSection, buildRepairPromptDoctrineSection } from "@/lib/ai/prompt-doctrine";
 import { buildAudiencePerspectivePrompt } from "@/lib/content-generation/audience-perspective";
+import { buildCampaignDetailPromptSection } from "@/lib/content-generation/campaign-detail";
 
 type WeeklyPlan = ReturnType<typeof buildMonthlyCampaignPlan>[number];
 
@@ -126,6 +127,8 @@ function packagePrompt({
     "- Do not sound like a generic AI marketing assistant.",
     "- Do not simply restate input fields as sentences.",
     "- Do not stitch together audience, offer, proof, and training fragments. Rewrite the idea from scratch.",
+    "- The V1 draft must already include the detail a reviewer would normally ask for in a stronger V2.",
+    "- When the campaign is about an audit, consultation, assessment, or review, explain what it looks at, why each area matters, and what the owner should expect to understand afterward.",
     "",
     "FACTUALITY:",
     "- Be 100% factual.",
@@ -143,6 +146,17 @@ function packagePrompt({
       audience: week.strategy?.targetAudience,
       topic: week.publicTopic,
       offer: week.strategy?.primaryOffer,
+    }),
+    "",
+    buildCampaignDetailPromptSection({
+      audience: week.strategy?.targetAudience,
+      topic: week.publicTopic || week.publicTitle,
+      offer: week.strategy?.primaryOffer,
+      objective: week.strategy?.monthlyObjective,
+      businessContext,
+      differentiator: week.strategy?.differentiator,
+      proofPoints: week.strategy?.proofPoints,
+      objections: week.strategy?.objections,
     }),
     "",
     buildGenerationPromptDoctrineSection(["blog", "email", "linkedin", "facebook", "video", "visual"]),
@@ -178,7 +192,9 @@ function packagePrompt({
     "- Video scripts must be practical and understandable.",
     "- Every sentence must be complete and easy to understand.",
     "- Every asset must lead the reader through a sensible path: problem, why it matters, useful insight, practical next step.",
-    "- If the draft sounds like source fields were merged together, rewrite it before returning JSON.",
+    "- For blog posts, include enough campaign-specific substance that the reader understands the actual offer, not just the general category.",
+    "- For social posts, include one concrete audit/review/offer detail rather than only a broad marketing statement.",
+    "- If the draft sounds like source fields were merged together or the idea is too generic, rewrite it before returning JSON.",
     "",
     "JSON SHAPE:",
     '{"assets":[{"slotId":"linkedin_post_1","title":"...","content":"..."}]}',
@@ -255,6 +271,16 @@ async function repairAsset({
       audience: week.strategy?.targetAudience,
       topic: week.publicTopic,
       offer: week.strategy?.primaryOffer,
+    }),
+    "",
+    buildCampaignDetailPromptSection({
+      audience: week.strategy?.targetAudience,
+      topic: week.publicTopic,
+      offer: week.strategy?.primaryOffer,
+      objective: week.strategy?.monthlyObjective,
+      differentiator: week.strategy?.differentiator,
+      proofPoints: week.strategy?.proofPoints,
+      objections: week.strategy?.objections,
     }),
     "",
     "Private positioning note, not public copy:",

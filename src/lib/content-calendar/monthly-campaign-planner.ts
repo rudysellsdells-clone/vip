@@ -22,6 +22,12 @@ import {
   publicAudienceTitle,
   resolveAudiencePerspective,
 } from "@/lib/content-generation/audience-perspective";
+import {
+  buildCampaignDetailPromptSection,
+  campaignBuyerQuestions,
+  campaignDetailBullets,
+  resolveCampaignDetailContext,
+} from "@/lib/content-generation/campaign-detail";
 
 export type MonthlyCampaignStrategyInput = {
   monthlyObjective?: string;
@@ -323,6 +329,17 @@ function privateGenerationPrompt({
       audience: strategy.targetAudience,
       topic: publicTitle,
       offer: strategy.primaryOffer,
+    }),
+    "",
+    buildCampaignDetailPromptSection({
+      audience: strategy.targetAudience,
+      topic: publicTitle,
+      offer: strategy.primaryOffer,
+      objective: strategy.monthlyObjective,
+      businessContext,
+      differentiator: strategy.differentiator,
+      proofPoints: strategy.proofPoints,
+      objections: strategy.objections,
     }),
     "",
     buildGenerationPromptDoctrineSection(["blog", "email", "linkedin", "facebook", "video", "visual"]),
@@ -784,6 +801,29 @@ function contentForAsset({
       : "A stronger message helps people understand what is happening, why it matters, and what to do next.",
     "A stronger message helps people understand what is happening, why it matters, and what to do next.",
   );
+  const detailContext = resolveCampaignDetailContext({
+    audience: strategy.targetAudience,
+    topic,
+    offer: marketingSpine?.offer || strategy.primaryOffer,
+    objective: strategy.monthlyObjective,
+    differentiator: marketingSpine?.positioningAngle || strategy.differentiator,
+    proofPoints: marketingSpine?.proofPoints?.join("\n") || strategy.proofPoints,
+    objections: marketingSpine?.objections?.join("\n") || strategy.objections,
+  });
+  const detailBullets = campaignDetailBullets({
+    audience: strategy.targetAudience,
+    topic,
+    offer: marketingSpine?.offer || strategy.primaryOffer,
+    objective: strategy.monthlyObjective,
+    proofPoints: marketingSpine?.proofPoints?.join("\n") || strategy.proofPoints,
+  });
+  const buyerQuestions = campaignBuyerQuestions({
+    audience: strategy.targetAudience,
+    topic,
+    offer: marketingSpine?.offer || strategy.primaryOffer,
+    objective: strategy.monthlyObjective,
+    proofPoints: marketingSpine?.proofPoints?.join("\n") || strategy.proofPoints,
+  });
 
   switch (assetType) {
     case "blog_post": {
@@ -800,17 +840,19 @@ function contentForAsset({
         "",
         `That is why ${topic} matters. The real issue is not the label. The issue is ${firstConcern}. When that problem is unclear, it is easy to spend time on the wrong fix while better-fit opportunities keep going somewhere else.`,
         "",
-        `For example, think about ${example}. Before that person calls, they are already forming an opinion from search results, reviews, website pages, local listings, and now AI-generated answers. If ${perspective.directAddress} is hard to find or hard to understand in those moments, the opportunity can be lost before a conversation ever starts.`,
+        `For example, think about ${example}. Before that person calls, they are already forming an opinion from search results, reviews, website pages, local listings, and AI-generated answers. If ${perspective.directAddress} is hard to find or hard to understand in those moments, the opportunity can be lost before a conversation ever starts.`,
         "",
-        "## What to look at first",
-        "A practical review should make the problem easier to understand, not more confusing. Start with questions like:",
+        `## What ${detailContext.plainLanguageOffer} should help you understand`,
+        `A useful ${detailContext.plainLanguageOffer.toLowerCase()} should not leave you with vague advice. It should help you see the specific places where ${perspective.directAddress} may be losing visibility, trust, or appointment opportunities.`,
         "",
-        `- Can people quickly understand what ${perspective.directAddress} offers?`,
-        "- Are the most important services easy to find in search?",
-        "- Do reviews, website pages, and local listings support the same message?",
-        "- Are there obvious gaps that would keep someone from taking the next step?",
+        ...detailBullets.map((item) => `- ${item}`),
         "",
-        `This is where ${offer} can be useful. It gives you ${outcome} without forcing you to guess or commit to a bigger plan before you understand the issue.`,
+        "## The questions worth answering first",
+        "Before you spend more time or budget, the first review should help answer practical questions like:",
+        "",
+        ...buyerQuestions.map((question) => `- ${question}`),
+        "",
+        `This is where ${offer} can be useful. It gives you ${detailContext.outcomeDescription} without forcing you to guess or commit to a bigger plan before you understand the issue.`,
         "",
         "## Why this matters",
         `The concern is usually not just ${objection}. It is the time wasted trying random fixes without knowing whether they address the real problem. A clearer review helps separate what feels urgent from what is actually important.`,
