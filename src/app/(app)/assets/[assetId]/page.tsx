@@ -5,6 +5,7 @@ import { AssetReviewActions } from "@/components/approvals/AssetReviewActions";
 import { RunGalaxyAiAssetButton } from "@/components/galaxyai/RunGalaxyAiAssetButton";
 import { ExecuteApprovedAssetButton } from "@/components/publishing/ExecuteApprovedAssetButton";
 import { RequestRevisionButton } from "@/components/assets/RequestRevisionButton";
+import { ManualAssetEditForm } from "@/components/assets/ManualAssetEditForm";
 import { VisualAssetPanel } from "@/components/assets/VisualAssetPanel";
 import {
   WebsiteBadge,
@@ -319,6 +320,14 @@ export default async function AssetDetailPage({ params }: PageProps) {
           <pre className={websiteStyles.cardContentBox}>{asset.content}</pre>
 
           <div className={websiteStyles.cardActions}>
+            {assetAccess.canManage && canRevise ? (
+              <ManualAssetEditForm
+                assetId={asset.id}
+                initialTitle={asset.title}
+                initialContent={asset.content}
+              />
+            ) : null}
+
             <AssetReviewActions assetId={asset.id} />
 
             {canExecuteZapierMcp ? (
