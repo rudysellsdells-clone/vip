@@ -121,15 +121,55 @@ function titleTopic(title: string) {
   return cleaned || title;
 }
 
+const HASHTAG_STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "are",
+  "as",
+  "at",
+  "be",
+  "by",
+  "for",
+  "from",
+  "how",
+  "in",
+  "into",
+  "is",
+  "it",
+  "its",
+  "of",
+  "on",
+  "or",
+  "that",
+  "the",
+  "their",
+  "this",
+  "to",
+  "with",
+  "you",
+  "your",
+]);
+
+const UNSAFE_HASHTAG_SOURCE_PATTERN = /\b(?:youll|you ll|receive|how to solve|preferred business outcome|desired outcome|selected audience|selected offer|proof points?|supporting context|business context|content angle|marketing spine|strategy input|campaign brief)\b/i;
+
 function hashtagFromPhrase(value: string) {
-  const words = String(value ?? "")
+  const cleaned = String(value ?? "")
+    .replace(/[’']/g, "")
     .replace(/&/g, " and ")
     .replace(/[^a-zA-Z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleaned || UNSAFE_HASHTAG_SOURCE_PATTERN.test(cleaned)) return "";
+
+  const words = cleaned
     .split(/\s+/)
     .map((word) => word.trim())
     .filter(Boolean)
-    .filter((word) => !["and", "the", "for", "with", "from", "this", "that"].includes(word.toLowerCase()))
-    .slice(0, 4);
+    .filter((word) => word.length > 2)
+    .filter((word) => !HASHTAG_STOP_WORDS.has(word.toLowerCase()))
+    .slice(0, 3);
 
   if (!words.length) return "";
 
@@ -189,23 +229,39 @@ function socialHashtags({
   content: string;
 }) {
   const topic = titleTopic(title);
-  const firstSentence = content
-    .replace(/\n/g, " ")
-    .split(/[.!?]/)
-    .map((part) => part.trim())
-    .find(Boolean);
+  const combined = `${topic} ${content}`.toLowerCase();
+  const inferredTags: string[] = [];
+
+  if (/contractor|construction|trade|trades/.test(combined)) {
+    inferredTags.push("#ContractorMarketing");
+  }
+
+  if (/ai|aio|search|visibility|google|seo/.test(combined)) {
+    inferredTags.push("#AIOptimization", "#LocalSEO");
+  }
+
+  if (/audit|visibility audit|marketing audit/.test(combined)) {
+    inferredTags.push("#MarketingAudit");
+  }
+
+  if (/content|blog|post|social/.test(combined)) {
+    inferredTags.push("#ContentMarketing");
+  }
+
+  if (/lead|retainer|contract|sales|pipeline|growth/.test(combined)) {
+    inferredTags.push("#LeadGeneration");
+  }
 
   const channelTag = assetType === "linkedin_post" ? "#BusinessGrowth" : "#LocalBusiness";
 
   return unique([
     hashtagFromPhrase(topic),
-    firstSentence ? hashtagFromPhrase(firstSentence) : "",
+    ...inferredTags,
     "#WebSearchPros",
     "#DigitalMarketing",
-    "#LocalSEO",
     channelTag,
   ])
-    .slice(0, assetType === "linkedin_post" ? 6 : 5)
+    .slice(0, assetType === "linkedin_post" ? 5 : 4)
     .join(" ");
 }
 

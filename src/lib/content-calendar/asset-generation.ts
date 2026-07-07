@@ -113,6 +113,8 @@ function itemSpecificInstructions(item: CalendarItem) {
         "Make it approachable, clear, and helpful.",
         "Include a strong opening tied to a real business situation, short paragraphs, useful detail, and a soft CTA.",
         "Do not overuse hashtags. Use at most 3 if helpful.",
+        "Do not create hashtags from full sentences, broken phrases, or raw strategy fields.",
+        "Do not include planning language such as preferred business outcome, proof point, supporting context, selected audience, or selected offer.",
       ].join("\n");
 
     case "linkedin_post":
@@ -121,6 +123,9 @@ function itemSpecificInstructions(item: CalendarItem) {
         "Make it professional, authority-building, and readable.",
         "Use a strong hook, short paragraphs, a specific business lesson, and a clear point of view.",
         "End with a thoughtful CTA or engagement prompt.",
+        "Use 3 to 5 clean, relevant hashtags at the end.",
+        "Do not create hashtags from full sentences, broken phrases, or raw strategy fields.",
+        "Do not include planning language such as preferred business outcome, proof point, supporting context, selected audience, or selected offer.",
       ].join("\n");
 
     case "email_outreach":

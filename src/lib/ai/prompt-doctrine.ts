@@ -44,6 +44,7 @@ export function buildContextToCopyFirewallSection() {
     "- Convert context into original sentences, buyer examples, useful explanations, practical steps, objection handling, and channel-appropriate copy.",
     "- Do not include raw field labels such as Target Audience, Offer Focus, Brand Tone, Proof Points, Content Angle, Marketing Spine, Asset Brief, or Additional Business Context.",
     "- If a source field is written as a list, use it to choose the angle and details. Do not print the list as the body of the asset.",
+    "- Never publish planning language such as: preferred business outcome, selected audience, selected offer, proof point, supporting context, or practical context point.",
     "- The finished asset should read like public marketing content, not like a completed form, intake worksheet, strategy note, or prompt summary.",
   ]);
 }
@@ -96,6 +97,8 @@ export function buildChannelStandardsSection(channels: PromptDoctrineChannel[] =
       "- Use short paragraphs and a clear point of view.",
       "- Include practical value, not just promotion.",
       "- Use a CTA or conversation prompt that fits the post.",
+      "- Use 3 to 5 clean, relevant hashtags at the end. Do not turn full sentences or broken phrases into hashtags.",
+      "- Do not publish raw planning fragments such as preferred business outcome, proof point, or supporting context.",
     ]));
   }
 
@@ -106,6 +109,8 @@ export function buildChannelStandardsSection(channels: PromptDoctrineChannel[] =
       "- Use concrete service/business context and simple phrasing.",
       "- Emoji are fine when natural; avoid clutter.",
       "- Use a soft CTA or engagement prompt.",
+      "- Use no more than 4 clean, relevant hashtags at the end. Do not turn full sentences or broken phrases into hashtags.",
+      "- Do not publish raw planning fragments such as preferred business outcome, proof point, or supporting context.",
     ]));
   }
 
