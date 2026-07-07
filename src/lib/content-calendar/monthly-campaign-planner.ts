@@ -214,21 +214,22 @@ function publicTitleForTopic(
   topic: string,
   strategy: MonthlyCampaignStrategyInput,
 ) {
-  const audience = strategy.targetAudience || "local businesses";
+  const safeTopic = titleCase(simpleNounPhrase(topic, "better marketing visibility"));
+  const audience = titleCase(simpleNounPhrase(strategy.targetAudience, "business owners"));
 
-  if (/ai|search/i.test(topic)) {
-    return `Why ${titleCase(topic)} Matters for ${audience}`;
+  if (/ai|search|seo|aio|visibility/i.test(safeTopic)) {
+    return `Why ${safeTopic} Matters for ${audience}`;
   }
 
-  if (/content/i.test(topic)) {
-    return `How Better ${titleCase(topic)} Builds Trust`;
+  if (/content|message|blog|social/i.test(safeTopic)) {
+    return `How Better ${safeTopic} Builds Trust`;
   }
 
-  if (/lead|sales|growth/i.test(topic)) {
-    return `Turning ${titleCase(topic)} Into Better Opportunities`;
+  if (/lead|sales|growth|pipeline/i.test(safeTopic)) {
+    return `Turning ${safeTopic} Into Better Conversations`;
   }
 
-  return `A Practical Guide to ${titleCase(topic)}`;
+  return `A Practical Guide to ${safeTopic}`;
 }
 
 function internalCampaignName({
@@ -262,37 +263,19 @@ function publicCampaignAngle({
   strategy: MonthlyCampaignStrategyInput;
   marketingSpine?: MarketingSpine | null;
 }) {
-  const topic = topicForWeek(strategy, weekNumber, marketingSpine);
-  const audience =
-    marketingSpine?.audience ||
-    strategy.targetAudience ||
-    "the right customers";
-  const offer =
-    marketingSpine?.offer || strategy.primaryOffer || "the right next step";
-  const differentiator =
-    strategy.differentiator ||
-    marketingSpine?.positioningAngle ||
-    "a practical service plan";
-  const originality =
-    marketingSpine?.originalityAngle || strategy.originalityAngle || "";
-  const buyerPain = marketingSpine?.buyerPain || topic;
+  const topic = topicLabel(strategy, weekNumber, marketingSpine);
+  const audience = audienceLabel(strategy, marketingSpine);
+  const offer = offerLabel(strategy, marketingSpine);
 
   const angles = [
-    originality
-      ? `${originality} This week turns that point of view into useful content around ${topic}.`
-      : "",
-    buyerPain
-      ? `${audience} are dealing with ${buyerPain}. This week shows why that matters and how ${offer} creates a practical next step.`
-      : "",
-    `${audience} are paying closer attention to ${topic}, and the service businesses that explain it clearly are more likely to earn trust before the first conversation.`,
-    `Improving how people understand ${topic} does not have to be complicated. The right plan connects helpful education, clear proof, and a simple next step for the customer.`,
-    `Many businesses waste time creating disconnected content. A better approach is to use ${topic} as the weekly anchor and turn it into useful posts, emails, and video ideas.`,
-    `${topic} works best when it gives people a simple reason to act. That is where ${differentiator} can turn attention into real opportunities.`,
-    `A strong month of content should not feel random. It should reinforce the same message, build confidence, and point people toward ${offer}.`,
+    `This week's campaign helps ${audience} understand ${topic} in plain language before pointing them toward ${offer}.`,
+    `The goal is to make ${topic} easier to understand, easier to trust, and easier to act on.`,
+    `This message should connect a recognizable buyer problem to a practical next step without sounding like a generic service pitch.`,
+    `A strong campaign this week should help the reader see what is happening, why it matters, and what they can do next.`,
+    `The content should build trust by explaining the problem first, then positioning ${offer} as the natural next move.`,
   ];
 
-  const usableAngles = angles.filter(Boolean);
-  return usableAngles[(weekNumber - 1) % usableAngles.length];
+  return angles[(weekNumber - 1) % angles.length];
 }
 
 function privateGenerationPrompt({
@@ -356,11 +339,7 @@ function privateGenerationPrompt({
 }
 
 function cta(strategy: MonthlyCampaignStrategyInput) {
-  return strategy.callToAction || "Reach out to learn the best next step.";
-}
-
-function publicOfferPhrase(strategy: MonthlyCampaignStrategyInput) {
-  return strategy.primaryOffer || "the recommended next step";
+  return strategy.callToAction || "Schedule a marketing audit.";
 }
 
 const HASHTAG_STOP_WORDS = new Set([
@@ -398,7 +377,255 @@ const HASHTAG_STOP_WORDS = new Set([
   "your",
 ]);
 
-const BAD_PUBLIC_CONTEXT_PATTERN = /\b(?:preferred business outcome|desired outcome|primary outcome|selected audience|selected offer|selected service|audience context|offer details|proof points?|supporting context|business context|additional context|content angle|marketing spine|strategy input|campaign brief|raw context|internal month|internal campaign|week number)\b/i;
+const BAD_PUBLIC_CONTEXT_PATTERN = /\b(?:preferred business outcome|desired outcome|primary outcome|selected audience|selected offer|selected service|audience context|offer details|proof points?|supporting context|business context|additional context|content angle|marketing spine|strategy input|campaign brief|raw context|internal month|internal campaign|week number|practical proof|context point|asset brief)\b/i;
+
+const CONTEXT_LABEL_PREFIX_PATTERN = /^(?:selected service line|selected audience|selected offer|service context|primary outcome|audience context|audience pain points?|desired outcomes?|common objections?|offer details?|offer outcome|price\/package notes?|proof points?|supporting context|business context|additional business context|target audience|primary offer|brand tone|monthly objective|key topics?|differentiator|call to action|cta)\s*:\s*/i;
+
+function stripContextLabel(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .replace(/^[-•*]\s+/, "")
+    .replace(CONTEXT_LABEL_PREFIX_PATTERN, "")
+    .replace(/^selected\s+[^—:]+\s+—\s+/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isLikelySentence(value: string) {
+  const cleaned = stripContextLabel(value);
+
+  if (!cleaned) return false;
+  if (/[.!?]$/.test(cleaned)) return true;
+  if (cleaned.split(/\s+/).length > 7) return true;
+
+  return /\b(?:needs?|wants?|struggles?|looking|trying|believes?|feels?|receive|solve|outcome|contract|retainer|report|recommendations?)\b/i.test(cleaned);
+}
+
+function isPublicContextCandidate(value: string) {
+  const cleaned = stripContextLabel(value);
+
+  if (!cleaned) return false;
+  if (/^(not supplied|not provided|none|n\/a)$/i.test(cleaned)) return false;
+  if (BAD_PUBLIC_CONTEXT_PATTERN.test(cleaned)) return false;
+
+  return true;
+}
+
+function contextNuggets(value: unknown, limit = 4) {
+  return String(value ?? "")
+    .split(/\r?\n|\s*[|•]\s*|;/g)
+    .map(stripContextLabel)
+    .filter(isPublicContextCandidate)
+    .filter((item, index, array) => {
+      const key = item.toLowerCase();
+      return array.findIndex((compare) => compare.toLowerCase() === key) === index;
+    })
+    .slice(0, limit);
+}
+
+function firstContextNugget(value: unknown, fallback: string) {
+  return contextNuggets(value, 1)[0] || stripContextLabel(fallback);
+}
+
+function sentenceCase(value: string) {
+  const cleaned = stripContextLabel(value)
+    .replace(/\bai\b/gi, "AI")
+    .replace(/\bseo\b/gi, "SEO")
+    .replace(/\baio\b/gi, "AIO")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleaned) return "";
+
+  return `${cleaned.charAt(0).toUpperCase()}${cleaned.slice(1)}`;
+}
+
+function completeSentence(value: string, fallback: string) {
+  const source = isPublicContextCandidate(value) ? value : fallback;
+  const cleaned = sentenceCase(source);
+
+  if (!cleaned) return "";
+  if (/[.!?]$/.test(cleaned)) return cleaned;
+
+  return `${cleaned}.`;
+}
+
+function simpleNounPhrase(value: unknown, fallback: string) {
+  const cleaned = stripContextLabel(value);
+  const words = cleaned.split(/\s+/).filter(Boolean);
+
+  if (!cleaned) return fallback;
+  if (BAD_PUBLIC_CONTEXT_PATTERN.test(cleaned)) return fallback;
+  if (isLikelySentence(cleaned)) return fallback;
+  if (words.length > 5) return fallback;
+
+  return cleaned;
+}
+
+function lowercaseFirst(value: string) {
+  if (!value) return value;
+  if (/^[A-Z]{2,}$/.test(value)) return value;
+
+  return `${value.charAt(0).toLowerCase()}${value.slice(1)}`;
+}
+
+function audienceLabel(strategy: MonthlyCampaignStrategyInput, marketingSpine?: MarketingSpine | null) {
+  return lowercaseFirst(
+    simpleNounPhrase(
+      marketingSpine?.audience || strategy.targetAudience,
+      "the right buyers",
+    ),
+  );
+}
+
+function offerLabel(strategy: MonthlyCampaignStrategyInput, marketingSpine?: MarketingSpine | null) {
+  const raw = simpleNounPhrase(
+    marketingSpine?.offer || strategy.primaryOffer,
+    "a practical next step",
+  );
+
+  if (/^free\s+/i.test(raw)) {
+    return `a ${lowercaseFirst(raw)}`;
+  }
+
+  if (/^(a|an|the)\s+/i.test(raw)) {
+    return lowercaseFirst(raw);
+  }
+
+  return lowercaseFirst(raw);
+}
+
+function topicLabel(
+  strategy: MonthlyCampaignStrategyInput,
+  weekNumber: number,
+  marketingSpine?: MarketingSpine | null,
+) {
+  return lowercaseFirst(
+    simpleNounPhrase(
+      topicForWeek(strategy, weekNumber, marketingSpine),
+      "better marketing visibility",
+    ),
+  );
+}
+
+function proofLabel(strategy: MonthlyCampaignStrategyInput, marketingSpine?: MarketingSpine | null) {
+  const proof = firstContextNugget(
+    marketingSpine?.proofPoints?.[0] || strategy.proofPoints,
+    "a clearer view of what is working, what is missing, and what to fix first",
+  );
+
+  if (!isLikelySentence(proof) && proof.split(/\s+/).length <= 8) {
+    return lowercaseFirst(proof);
+  }
+
+  return "a clearer view of what is working, what is missing, and what to fix first";
+}
+
+function objectionLabel(strategy: MonthlyCampaignStrategyInput, marketingSpine?: MarketingSpine | null) {
+  const objection = firstContextNugget(
+    marketingSpine?.objections?.[0] || strategy.objections,
+    "not knowing whether the next marketing move is worth the time or budget",
+  );
+
+  if (BAD_PUBLIC_CONTEXT_PATTERN.test(objection)) {
+    return "not knowing whether the next marketing move is worth the time or budget";
+  }
+
+  return lowercaseFirst(objection.replace(/[.!?]$/, ""));
+}
+
+function normalizeCta(value: string) {
+  const cleaned = stripContextLabel(value)
+    .replace(/\bSCHEDULE\b/g, "Schedule")
+    .replace(/\bBOOK\b/g, "Book")
+    .replace(/\bGET\b/g, "Get")
+    .replace(/\bDOWNLOAD\b/g, "Download")
+    .replace(/\bMARKETING\b/g, "marketing")
+    .replace(/\bAUDIT\b/g, "audit")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return completeSentence(cleaned, "Schedule a marketing audit.");
+}
+
+function humanBuyerProblem({
+  topic,
+  audience,
+  offer,
+  buyerPain,
+}: {
+  topic: string;
+  audience: string;
+  offer: string;
+  buyerPain: string;
+}) {
+  const combined = `${topic} ${audience} ${offer} ${buyerPain}`.toLowerCase();
+
+  if (/contractor|construction|trades?/.test(combined)) {
+    return "they are trying to win better-fit jobs without wasting time or money on marketing that never turns into real conversations";
+  }
+
+  if (/audit|visibility|search|seo|aio|ai|google/.test(combined)) {
+    return "it is hard to know why they are not showing up in the right searches or what to fix first";
+  }
+
+  if (/lead|sales|pipeline/.test(combined)) {
+    return "the problem is not just getting attention; it is turning that attention into a real sales conversation";
+  }
+
+  if (/email|nurture|follow/.test(combined)) {
+    return "good prospects often need a clear reason to respond before they are ready for a sales conversation";
+  }
+
+  if (buyerPain && !BAD_PUBLIC_CONTEXT_PATTERN.test(buyerPain) && !isLikelySentence(buyerPain)) {
+    return `they are trying to make sense of ${lowercaseFirst(buyerPain)}`;
+  }
+
+  return "they need a clearer way to understand the problem, compare their options, and choose a next step";
+}
+
+function humanOutcome({
+  offer,
+  proof,
+}: {
+  offer: string;
+  proof: string;
+}) {
+  if (/audit|visibility/.test(`${offer} ${proof}`.toLowerCase())) {
+    return "a short list of practical recommendations they can understand and act on";
+  }
+
+  if (/consult|call|strategy/.test(offer.toLowerCase())) {
+    return "a practical conversation about what to fix first";
+  }
+
+  return proof || "a clearer path from interest to action";
+}
+
+function socialEmojiSet({
+  topic,
+  assetType,
+}: {
+  topic: string;
+  assetType: string;
+}) {
+  const lower = topic.toLowerCase();
+  const base = lower.includes("search") || lower.includes("visibility") || lower.includes("audit") || lower.includes("ai") || lower.includes("seo")
+    ? ["🔎"]
+    : lower.includes("lead") || lower.includes("sales") || lower.includes("growth")
+      ? ["📈"]
+      : ["💡"];
+
+  if (assetType === "linkedin_post") {
+    base.push("🤝");
+  }
+
+  if (assetType === "facebook_post") {
+    base.push("✅");
+  }
+
+  return uniqueValues(base).slice(0, 2).join(" ");
+}
 
 function hashtagFromPhrase(value: string) {
   const cleaned = stripContextLabel(value)
@@ -408,7 +635,7 @@ function hashtagFromPhrase(value: string) {
     .replace(/\s+/g, " ")
     .trim();
 
-  if (!cleaned || BAD_PUBLIC_CONTEXT_PATTERN.test(cleaned)) return "";
+  if (!cleaned || BAD_PUBLIC_CONTEXT_PATTERN.test(cleaned) || isLikelySentence(cleaned)) return "";
 
   const words = cleaned
     .split(/\s+/)
@@ -440,222 +667,6 @@ function uniqueValues(values: string[]) {
   }
 
   return result;
-}
-
-const CONTEXT_LABEL_PREFIX_PATTERN = /^(?:selected service line|selected audience|selected offer|service context|primary outcome|audience context|audience pain points?|desired outcomes?|common objections?|offer details?|offer outcome|price\/package notes?|proof points?|supporting context|business context|additional business context|target audience|primary offer|brand tone|monthly objective|key topics?|differentiator|call to action|cta)\s*:\s*/i;
-
-function stripContextLabel(value: unknown) {
-  return String(value ?? "")
-    .trim()
-    .replace(/^[-•*]\s+/, "")
-    .replace(CONTEXT_LABEL_PREFIX_PATTERN, "")
-    .replace(/^selected\s+[^—:]+\s+—\s+/i, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function isPublicContextCandidate(value: string) {
-  const cleaned = stripContextLabel(value);
-
-  if (!cleaned) return false;
-  if (/^(not supplied|not provided|none|n\/a)$/i.test(cleaned)) return false;
-  if (BAD_PUBLIC_CONTEXT_PATTERN.test(cleaned)) return false;
-
-  return true;
-}
-
-function contextNuggets(value: unknown, limit = 4) {
-  return String(value ?? "")
-    .split(/\r?\n|\s*[|•]\s*|;/g)
-    .map(stripContextLabel)
-    .filter(isPublicContextCandidate)
-    .filter((item, index, array) => {
-      const key = item.toLowerCase();
-      return array.findIndex((compare) => compare.toLowerCase() === key) === index;
-    })
-    .slice(0, limit);
-}
-
-function firstContextNugget(value: unknown, fallback: string) {
-  return contextNuggets(value, 1)[0] || stripContextLabel(fallback);
-}
-
-function naturalList(values: string[], fallback: string) {
-  const cleanValues = values.map(stripContextLabel).filter(Boolean).slice(0, 3);
-
-  if (!cleanValues.length) return fallback;
-  if (cleanValues.length === 1) return cleanValues[0];
-  if (cleanValues.length === 2) return `${cleanValues[0]} and ${cleanValues[1]}`;
-
-  return `${cleanValues[0]}, ${cleanValues[1]}, and ${cleanValues[2]}`;
-}
-
-function audiencePhrase(strategy: MonthlyCampaignStrategyInput, marketingSpine?: MarketingSpine | null) {
-  return firstContextNugget(
-    marketingSpine?.audience || strategy.targetAudience,
-    "the intended audience",
-  );
-}
-
-function offerPhrase(strategy: MonthlyCampaignStrategyInput, marketingSpine?: MarketingSpine | null) {
-  return firstContextNugget(
-    marketingSpine?.offer || strategy.primaryOffer,
-    "the recommended next step",
-  );
-}
-
-function proofPhrase(strategy: MonthlyCampaignStrategyInput, marketingSpine?: MarketingSpine | null) {
-  return firstContextNugget(
-    marketingSpine?.proofPoints?.[0] || strategy.proofPoints,
-    "a practical detail from the service or offer",
-  );
-}
-
-function objectionPhrase(strategy: MonthlyCampaignStrategyInput, marketingSpine?: MarketingSpine | null) {
-  return firstContextNugget(
-    marketingSpine?.objections?.[0] || strategy.objections,
-    "the concern that this may not be urgent enough right now",
-  );
-}
-
-function buyerPainPhrase({
-  topic,
-  strategy,
-  marketingSpine,
-}: {
-  topic: string;
-  strategy: MonthlyCampaignStrategyInput;
-  marketingSpine?: MarketingSpine | null;
-}) {
-  const fallbackProblem = /audit|visibility|seo|ai|search/i.test(topic)
-    ? "the real challenge is knowing which marketing actions will actually improve visibility and lead quality"
-    : `the real challenge is making ${topic.toLowerCase()} easier to understand and act on`;
-
-  return firstContextNugget(
-    marketingSpine?.buyerPain || strategy.proofPoints,
-    fallbackProblem,
-  );
-}
-
-function contextToPublicSentence(value: unknown, fallback: string) {
-  const nuggets = contextNuggets(value, 2);
-  return naturalList(nuggets, fallback);
-}
-
-function sentenceCase(value: string) {
-  const cleaned = stripContextLabel(value)
-    .replace(/\bai\b/gi, "AI")
-    .replace(/\bio\b/gi, "IO")
-    .replace(/\bseo\b/gi, "SEO")
-    .replace(/\baio\b/gi, "AIO")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!cleaned) return "";
-
-  return `${cleaned.charAt(0).toUpperCase()}${cleaned.slice(1)}`;
-}
-
-function completeSentence(value: string, fallback: string) {
-  const cleaned = sentenceCase(isPublicContextCandidate(value) ? value : fallback);
-
-  if (!cleaned) return "";
-  if (/[.!?]$/.test(cleaned)) return cleaned;
-
-  return `${cleaned}.`;
-}
-
-function normalizeCta(value: string) {
-  const cleaned = stripContextLabel(value)
-    .replace(/\bSCHEDULE\b/g, "Schedule")
-    .replace(/\bBOOK\b/g, "Book")
-    .replace(/\bGET\b/g, "Get")
-    .replace(/\bDOWNLOAD\b/g, "Download")
-    .replace(/\bMARKETING\b/g, "marketing")
-    .replace(/\bAUDIT\b/g, "audit")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return completeSentence(cleaned, "Schedule a marketing audit");
-}
-
-function audienceLeadIn(audience: string) {
-  const cleaned = stripContextLabel(audience);
-
-  if (!cleaned || /^the intended audience$/i.test(cleaned)) {
-    return "For the right buyer";
-  }
-
-  return `For ${cleaned.toLowerCase()}`;
-}
-
-function buyerProblemSentence({
-  topic,
-  buyerPain,
-}: {
-  topic: string;
-  buyerPain: string;
-}) {
-  const cleanedPain = stripContextLabel(buyerPain);
-
-  if (!cleanedPain || BAD_PUBLIC_CONTEXT_PATTERN.test(cleanedPain)) {
-    return `they are trying to figure out what ${topic.toLowerCase()} means for their next decision`;
-  }
-
-  if (/\bneeds\b/i.test(cleanedPain) && !/[.!?]$/.test(cleanedPain)) {
-    return cleanedPain.replace(/\.$/, "");
-  }
-
-  return cleanedPain.replace(/\.$/, "");
-}
-
-function socialTopicSentence(topic: string) {
-  const cleaned = stripContextLabel(topic);
-
-  if (!cleaned) return "the next marketing decision";
-
-  return cleaned.toLowerCase();
-}
-
-function topicEmoji(topic: string) {
-  const lower = topic.toLowerCase();
-
-  if (lower.includes("ai") || lower.includes("search")) return "🔎";
-  if (lower.includes("local") || lower.includes("google")) return "📍";
-  if (lower.includes("content") || lower.includes("blog")) return "✍️";
-  if (
-    lower.includes("lead") ||
-    lower.includes("sales") ||
-    lower.includes("growth")
-  )
-    return "📈";
-  if (lower.includes("authority") || lower.includes("trust")) return "🏆";
-  if (lower.includes("video")) return "🎥";
-  if (lower.includes("email")) return "📬";
-  if (lower.includes("review")) return "⭐";
-  if (lower.includes("strategy")) return "🧭";
-
-  return "💡";
-}
-
-function socialEmojiSet({
-  topic,
-  assetType,
-}: {
-  topic: string;
-  assetType: string;
-}) {
-  const base = [topicEmoji(topic)];
-
-  if (assetType === "linkedin_post") {
-    base.push("📈", "🤝");
-  }
-
-  if (assetType === "facebook_post") {
-    base.push("📣", "✅");
-  }
-
-  return uniqueValues(base).slice(0, 3).join(" ");
 }
 
 function fixedSocialHashtags({
@@ -739,26 +750,27 @@ function contentForAsset({
       "Schedule a marketing audit.",
     ),
   );
-  const topic = firstContextNugget(
-    topicForWeek(strategy, weekNumber, marketingSpine),
-    "the campaign topic",
+  const topic = topicLabel(strategy, weekNumber, marketingSpine);
+  const offer = offerLabel(strategy, marketingSpine);
+  const audience = audienceLabel(strategy, marketingSpine);
+  const rawPain = firstContextNugget(
+    marketingSpine?.buyerPain || strategy.proofPoints,
+    "",
   );
-  const offer = offerPhrase(strategy, marketingSpine);
-  const audience = audiencePhrase(strategy, marketingSpine);
-  const buyerPain = buyerPainPhrase({ topic, strategy, marketingSpine });
-  const publicBuyerProblem = buyerProblemSentence({ topic, buyerPain });
-  const originalityAngle = completeSentence(
-    contextToPublicSentence(
-      marketingSpine?.originalityAngle || strategy.originalityAngle || campaignAngle,
-      campaignAngle,
-    ),
-    "The difference is whether the message gives the buyer a reason to trust the next step.",
-  );
-  const proofPoint = proofPhrase(strategy, marketingSpine);
-  const objection = objectionPhrase(strategy, marketingSpine);
-  const practicalExample = contextToPublicSentence(
-    strategy.differentiator || marketingSpine?.positioningAngle,
-    `a clear connection between ${buyerPain} and ${offer}`,
+  const proof = proofLabel(strategy, marketingSpine);
+  const objection = objectionLabel(strategy, marketingSpine);
+  const buyerProblem = humanBuyerProblem({
+    topic,
+    audience,
+    offer,
+    buyerPain: rawPain,
+  });
+  const outcome = humanOutcome({ offer, proof });
+  const humanAngle = completeSentence(
+    campaignAngle && !BAD_PUBLIC_CONTEXT_PATTERN.test(campaignAngle)
+      ? campaignAngle
+      : "A stronger message helps people understand what is happening, why it matters, and what to do next.",
+    "A stronger message helps people understand what is happening, why it matters, and what to do next.",
   );
 
   switch (assetType) {
@@ -766,39 +778,47 @@ function contentForAsset({
       return [
         `# ${publicTitle}`,
         "",
-        "## Why this matters",
-        `${campaignAngle}`,
+        "Most people do not act because a business has a service to sell. They act when the problem becomes clear enough to understand and the next step feels safe enough to take.",
         "",
-        `For ${audience}, this usually shows up as a practical problem: ${buyerPain}. When that problem is left alone, people may still need the service, but they do not have a clear enough reason to trust the next step, compare options, or act with confidence.`,
+        humanAngle,
         "",
-        "## What buyers need to understand first",
-        `The useful starting point is not to repeat the offer word-for-word. It is to explain the situation the buyer is already trying to solve, then connect that situation to ${offer}. A strong message around ${topic} should make the problem easier to recognize, easier to understand, and easier to act on.`,
+        `For ${audience}, the challenge is usually simple: ${buyerProblem}. That is why content about ${topic} has to do more than announce an offer. It has to help the reader recognize the problem in plain language and see a practical way forward.`,
         "",
-        `One practical angle to keep in view is ${practicalExample}. That gives the content a real point of view instead of sounding like a copied service description.`,
+        "## What the reader needs to understand",
+        "A useful article should answer the questions the buyer is already asking quietly:",
         "",
-        "## How to turn the context into useful content",
-        "A useful article should translate the available audience, offer, and market details into plain-language guidance, examples, and decision support.",
+        "- What is actually holding us back?",
+        "- What should we look at first?",
+        "- What would a realistic next step look like?",
+        "- How do we avoid wasting time on the wrong fix?",
         "",
-        `A simple way to do that is to focus each section on one question: what the buyer is worried about, what they may misunderstand, what proof or process detail helps them decide, and why ${offer} is a reasonable next step.`,
+        `That is where ${offer} can become useful. The offer should not feel like a hard sell. It should feel like a practical way to get ${outcome}.`,
         "",
-        "## Common concern to address",
-        `A likely concern is ${objection}. The content should answer that concern directly with context, explanation, and useful next steps instead of making a broad claim.`,
+        "## Why generic messaging falls flat",
+        "Generic content usually talks about the service too soon. It says what the business does before it proves that the business understands the customer’s situation.",
+        "",
+        `A better message starts with the real concern: ${objection}. When the content addresses that concern directly, the reader has a reason to keep going.`,
+        "",
+        "## A better way to frame the conversation",
+        `Start with the problem behind ${topic}. Explain what the buyer may be missing, what the consequence is, and what they can do next. Then connect that explanation to ${offer} as the natural next step.`,
+        "",
+        "This approach makes the content more useful, more believable, and easier to act on. It also keeps the message from sounding like every other business making the same claim.",
         "",
         "## Practical next step",
-        `If ${topic} is already on the buyer's mind, the next step is to make the decision easier. ${callToAction}`,
+        `If this is already on your mind, the next move is not to guess. ${callToAction}`,
       ].join("\n");
 
     case "linkedin_post":
       return [
-        `${socialEmojiSet({ topic, assetType })} The best marketing message does not start with a service pitch.`,
+        `${socialEmojiSet({ topic, assetType })} Most buyers do not need another generic marketing pitch.`,
         "",
-        "It starts with the problem your customer is already trying to solve.",
+        "They need a clear explanation of the problem they are already trying to solve.",
         "",
-        originalityAngle,
+        `For ${audience}, ${buyerProblem}. That is the part good content has to make simple.`,
         "",
-        `${audienceLeadIn(audience)}, ${publicBuyerProblem}. A stronger message makes that problem easier to understand, then connects it to a next step that feels useful instead of generic.`,
+        `The offer matters, but only after the reader understands why it is useful. That is where ${offer} can help: it gives them ${outcome}.`,
         "",
-        `That is where ${offer} works best: not as a slogan, but as a practical way to show what should change next.`,
+        "The goal is not to sound clever. The goal is to make the next decision easier.",
         "",
         callToAction,
         "",
@@ -807,13 +827,15 @@ function contentForAsset({
 
     case "facebook_post":
       return [
-        `${socialEmojiSet({ topic, assetType })} Quick thought for local businesses:`,
+        `${socialEmojiSet({ topic, assetType })} Quick thought for business owners:`,
         "",
-        `Your customer probably is not looking for another generic pitch about ${socialTopicSentence(topic)}. They are trying to decide whether you understand the problem and can give them a clear next step.`,
+        "Your best marketing message usually is not the thing you want to say first.",
         "",
-        originalityAngle,
+        "It is the thing your customer needs to understand before they are ready to act.",
         "",
-        `${audienceLeadIn(audience)}, ${publicBuyerProblem}. Good content explains that situation in plain language, answers the obvious concern, and makes the first action easy.`,
+        `For ${audience}, ${buyerProblem}. A helpful message explains that in plain language, answers the obvious concern, and points to one easy next step.`,
+        "",
+        `That is the role of ${offer}: helping people get ${outcome}.`,
         "",
         callToAction,
         "",
@@ -823,15 +845,15 @@ function contentForAsset({
     case "email":
       return [
         `Subject: ${publicTitle}`,
-        `Preview: A practical look at why ${topic} matters now.`,
+        `Preview: A practical way to think about ${topic}.`,
         "",
         "Hi there,",
         "",
-        campaignAngle,
+        `A lot of marketing gets ignored because it starts with the service instead of the problem. For ${audience}, the real issue is often that ${buyerProblem}.`,
         "",
-        `If ${buyerPain} is showing up in the buyer journey, the message should help the reader understand what is happening, why it matters, and what a practical next step looks like.`,
+        `That is why ${topic} needs to be explained in everyday language. The reader should be able to understand what is happening, what it may be costing them, and what they can do next.`,
         "",
-        `The opportunity is to connect that situation to ${offer} with a clear explanation and a useful proof point: ${proofPoint}`,
+        `A practical next step is ${offer}, especially if the goal is to get ${outcome}.`,
         "",
         callToAction,
         "",
@@ -845,11 +867,11 @@ function contentForAsset({
         "",
         "20-second video script:",
         "",
-        `Hook: Most marketing misses because it explains the service before it explains the customer problem.`,
+        "Hook: Most marketing fails when it talks about the service before it explains the customer’s problem.",
         "",
-        `Main point: ${campaignAngle}`,
+        `Problem: For ${audience}, ${buyerProblem}.`,
         "",
-        `Support: Focus on ${buyerPain}, then show how ${offer} gives the viewer a practical next step.`,
+        `Solution: Make the problem easy to understand, then connect it to ${offer} as the next practical step.`,
         "",
         `Close: ${callToAction}`,
       ].join("\n");
@@ -872,7 +894,7 @@ function contentForAsset({
       });
 
     default:
-      return `${label}: ${campaignAngle}`;
+      return `${label}: ${humanAngle}`;
   }
 }
 

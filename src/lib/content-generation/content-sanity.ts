@@ -37,6 +37,18 @@ const PLACEHOLDER_PATTERNS = [
   /\bthis blog should\b/i,
 ];
 
+
+const NONSENSE_OR_FIELD_STITCH_PATTERNS = [
+  /\bconnects?\s+[^.!?]{0,80}\s+needs?\s+[^.!?]{0,80}\s+to\s+a\s+believable\s+next\s+step/i,
+  /\bthe\s+issue\s+is\s+not\s+just\s+awareness\b/i,
+  /\ba\s+practical\s+proof\s+or\s+context\s+point\b/i,
+  /\bpreferred\s+business\s+outcome\b/i,
+  /\bselected\s+(?:audience|offer|service)\b/i,
+  /\bproof\s+points?\s*\/\s*supporting\s+context\b/i,
+  /\b[a-z]+\s+needs\s+a\s+clearer\s+way\s+to\s+understand\s+and\s+act\s+on\s+[A-Z]/i,
+  /\bto\s+a\s+believable\s+next\s+step\s*:/i,
+];
+
 const UNSUPPORTED_CLAIM_PATTERNS = [
   /\bguarantee(?:d|s)?\b.*\b(rankings?|results?|traffic|revenue|leads?)\b/i,
   /\b#1\b.*\bgoogle\b/i,
@@ -132,6 +144,10 @@ export function validatePublishReadyContent({
 
   if (PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(text))) {
     issues.push("Content contains placeholder or instruction-like wording.");
+  }
+
+  if (NONSENSE_OR_FIELD_STITCH_PATTERNS.some((pattern) => pattern.test(text))) {
+    issues.push("Content appears to contain stitched field fragments or nonsensical planning language.");
   }
 
   if (UNSUPPORTED_CLAIM_PATTERNS.some((pattern) => pattern.test(text))) {

@@ -39,13 +39,14 @@ export function buildStrategyInheritanceSection() {
 export function buildContextToCopyFirewallSection() {
   return lines([
     "## Context-to-Copy Firewall",
-    "- Treat brand profile, market profile, account strategy, campaign brief, Marketing Spine, service line, buyer segment, offer, proof, and calendar fields as private source context.",
+    "- Treat brand profile, market profile, account strategy, training documents, campaign brief, Marketing Spine, service line, buyer segment, offer, proof, and calendar fields as private source context.",
     "- Do not paste those fields verbatim into the finished asset unless the wording is a proper noun, approved tagline, exact offer name, exact CTA, legal wording, or a user-supplied quote explicitly meant for publication.",
-    "- Convert context into original sentences, buyer examples, useful explanations, practical steps, objection handling, and channel-appropriate copy.",
-    "- Do not include raw field labels such as Target Audience, Offer Focus, Brand Tone, Proof Points, Content Angle, Marketing Spine, Asset Brief, or Additional Business Context.",
-    "- If a source field is written as a list, use it to choose the angle and details. Do not print the list as the body of the asset.",
-    "- Never publish planning language such as: preferred business outcome, selected audience, selected offer, proof point, supporting context, or practical context point.",
-    "- The finished asset should read like public marketing content, not like a completed form, intake worksheet, strategy note, or prompt summary.",
+    "- Translate context into original, everyday sentences that a real person in the target audience would immediately understand.",
+    "- Use context to decide what the buyer cares about, what problem to explain, what objection to answer, and what next step to recommend.",
+    "- Do not include raw field labels such as Target Audience, Offer Focus, Brand Tone, Proof Points, Content Angle, Marketing Spine, Asset Brief, Training Notes, Knowledge Source, or Additional Business Context.",
+    "- If a source field is written as a list, a fragment, or an awkward sentence, rewrite the idea completely. Do not repair the grammar and print it; write new public copy from the meaning.",
+    "- Never publish planning language such as: preferred business outcome, selected audience, selected offer, proof point, supporting context, practical context point, or recommendation context.",
+    "- The finished asset should read like public marketing content, not like a completed form, intake worksheet, strategy note, training summary, or prompt summary.",
   ]);
 }
 
@@ -77,9 +78,12 @@ export function buildOriginalityRequirementSection() {
 
 export function buildAntiGenericRulesSection() {
   return lines([
-    "## Anti-Generic Rules",
+    "## Anti-Generic + Human Clarity Rules",
     "- Do not use vague filler as the main idea.",
     "- Avoid phrases like: in today's digital world, take your business to the next level, boost your online presence, unlock your potential, grow your business, drive results, maximize your reach, elevate your brand.",
+    "- Write in complete, conversational sentences. Every paragraph should make logical sense to a non-marketer.",
+    "- Do not stitch source fields together. If a sentence would sound odd when read aloud, rewrite it from scratch.",
+    "- Each asset should follow a simple logic path: recognizable problem, why it matters, useful insight, practical next step.",
     "- If a common phrase is unavoidable, immediately make it specific with a buyer problem, example, consequence, proof point, or next step.",
     "- If the finished asset could be copied into a random competitor's campaign with minimal edits, rewrite it before returning.",
   ]);
@@ -176,7 +180,9 @@ export function buildFinalAssetSelfCheckSection() {
     "- Does it avoid unsupported claims?",
     "- Does it avoid raw internal labels and prompt notes?",
     "- Would a serious human reviewer understand why this asset exists?",
-    "- If it still sounds generic, improve it before returning.",
+    "- Does the copy sound like a person wrote it, or does it sound like strategy fields were stitched together?",
+    "- Does every sentence make sense when read aloud?",
+    "- If it still sounds generic, awkward, or nonsensical, improve it before returning.",
   ]);
 }
 

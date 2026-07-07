@@ -33,6 +33,7 @@ const LEAKED_CONTEXT_LABEL_PATTERNS = [
   /^Do not include .*raw context.*$/i,
   /^(?:Internal Month|Internal Campaign|Internal Week|Public Title Direction|Asset Type|Asset Slot|Asset Brief|Gate Status|Campaign Objective|Buyer Pain|Positioning Angle|Originality Angle|Primary CTA|Proof Points|Content Pillars|Brand Tone|Avoid|Additional Business Context|Key Topics \/ Weekly Angles|Monthly Objective|Differentiator|Call To Action)\s*:/i,
   /^(?:Month|Theme|Business goal|Target audience|Offer focus|Type|Platform|Scheduled date|Week|Description|Content angle|Linked campaign)\s*:/i,
+  /\b(?:preferred business outcome|practical proof or context point|selected audience|selected offer|proof points? \/ supporting context)\b/i,
 ];
 
 const UUID_LINE_PATTERN =

@@ -93,6 +93,9 @@ function systemPrompt() {
     "Do not create a generic asset that could apply to any random business in any industry.",
     "Do not invent fake case studies, fake results, fake testimonials, or guaranteed outcomes.",
     "If content is hypothetical, clearly label it as a scenario, not a completed case study.",
+    "Write like a real marketing professional explaining the idea to a real buyer.",
+    "Do not stitch together audience, offer, proof, and context fields as a sentence.",
+    "Every sentence must be complete, plain-English, and logically connected to the sentence before it.",
     "Return only the finished content. Do not include process notes.",
   ].join("\n");
 }
@@ -104,6 +107,7 @@ function itemSpecificInstructions(item: CalendarItem) {
         "Create a complete blog post.",
         "Include an SEO title, meta description, introduction, clear sections, practical advice, a short FAQ, and a CTA.",
         "Use concrete examples, buyer situations, implementation steps, and search-friendly topical depth.",
+        "Lead the reader from a recognizable problem to a practical conclusion and CTA.",
         "Write enough detail to be genuinely useful before review, but keep it readable and not bloated.",
       ].join("\n");
 
@@ -112,6 +116,7 @@ function itemSpecificInstructions(item: CalendarItem) {
         "Create a Facebook Page post.",
         "Make it approachable, clear, and helpful.",
         "Include a strong opening tied to a real business situation, short paragraphs, useful detail, and a soft CTA.",
+        "Use everyday language that a small business owner or buyer would actually say and understand.",
         "Do not overuse hashtags. Use at most 3 if helpful.",
         "Do not create hashtags from full sentences, broken phrases, or raw strategy fields.",
         "Do not include planning language such as preferred business outcome, proof point, supporting context, selected audience, or selected offer.",
@@ -122,6 +127,7 @@ function itemSpecificInstructions(item: CalendarItem) {
         "Create a LinkedIn company page post.",
         "Make it professional, authority-building, and readable.",
         "Use a strong hook, short paragraphs, a specific business lesson, and a clear point of view.",
+        "Make the post flow from problem to insight to practical next step.",
         "End with a thoughtful CTA or engagement prompt.",
         "Use 3 to 5 clean, relevant hashtags at the end.",
         "Do not create hashtags from full sentences, broken phrases, or raw strategy fields.",
@@ -211,6 +217,7 @@ export function buildCalendarAssetPrompt({
     "",
     "Pre-review detail pass:",
     "Before finalizing, revise your own draft once to remove generic filler, add concrete detail, strengthen the CTA, and make the asset useful enough for human review.",
+    "Read the final content as if it were being posted by a real company. If any sentence sounds like field values were stitched together, rewrite it in plain English.",
     "Confirm the final asset does not include raw context labels, intake-field wording, or copied strategy notes.",
   ]
     .filter(Boolean)

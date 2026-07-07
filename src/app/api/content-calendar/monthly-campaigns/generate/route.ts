@@ -14,6 +14,8 @@ import {
   mergeStrategyWithMarketDefaults,
   resolveAccountMarketProfile,
 } from "@/lib/accounts/account-market-profile";
+import { buildBusinessMemoryContext } from "@/lib/content-generation/memory-context";
+import { generatePublishReadyWeeklyPackage } from "@/lib/content-generation/publish-ready-weekly-generator";
 import { preparePublicAssetContent } from "@/lib/content/public-content-cleaner";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
@@ -58,6 +60,116 @@ function campaignSummary(
   ].join("\n");
 }
 
+const AI_PUBLIC_COPY_ASSET_TYPES = [
+  "blog_post",
+  "linkedin_post",
+  "facebook_post",
+  "email",
+  "video_script",
+];
+
+function slotIdForAsset(assetType: string, index: number) {
+  return `${assetType}_${index + 1}`;
+}
+
+async function upgradePlanWithAiPublicCopy({
+  supabase,
+  userId,
+  accountId,
+  month,
+  campaignTheme,
+  businessContext,
+  strategy,
+  plan,
+}: {
+  supabase: any;
+  userId: string;
+  accountId: string;
+  month: string;
+  campaignTheme: string;
+  businessContext: string;
+  strategy: Record<string, unknown>;
+  plan: ReturnType<typeof buildMonthlyCampaignPlan>;
+}) {
+  if (!process.env.OPENAI_API_KEY?.trim()) {
+    return {
+      plan,
+      generationMode: "human_safe_fast_draft",
+      warnings: [
+        "OPENAI_API_KEY is not configured, so monthly generation used the human-safe fast draft templates.",
+      ],
+    };
+  }
+
+  try {
+    const memory = await buildBusinessMemoryContext({
+      supabase,
+      userId,
+      accountId,
+      campaignTheme,
+      businessContext,
+      strategy: strategy as Record<string, string>,
+    });
+
+    const upgradedWeeks: ReturnType<typeof buildMonthlyCampaignPlan> = [];
+
+    for (const week of plan) {
+      const generatedAssets = await generatePublishReadyWeeklyPackage({
+        month,
+        campaignTheme,
+        businessContext,
+        week,
+        memory,
+        assetTypes: AI_PUBLIC_COPY_ASSET_TYPES,
+      });
+
+      const generatedBySlotId = new Map(
+        generatedAssets.map((asset) => [asset.slotId, asset]),
+      );
+
+      upgradedWeeks.push({
+        ...week,
+        assets: week.assets.map((asset, index) => {
+          const generated = generatedBySlotId.get(slotIdForAsset(asset.assetType, index));
+
+          if (!generated) return asset;
+
+          return {
+            ...asset,
+            title: generated.title || asset.title,
+            content: generated.content || asset.content,
+            metadata: {
+              ...(asset.metadata ?? {}),
+              aiHumanizedPublicCopy: true,
+              aiHumanizedAt: new Date().toISOString(),
+              fastDraftRetainedForNonPublicAssets: true,
+            },
+          };
+        }),
+      });
+    }
+
+    return {
+      plan: upgradedWeeks,
+      generationMode: "ai_humanized_public_copy",
+      warnings: [
+        memory.hasUsefulMemory
+          ? `AI public-copy generation used ${memory.sourceCount} saved memory source group(s).`
+          : "AI public-copy generation ran with campaign context only because no saved memory was found.",
+        ...memory.warnings.map((warning) => `Memory warning: ${warning}`),
+      ],
+    };
+  } catch (error) {
+    return {
+      plan,
+      generationMode: "human_safe_fast_draft",
+      warnings: [
+        `AI public-copy generation could not complete, so monthly generation used the human-safe fast draft templates: ${error instanceof Error ? error.message : "Unknown error."}`,
+      ],
+    };
+  }
+}
+
 function campaignPayload({
   userId,
   accountId,
@@ -66,6 +178,7 @@ function campaignPayload({
   businessContext,
   marketProfile,
   week,
+  generationMode,
 }: {
   userId: string;
   accountId: string | null;
@@ -74,6 +187,7 @@ function campaignPayload({
   businessContext: string;
   marketProfile: Record<string, unknown>;
   week: ReturnType<typeof buildMonthlyCampaignPlan>[number];
+  generationMode: string;
 }) {
   const idea = campaignIdea(week);
 
@@ -90,7 +204,7 @@ function campaignPayload({
     planned_end_date: week.weekEndDate,
     metadata: {
       generatedFrom: "monthly_campaign_calendar",
-      generationMode: "marketing_spine_fast_batch_planner",
+      generationMode,
       campaignTheme,
       businessContext,
       accountId,
@@ -132,6 +246,7 @@ function assetPayload({
   week,
   asset,
   marketProfile,
+  generationMode,
 }: {
   userId: string;
   accountId: string | null;
@@ -140,6 +255,7 @@ function assetPayload({
   week: ReturnType<typeof buildMonthlyCampaignPlan>[number];
   asset: ReturnType<typeof buildMonthlyCampaignPlan>[number]["assets"][number];
   marketProfile: Record<string, unknown>;
+  generationMode: string;
 }) {
   return {
     user_id: userId,
@@ -154,7 +270,7 @@ function assetPayload({
     }),
     metadata: toJson({
       generatedBy: "monthly_campaign_calendar",
-      generationMode: "marketing_spine_fast_batch_planner",
+      generationMode,
       accountId,
       marketProfile,
       companionAssetFlow:
@@ -308,7 +424,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const plan = buildMonthlyCampaignPlan({
+  let plan = buildMonthlyCampaignPlan({
     month,
     campaignTheme,
     businessContext,
@@ -326,12 +442,20 @@ export async function POST(request: Request) {
     );
   }
 
-  /*
-    Important:
-    This route intentionally does NOT call OpenAI and does NOT read memory.
-    It must finish quickly and reliably. Content improvement happens later through
-    Bulk Quality Review / resubmission, not inside the monthly creation transaction.
-  */
+  const aiUpgrade = await upgradePlanWithAiPublicCopy({
+    supabase,
+    userId: user.id,
+    accountId: activeAccountId,
+    month,
+    campaignTheme,
+    businessContext,
+    strategy,
+    plan,
+  });
+
+  plan = aiUpgrade.plan;
+  const generationMode = aiUpgrade.generationMode;
+
   const campaignRows = plan.map((week) =>
     campaignPayload({
       userId: user.id,
@@ -341,6 +465,7 @@ export async function POST(request: Request) {
       businessContext,
       marketProfile: resolvedMarketProfile.metadata,
       week,
+      generationMode,
     }),
   );
 
@@ -380,6 +505,7 @@ export async function POST(request: Request) {
         week,
         asset,
         marketProfile: resolvedMarketProfile.metadata,
+        generationMode,
       }),
     );
   });
@@ -534,7 +660,10 @@ export async function POST(request: Request) {
   }
 
   const warnings = [
-    "Fast batch generation mode is active. The route does not call OpenAI or memory, which prevents Vercel function timeouts during monthly package creation.",
+    generationMode === "ai_humanized_public_copy"
+      ? "AI humanized public-copy generation is active for blog, social, email, and video script assets."
+      : "Human-safe fast draft generation is active. Public copy uses safer templates and can still be improved through review/resubmission.",
+    ...aiUpgrade.warnings,
     marketingSpineReviewed
       ? "Marketing Spine review gate was confirmed before generation."
       : "Marketing Spine review gate was not confirmed by the client before generation; server rebuilt the spine from submitted inputs.",
@@ -549,7 +678,7 @@ export async function POST(request: Request) {
     description: `${createdCampaigns.length} campaign(s) and ${createdAssets.length} generated asset(s) created for ${month}.`,
     metadata: {
       month,
-      generationMode: "marketing_spine_fast_batch_planner",
+      generationMode,
       campaignTheme,
       businessContext,
       activeAccountId,
@@ -576,7 +705,7 @@ export async function POST(request: Request) {
     marketProfile: resolvedMarketProfile.metadata,
     marketingSpine: marketingSpineSummary(marketingSpine),
     marketingSpineReviewGate: marketingSpineReviewed ? "confirmed" : "server_rebuilt_unconfirmed",
-    generationMode: "marketing_spine_fast_batch_planner",
+    generationMode,
     campaignCount: createdCampaigns.length,
     assetCount: createdAssets.length,
     expectedAssetCount: assetRows.length,

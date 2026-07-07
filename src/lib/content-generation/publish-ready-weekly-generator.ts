@@ -121,8 +121,10 @@ function packagePrompt({
     "VOICE:",
     "- Friendly, supportive, confident, and authoritative.",
     "- Human, practical, direct, and easy to understand.",
+    "- Use everyday sentences that the audience would actually understand.",
     "- Do not sound like a generic AI marketing assistant.",
     "- Do not simply restate input fields as sentences.",
+    "- Do not stitch together audience, offer, proof, and training fragments. Rewrite the idea from scratch.",
     "",
     "FACTUALITY:",
     "- Be 100% factual.",
@@ -132,8 +134,9 @@ function packagePrompt({
     "",
     "CONTEXT RULE:",
     "- Saved business memory is the source of truth when present.",
-    "- Monthly strategy can add context and angle, but cannot contradict saved business memory.",
+    "- Monthly strategy, brand training, and uploaded knowledge can add context and angle, but cannot contradict saved business memory.",
     "- Campaign strategy should guide the output; it should not appear verbatim as raw labels.",
+    "- If memory or strategy contains awkward wording, fragments, lists, or notes, translate the meaning into clear public copy instead of copying it.",
     "",
     buildGenerationPromptDoctrineSection(["blog", "email", "linkedin", "facebook", "video", "visual"]),
     "",
@@ -164,6 +167,8 @@ function packagePrompt({
     "- Emails must sound like a person wrote them and include a clear next step.",
     "- Video scripts must be practical and understandable.",
     "- Every sentence must be complete and easy to understand.",
+    "- Every asset must lead the reader through a sensible path: problem, why it matters, useful insight, practical next step.",
+    "- If the draft sounds like source fields were merged together, rewrite it before returning JSON.",
     "",
     "JSON SHAPE:",
     '{"assets":[{"slotId":"linkedin_post_1","title":"...","content":"..."}]}',
@@ -257,6 +262,7 @@ async function repairAsset({
     "- Do not include private labels, internal campaign names, week labels, IDs, or prompt notes.",
     "- Do not invent unsupported claims.",
     "- Keep a friendly, supportive, confident, authoritative human voice.",
+    "- Rewrite awkward field fragments into natural everyday language.",
     "- Social posts must include emoji and hashtags.",
   ].join("\n");
 
@@ -275,18 +281,27 @@ export async function generatePublishReadyWeeklyPackage({
   businessContext,
   week,
   memory,
+  assetTypes,
 }: {
   month: string;
   campaignTheme: string;
   businessContext: string;
   week: WeeklyPlan;
   memory: BusinessMemoryContext;
+  assetTypes?: string[];
 }) {
-  const slots: SlotInput[] = week.assets.map((asset, index) => ({
-    ...asset,
-    slotId: `${asset.assetType}_${index + 1}`,
-    slotNumber: index + 1,
-  }));
+  const allowedAssetTypes = assetTypes?.length ? new Set(assetTypes) : null;
+  const slots: SlotInput[] = week.assets
+    .map((asset, index) => ({
+      ...asset,
+      slotId: `${asset.assetType}_${index + 1}`,
+      slotNumber: index + 1,
+    }))
+    .filter((asset) => !allowedAssetTypes || allowedAssetTypes.has(asset.assetType));
+
+  if (!slots.length) {
+    return [];
+  }
 
   const responseAssets = await callOpenAIForAssets(
     packagePrompt({

@@ -81,11 +81,13 @@ async function tryQuery({
   supabase,
   table,
   userId,
+  accountId,
   limit = 30,
 }: {
   supabase: any;
   table: string;
   userId: string;
+  accountId?: string | null;
   limit?: number;
 }): Promise<SafeSelectResult> {
   try {
@@ -95,11 +97,28 @@ async function tryQuery({
       The earlier version used .order("updated_at"), which can fail if a table exists but does
       not have that exact column. For memory lookup, finding rows matters more than perfect order.
     */
-    const { data, error } = await supabase
+    let query = supabase
       .from(table)
       .select("*")
       .eq("user_id", userId)
       .limit(limit);
+
+    if (accountId) {
+      query = query.eq("account_id", accountId);
+    }
+
+    let { data, error } = await query;
+
+    if (error && accountId && /account_id|schema cache|column/i.test(error.message ?? "")) {
+      const fallback = await supabase
+        .from(table)
+        .select("*")
+        .eq("user_id", userId)
+        .limit(limit);
+
+      data = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) {
       return {
@@ -149,12 +168,14 @@ export function fallbackCampaignMemoryContext({
 export async function buildBusinessMemoryContext({
   supabase,
   userId,
+  accountId = null,
   campaignTheme = "",
   businessContext = "",
   strategy = {},
 }: {
   supabase: any;
   userId: string;
+  accountId?: string | null;
   campaignTheme?: string;
   businessContext?: string;
   strategy?: Record<string, string>;
@@ -170,6 +191,7 @@ export async function buildBusinessMemoryContext({
     "brand_voices",
     "brand_voice_profiles",
     "brand_voice_settings",
+    "knowledge_sources",
     "knowledge_entries",
     "knowledge",
     "knowledge_items",
@@ -189,6 +211,7 @@ export async function buildBusinessMemoryContext({
         supabase,
         table,
         userId,
+        accountId,
         limit: table.includes("knowledge") || table.includes("memory") || table.includes("facts") ? 50 : 20,
       })
     )
@@ -260,7 +283,7 @@ export function summarizeMemoryForPrompt(memory: BusinessMemoryContext) {
 
   return [
     "Use the following context as private generation guidance.",
-    "Saved Brand Voice / Knowledge / Business Facts are the source of truth when present.",
+    "Saved Brand Voice / Knowledge Sources / Uploaded Documents / Business Facts are the source of truth when present.",
     "Current campaign context may guide the angle, but it must not be copied verbatim into the final content.",
     "Do not quote database labels or raw strategy notes directly unless they sound natural in the final content.",
     "If monthly campaign strategy conflicts with saved business facts, follow saved business facts.",
