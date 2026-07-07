@@ -399,6 +399,88 @@
   box-shadow: 0 14px 28px rgba(11, 74, 122, 0.22);
 }
 
+.logList {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid #dbe5ef;
+  border-radius: 18px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.logItem {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 14px;
+  padding: 20px 22px;
+  background: #ffffff;
+}
+
+.logItem + .logItem {
+  border-top: 1px solid #e2e8f0;
+}
+
+.logRail {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  padding-top: 4px;
+}
+
+.logDot {
+  display: block;
+  height: 12px;
+  width: 12px;
+  border: 3px solid #bfdbfe;
+  border-radius: 999px;
+  background: #0b4a7a;
+  box-shadow: 0 0 0 4px #eff6ff;
+}
+
+.logLine {
+  display: block;
+  flex: 1;
+  width: 2px;
+  min-height: 46px;
+  margin-top: 10px;
+  background: #e2e8f0;
+}
+
+.logBody {
+  min-width: 0;
+}
+
+.logHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.logTime {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.logTitle {
+  margin: 10px 0 0;
+  color: #0f172a;
+  font-size: 17px;
+  font-weight: 950;
+  letter-spacing: -0.02em;
+}
+
+.logText {
+  margin: 8px 0 0;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
 @media (min-width: 768px) {
   .page {
     padding: 42px 42px 76px 52px;

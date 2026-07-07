@@ -65,6 +65,23 @@ function dateLabel(value: unknown) {
   }).format(date);
 }
 
+function activityTypeLabel(value: unknown) {
+  const text = String(value ?? "activity")
+    .replace(/[_-]+/g, " ")
+    .trim();
+
+  if (!text) return "Activity";
+
+  return text
+    .split(" ")
+    .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
+    .join(" ");
+}
+
+function activityDescription(item: Record<string, any>) {
+  return String(item.description ?? item.metadata?.message ?? "No description provided.").trim();
+}
+
 function assetMonth(asset: Record<string, any>) {
   const values = [
     asset.intended_publish_month,
@@ -484,17 +501,34 @@ export default async function ContentCalendarCommandCenterPage({ searchParams }:
       </WebsiteSection>
 
       <WebsiteSection
-        eyebrow="Activity"
+        eyebrow="Activity Log"
         title="Recent content activity"
-        description="A quick log of recent content system activity."
+        description="A chronological log of recent content system events."
       >
         {activity.length ? (
-          <div className={websiteStyles.cardGrid}>
+          <div className={websiteStyles.logList}>
             {activity.map((item) => (
-              <article key={item.id} className={websiteStyles.card}>
-                <p className={websiteStyles.cardMeta}>{dateLabel(item.created_at)}</p>
-                <h3 className={websiteStyles.cardTitle}>{item.title ?? item.activity_type ?? "Activity"}</h3>
-                <p className={websiteStyles.cardText}>{item.description ?? "No description provided."}</p>
+              <article key={item.id} className={websiteStyles.logItem}>
+                <div className={websiteStyles.logRail}>
+                  <span className={websiteStyles.logDot} aria-hidden="true" />
+                  <span className={websiteStyles.logLine} aria-hidden="true" />
+                </div>
+
+                <div className={websiteStyles.logBody}>
+                  <div className={websiteStyles.logHeader}>
+                    <span className={websiteStyles.logTime}>
+                      {dateLabel(item.created_at)}
+                    </span>
+                    <span className={[websiteStyles.badge, websiteStyles.badgeBlue].join(" ")}>
+                      {activityTypeLabel(item.activity_type)}
+                    </span>
+                  </div>
+
+                  <h3 className={websiteStyles.logTitle}>
+                    {item.title ?? activityTypeLabel(item.activity_type)}
+                  </h3>
+                  <p className={websiteStyles.logText}>{activityDescription(item)}</p>
+                </div>
               </article>
             ))}
           </div>
