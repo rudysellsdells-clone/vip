@@ -36,6 +36,18 @@ export function buildStrategyInheritanceSection() {
   ]);
 }
 
+export function buildContextToCopyFirewallSection() {
+  return lines([
+    "## Context-to-Copy Firewall",
+    "- Treat brand profile, market profile, account strategy, campaign brief, Marketing Spine, service line, buyer segment, offer, proof, and calendar fields as private source context.",
+    "- Do not paste those fields verbatim into the finished asset unless the wording is a proper noun, approved tagline, exact offer name, exact CTA, legal wording, or a user-supplied quote explicitly meant for publication.",
+    "- Convert context into original sentences, buyer examples, useful explanations, practical steps, objection handling, and channel-appropriate copy.",
+    "- Do not include raw field labels such as Target Audience, Offer Focus, Brand Tone, Proof Points, Content Angle, Marketing Spine, Asset Brief, or Additional Business Context.",
+    "- If a source field is written as a list, use it to choose the angle and details. Do not print the list as the body of the asset.",
+    "- The finished asset should read like public marketing content, not like a completed form, intake worksheet, strategy note, or prompt summary.",
+  ]);
+}
+
 export function buildEvidenceIntegritySection() {
   return lines([
     "## Evidence Integrity Rules",
@@ -167,6 +179,7 @@ export function buildGenerationPromptDoctrineSection(channels: PromptDoctrineCha
   return [
     buildPromptSourceHierarchySection(),
     buildStrategyInheritanceSection(),
+    buildContextToCopyFirewallSection(),
     buildEvidenceIntegritySection(),
     buildOriginalityRequirementSection(),
     buildAntiGenericRulesSection(),
@@ -177,6 +190,7 @@ export function buildGenerationPromptDoctrineSection(channels: PromptDoctrineCha
 
 export function buildRepairPromptDoctrineSection() {
   return [
+    buildContextToCopyFirewallSection(),
     buildEvidenceIntegritySection(),
     buildOriginalityRequirementSection(),
     buildAntiGenericRulesSection(),

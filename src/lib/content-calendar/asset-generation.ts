@@ -1,4 +1,5 @@
 import { buildAssetTypeDetailStandardsSection, buildSpecificityContractSection } from "@/lib/ai/content-specificity";
+import { buildContextToCopyFirewallSection } from "@/lib/ai/prompt-doctrine";
 
 type CalendarItem = {
   id: string;
@@ -181,16 +182,18 @@ export function buildCalendarAssetPrompt({
     "",
     buildSpecificityContractSection(),
     "",
+    buildContextToCopyFirewallSection(),
+    "",
     buildAssetTypeDetailStandardsSection([mapCalendarItemToAssetType(item.item_type)]),
     "",
-    "Monthly plan context:",
+    "PRIVATE MONTHLY PLAN CONTEXT — USE FOR GUIDANCE ONLY, DO NOT QUOTE OR PRINT FIELD LABELS:",
     `Month: ${read(plan.month_label, "Not provided")}`,
     `Theme: ${read(plan.monthly_theme, "Not provided")}`,
     `Business goal: ${read(plan.business_goal, "Generate qualified conversations")}`,
     `Target audience: ${read(plan.target_audience, "Business owners")}`,
     `Offer focus: ${read(plan.offer_focus, "SEO, AIO, content, and automation")}`,
     "",
-    "Calendar item:",
+    "PRIVATE CALENDAR ITEM CONTEXT — USE FOR GUIDANCE ONLY, DO NOT QUOTE OR PRINT FIELD LABELS:",
     `Title: ${read(item.title, "Untitled")}`,
     `Type: ${read(item.item_type, "content_asset")}`,
     `Platform: ${read(item.platform, "Not specified")}`,
@@ -203,6 +206,7 @@ export function buildCalendarAssetPrompt({
     "",
     "Pre-review detail pass:",
     "Before finalizing, revise your own draft once to remove generic filler, add concrete detail, strengthen the CTA, and make the asset useful enough for human review.",
+    "Confirm the final asset does not include raw context labels, intake-field wording, or copied strategy notes.",
   ]
     .filter(Boolean)
     .join("\n");

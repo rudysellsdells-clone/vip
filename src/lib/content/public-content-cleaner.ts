@@ -23,6 +23,18 @@ const CAMPAIGN_LABEL_PATTERNS = [
   /^#?\s*\d{4}-\d{2}\s+Week\s+\d+\s*:.*$/i,
 ];
 
+const LEAKED_CONTEXT_LABEL_PATTERNS = [
+  /^PRIVATE\s+(?:MONTHLY PLAN|CALENDAR ITEM|GENERATION)\s+CONTEXT.*$/i,
+  /^PRIVATE GENERATION BRIEF.*$/i,
+  /^MARKETING SPINE.*$/i,
+  /^Content request:.*$/i,
+  /^Pre-review detail pass:.*$/i,
+  /^Confirm the final asset.*$/i,
+  /^Do not include .*raw context.*$/i,
+  /^(?:Internal Month|Internal Campaign|Internal Week|Public Title Direction|Asset Type|Asset Slot|Asset Brief|Gate Status|Campaign Objective|Buyer Pain|Positioning Angle|Originality Angle|Primary CTA|Proof Points|Content Pillars|Brand Tone|Avoid|Additional Business Context|Key Topics \/ Weekly Angles|Monthly Objective|Differentiator|Call To Action)\s*:/i,
+  /^(?:Month|Theme|Business goal|Target audience|Offer focus|Type|Platform|Scheduled date|Week|Description|Content angle|Linked campaign)\s*:/i,
+];
+
 const UUID_LINE_PATTERN =
   /^(?:asset\s*)?(?:id\s*)?:?\s*[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -47,6 +59,16 @@ function isCampaignLabelLine(line: string) {
   return CAMPAIGN_LABEL_PATTERNS.some((pattern) => pattern.test(trimmed));
 }
 
+function isLeakedContextLabelLine(line: string) {
+  const trimmed = line.trim();
+
+  if (!trimmed) return false;
+
+  return LEAKED_CONTEXT_LABEL_PATTERNS.some((pattern) =>
+    pattern.test(trimmed),
+  );
+}
+
 export function stripInternalTraceContent(content: string | null | undefined) {
   return String(content ?? "")
     .replace(UUID_INLINE_LABEL_PATTERN, "")
@@ -62,6 +84,7 @@ export function stripCampaignLabels(content: string | null | undefined) {
     .split("\n")
     .filter((line, index) => {
       if (isCampaignLabelLine(line)) return false;
+      if (isLeakedContextLabelLine(line)) return false;
 
       // Also catch a campaign label after an emoji prefix in social content.
       if (index === 0 && /[A-Za-z]+\s+\d{4}\s+Week\s+\d+\s*:/i.test(line)) return false;

@@ -389,6 +389,94 @@ function uniqueValues(values: string[]) {
   return Array.from(new Set(values.filter(Boolean)));
 }
 
+
+const CONTEXT_LABEL_PREFIX_PATTERN = /^(?:selected service line|selected audience|selected offer|service context|primary outcome|audience context|audience pain points?|desired outcomes?|common objections?|offer details?|offer outcome|price\/package notes?|proof points?|supporting context|business context|additional business context|target audience|primary offer|brand tone|monthly objective|key topics?|differentiator|call to action|cta)\s*:\s*/i;
+
+function stripContextLabel(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .replace(/^[-•*]\s+/, "")
+    .replace(CONTEXT_LABEL_PREFIX_PATTERN, "")
+    .replace(/^selected\s+[^—:]+\s+—\s+/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function contextNuggets(value: unknown, limit = 4) {
+  return String(value ?? "")
+    .split(/\r?\n|\s*[|•]\s*|;/g)
+    .map(stripContextLabel)
+    .filter(Boolean)
+    .filter((item) => !/^(not supplied|not provided|none|n\/a)$/i.test(item))
+    .filter((item, index, array) => {
+      const key = item.toLowerCase();
+      return array.findIndex((compare) => compare.toLowerCase() === key) === index;
+    })
+    .slice(0, limit);
+}
+
+function firstContextNugget(value: unknown, fallback: string) {
+  return contextNuggets(value, 1)[0] || stripContextLabel(fallback);
+}
+
+function naturalList(values: string[], fallback: string) {
+  const cleanValues = values.map(stripContextLabel).filter(Boolean).slice(0, 3);
+
+  if (!cleanValues.length) return fallback;
+  if (cleanValues.length === 1) return cleanValues[0];
+  if (cleanValues.length === 2) return `${cleanValues[0]} and ${cleanValues[1]}`;
+
+  return `${cleanValues[0]}, ${cleanValues[1]}, and ${cleanValues[2]}`;
+}
+
+function audiencePhrase(strategy: MonthlyCampaignStrategyInput, marketingSpine?: MarketingSpine | null) {
+  return firstContextNugget(
+    marketingSpine?.audience || strategy.targetAudience,
+    "the intended audience",
+  );
+}
+
+function offerPhrase(strategy: MonthlyCampaignStrategyInput, marketingSpine?: MarketingSpine | null) {
+  return firstContextNugget(
+    marketingSpine?.offer || strategy.primaryOffer,
+    "the recommended next step",
+  );
+}
+
+function proofPhrase(strategy: MonthlyCampaignStrategyInput, marketingSpine?: MarketingSpine | null) {
+  return firstContextNugget(
+    marketingSpine?.proofPoints?.[0] || strategy.proofPoints,
+    "a practical detail from the service or offer",
+  );
+}
+
+function objectionPhrase(strategy: MonthlyCampaignStrategyInput, marketingSpine?: MarketingSpine | null) {
+  return firstContextNugget(
+    marketingSpine?.objections?.[0] || strategy.objections,
+    "the concern that this may not be urgent enough right now",
+  );
+}
+
+function buyerPainPhrase({
+  topic,
+  strategy,
+  marketingSpine,
+}: {
+  topic: string;
+  strategy: MonthlyCampaignStrategyInput;
+  marketingSpine?: MarketingSpine | null;
+}) {
+  return firstContextNugget(
+    marketingSpine?.buyerPain || strategy.proofPoints,
+    `${audiencePhrase(strategy, marketingSpine)} needs a clearer way to understand and act on ${topic}.`,
+  );
+}
+
+function contextToPublicSentence(value: unknown, fallback: string) {
+  const nuggets = contextNuggets(value, 2);
+  return naturalList(nuggets, fallback);
+}
+
 function topicEmoji(topic: string) {
   const lower = topic.toLowerCase();
 
@@ -474,54 +562,64 @@ function contentForAsset({
   weekNumber: number;
   marketingSpine?: MarketingSpine | null;
 }): string {
-  const callToAction = marketingSpine?.primaryCta || cta(strategy);
-  const topic = topicForWeek(strategy, weekNumber, marketingSpine);
-  const offer = marketingSpine?.offer || publicOfferPhrase(strategy);
-  const buyerPain = marketingSpine?.buyerPain || topic;
-  const originalityAngle =
-    marketingSpine?.originalityAngle ||
-    strategy.originalityAngle ||
-    campaignAngle;
-  const proofPoint =
-    marketingSpine?.proofPoints?.[0] ||
-    strategy.proofPoints ||
-    "a practical proof point";
-  const objection =
-    marketingSpine?.objections?.[0] ||
-    strategy.objections ||
-    "why this matters now";
+  const callToAction = firstContextNugget(
+    marketingSpine?.primaryCta || cta(strategy),
+    "Reach out to learn the best next step.",
+  );
+  const topic = firstContextNugget(
+    topicForWeek(strategy, weekNumber, marketingSpine),
+    "the campaign topic",
+  );
+  const offer = offerPhrase(strategy, marketingSpine);
+  const audience = audiencePhrase(strategy, marketingSpine);
+  const buyerPain = buyerPainPhrase({ topic, strategy, marketingSpine });
+  const originalityAngle = contextToPublicSentence(
+    marketingSpine?.originalityAngle || strategy.originalityAngle || campaignAngle,
+    campaignAngle,
+  );
+  const proofPoint = proofPhrase(strategy, marketingSpine);
+  const objection = objectionPhrase(strategy, marketingSpine);
+  const practicalExample = contextToPublicSentence(
+    strategy.differentiator || marketingSpine?.positioningAngle,
+    `a clear connection between ${buyerPain} and ${offer}`,
+  );
 
   switch (assetType) {
     case "blog_post":
       return [
         `# ${publicTitle}`,
         "",
-        "## Why This Matters",
-        campaignAngle,
+        "## Why this matters",
+        `${campaignAngle}`,
         "",
-        `The core buyer problem this campaign is built around: ${buyerPain}`,
+        `For ${audience}, this usually shows up as a practical problem: ${buyerPain}. When that problem is left alone, people may still need the service, but they do not have a clear enough reason to trust the next step, compare options, or act with confidence.`,
         "",
-        "## What Business Owners Should Know",
-        `A clear plan around ${topic} helps people understand why your service is relevant before they ever reach out. The proof point to keep in view: ${proofPoint}`,
+        "## What buyers need to understand first",
+        `The useful starting point is not to repeat the offer word-for-word. It is to explain the situation the buyer is already trying to solve, then connect that situation to ${offer}. A strong message around ${topic} should make the problem easier to recognize, easier to understand, and easier to act on.`,
         "",
-        "The strongest content does not try to say everything at once. It focuses on one useful idea, explains it clearly, and connects that idea to the next step.",
+        `One practical angle to keep in view is ${practicalExample}. That gives the content a real point of view instead of sounding like a copied service description.`,
         "",
-        "## How to Put This Into Action",
-        `Start by turning this topic into a practical message across your website, social posts, email, and video content. Keep the message useful, direct, and tied to ${offer}. Address this objection directly: ${objection}`,
+        "## How to turn the context into useful content",
+        "A useful article should translate the available audience, offer, and market details into plain-language guidance, examples, and decision support.",
         "",
-        "## Next Step",
-        callToAction,
+        `A simple way to do that is to focus each section on one question: what the buyer is worried about, what they may misunderstand, what proof or process detail helps them decide, and why ${offer} is a reasonable next step.`,
+        "",
+        "## Common concern to address",
+        `A likely concern is ${objection}. The content should answer that concern directly with context, explanation, and useful next steps instead of making a broad claim.`,
+        "",
+        "## Practical next step",
+        `If ${topic} is already on the buyer's mind, the next step is to make the decision easier. ${callToAction}`,
       ].join("\n");
 
     case "linkedin_post":
       return [
-        `${socialEmojiSet({ topic, assetType })} ${campaignAngle}`,
+        `${socialEmojiSet({ topic, assetType })} A useful marketing message starts with the customer's real problem, not a generic service pitch.`,
         "",
         originalityAngle,
         "",
-        `For ${marketingSpine?.audience || strategy.targetAudience || "the right audience"}, the issue is not just awareness. It is whether the message connects ${buyerPain} to a believable next step: ${offer}.`,
+        `For ${audience}, the issue is not just awareness. It is whether the message connects ${buyerPain} to a believable next step: ${offer}.`,
         "",
-        `One useful proof point to keep in view: ${proofPoint}`,
+        `A practical proof or context point to build around: ${proofPoint}`,
         "",
         callToAction,
         "",
@@ -534,7 +632,9 @@ function contentForAsset({
         "",
         campaignAngle,
         "",
-        `When your content is built around one clear service idea, it becomes easier for people to understand what you do and why it matters. The key objection to handle here: ${objection}`,
+        `Good content should turn the customer situation into a clear, helpful explanation of what they are dealing with and why it matters.`,
+        "",
+        `In this case, the helpful angle is ${buyerPain}. The concern to answer is ${objection}.`,
         "",
         callToAction,
         "",
@@ -544,16 +644,15 @@ function contentForAsset({
     case "email":
       return [
         `Subject: ${publicTitle}`,
+        `Preview: A practical look at why ${topic} matters now.`,
         "",
         "Hi there,",
         "",
         campaignAngle,
         "",
-        `This is a good time to look at how ${topic} affects the customer's decision. The key issue is ${buyerPain}.`,
+        `If ${buyerPain} is showing up in the buyer journey, the message should help the reader understand what is happening, why it matters, and what a practical next step looks like.`,
         "",
-        `The practical opportunity is to connect that issue to ${offer} in a way that feels clear, credible, and easy to act on.`,
-        "",
-        `A useful proof point or angle to keep in view: ${proofPoint}`,
+        `The opportunity is to connect that situation to ${offer} with a clear explanation and a useful proof point: ${proofPoint}`,
         "",
         callToAction,
         "",
@@ -567,9 +666,11 @@ function contentForAsset({
         "",
         "20-second video script:",
         "",
-        `Hook: Most businesses do not need more random content. They need a clearer strategy spine around ${topic}.`,
+        `Hook: Most marketing misses because it explains the service before it explains the customer problem.`,
         "",
         `Main point: ${campaignAngle}`,
+        "",
+        `Support: Focus on ${buyerPain}, then show how ${offer} gives the viewer a practical next step.`,
         "",
         `Close: ${callToAction}`,
       ].join("\n");
@@ -588,7 +689,7 @@ function contentForAsset({
         }),
         campaignAngle,
         callToAction,
-        audience: marketingSpine?.audience || strategy.targetAudience,
+        audience,
       });
 
     default:

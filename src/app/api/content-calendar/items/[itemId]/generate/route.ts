@@ -7,6 +7,7 @@ import {
   isCampaignCalendarItem,
   mapCalendarItemToAssetType,
 } from "@/lib/content-calendar/asset-generation";
+import { preparePublicAssetContent } from "@/lib/content/public-content-cleaner";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -321,8 +322,13 @@ export async function POST(_request: Request, context: RouteContext) {
       linkedCampaignName: linkedCampaign?.name ?? null,
     });
 
-    const content = await generateCalendarAssetContent(prompt);
+    const generatedContent = await generateCalendarAssetContent(prompt);
     const assetType = mapCalendarItemToAssetType(item.item_type);
+    const content = preparePublicAssetContent({
+      content: generatedContent,
+      assetType,
+      title: item.title,
+    });
 
     const { data: asset, error: assetError } = await supabase
       .from("generated_assets")
