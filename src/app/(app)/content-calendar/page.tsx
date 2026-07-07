@@ -8,6 +8,7 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
+import { getUserAccountContext } from "@/lib/accounts/account-context";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -181,24 +182,31 @@ export default async function ContentCalendarCommandCenterPage({ searchParams }:
     redirect("/login");
   }
 
+  const accountContext = await getUserAccountContext({ supabase, userId: user.id });
+  const activeAccountId = accountContext.activeAccountId;
+
+  if (!activeAccountId) {
+    redirect("/accounts");
+  }
+
   const { data: campaignData } = await supabase
     .from("campaigns")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("account_id", activeAccountId)
     .eq("campaign_month", month)
     .order("campaign_week_number", { ascending: true });
 
   const { data: assetData } = await supabase
     .from("generated_assets")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("account_id", activeAccountId)
     .order("scheduled_publish_at", { ascending: true, nullsFirst: false })
     .limit(2000);
 
   const { data: activityData } = await supabase
     .from("activity_log")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("account_id", activeAccountId)
     .order("created_at", { ascending: false })
     .limit(8);
 
@@ -314,10 +322,24 @@ export default async function ContentCalendarCommandCenterPage({ searchParams }:
       <WebsiteHero
         eyebrow="Content Command Center"
         title="Content calendar overview"
-        description="See where the month stands, what needs attention, and where to go next."
+        description={`See where ${accountContext.activeAccountName ?? "the active workspace"} stands for the month, what needs attention, and where to go next.`}
         primaryAction={{ label: "Monthly Calendar", href: `/content-calendar/monthly?view=month&date=${monthDate}` }}
         secondaryAction={{ label: "Publish Center", href: `/publishing-schedule?view=week&date=${monthDate}` }}
       />
+
+      <WebsiteSection
+        eyebrow="Active Workspace"
+        title={accountContext.activeAccountName ?? "Current workspace"}
+        description="This overview is scoped to the active account workspace, so campaign counts, asset status, cleanup, and activity do not bleed across clients."
+      >
+        <article className={websiteStyles.card}>
+          <div className="flex flex-wrap gap-2">
+            <span className={websiteStyles.badge}>Workspace ID: {activeAccountId}</span>
+            <span className={websiteStyles.badge}>Role: {accountContext.activeAccountRole ?? "member"}</span>
+            {accountContext.isMaster ? <span className={websiteStyles.badge}>MASTER</span> : null}
+          </div>
+        </article>
+      </WebsiteSection>
 
       <WebsiteSection
         eyebrow="Month"
@@ -348,7 +370,7 @@ export default async function ContentCalendarCommandCenterPage({ searchParams }:
       <WebsiteSection
         eyebrow="Cleanup"
         title="Remove monthly content"
-        description="Use this when you want to clear the current month’s generated package and start over."
+        description={`Use this when you want to clear ${accountContext.activeAccountName ?? "the active workspace"}'s generated package for the current month and start over.`}
       >
         <DeleteMonthlyCampaignButton month={month} />
       </WebsiteSection>
@@ -503,7 +525,7 @@ export default async function ContentCalendarCommandCenterPage({ searchParams }:
       <WebsiteSection
         eyebrow="Activity Log"
         title="Recent content activity"
-        description="A chronological log of recent content system events."
+        description={`A chronological log of recent content system events for ${accountContext.activeAccountName ?? "the active workspace"}.`}
       >
         {activity.length ? (
           <div className={websiteStyles.logList}>
