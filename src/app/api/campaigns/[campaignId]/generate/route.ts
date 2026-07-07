@@ -147,7 +147,6 @@ export async function POST(_request: Request, context: RouteContext) {
             preReviewEnrichment: true,
             cloneMemoryUsed: true,
             cloneMemorySnapshot: memorySnapshot,
-          oneOffCampaignStrategy,
             oneOffCampaignStrategy,
             companionAssetFlow:
               asset.assetType === "galaxyai_prompt"
