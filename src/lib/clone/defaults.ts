@@ -55,6 +55,7 @@ export const KNOWLEDGE_SOURCE_TYPES = [
   "case_study",
   "testimonial",
   "manual_note",
+  "uploaded_document",
   "other",
 ] as const;
 

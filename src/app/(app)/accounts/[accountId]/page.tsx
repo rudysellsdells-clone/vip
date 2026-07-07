@@ -151,6 +151,10 @@ export default async function AccountDetailPage({
   const activeMembers = memberRows.filter((membership) => membership.status === "active").length;
   const pendingMembers = memberRows.filter((membership) => membership.status === "pending").length;
   const canManage = accountAccess.canManage;
+  const brandProfileRecord = (brandProfile ?? {}) as Record<string, any>;
+  const brandColors = Array.isArray(brandProfileRecord.brand_colors)
+    ? brandProfileRecord.brand_colors.filter(Boolean)
+    : [];
 
   const configuredChannels = [
     publishingSettings?.linkedin_enabled ? "LinkedIn" : null,
@@ -248,7 +252,39 @@ export default async function AccountDetailPage({
                 title="Account-specific brand memory"
                 description="Define the voice, offer, audience, CTA, and positioning VIP should use for this account."
               />
-              <div className="mt-6">
+              <div className="mt-6 space-y-5">
+                {brandProfileRecord.logo_url || brandColors.length ? (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                    <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                      {brandProfileRecord.logo_url ? (
+                        <div className="flex items-center gap-4">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={brandProfileRecord.logo_url}
+                            alt={`${account.name} logo`}
+                            className="max-h-20 max-w-52 rounded-xl bg-white object-contain p-3 shadow-sm"
+                          />
+                          <div>
+                            <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Brand Logo</p>
+                            <p className="text-sm font-bold text-slate-900">{brandProfileRecord.logo_file_name ?? "Logo uploaded"}</p>
+                          </div>
+                        </div>
+                      ) : null}
+                      {brandColors.length ? (
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Brand Colors</p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {brandColors.map((color: string) => (
+                              <span key={color} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-700 shadow-sm">
+                                {color}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
                 {canManage ? (
                   <AccountBrandProfileForm accountId={account.id} profile={brandProfile} />
                 ) : (

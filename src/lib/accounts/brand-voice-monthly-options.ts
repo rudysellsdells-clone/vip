@@ -147,9 +147,15 @@ export function buildBrandVoiceMonthlyOptions({
     "proof",
   );
 
+  const brandColors = Array.isArray(account.brand_colors)
+    ? account.brand_colors.map((color) => text(color)).filter(Boolean).join(", ")
+    : "";
+
   const businessContextDefault = joinContext([
     account.company_name ? `Brand: ${text(account.company_name)}` : null,
     account.website_url ? `Website: ${text(account.website_url)}` : null,
+    brandColors ? `Brand colors: ${brandColors}` : null,
+    account.logo_url ? "Logo: uploaded in the account brand profile." : null,
     clone.business_summary ? `Business summary: ${text(clone.business_summary)}` : null,
     account.service_areas ? `Service areas: ${text(account.service_areas)}` : null,
     account.notes ? `Brand notes: ${text(account.notes)}` : null,

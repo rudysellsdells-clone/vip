@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { ContentExampleForm } from "@/components/knowledge/ContentExampleForm";
 import { KnowledgeSourceForm } from "@/components/knowledge/KnowledgeSourceForm";
+import { KnowledgeDocumentUploadForm } from "@/components/knowledge/KnowledgeDocumentUploadForm";
 import {
   WebsiteHero,
   WebsiteMetric,
@@ -73,10 +74,27 @@ export default async function KnowledgePage() {
 
       <section className={websiteStyles.twoColumn}>
         <div className={websiteStyles.formFrame}>
-          <KnowledgeSourceForm />
+          <KnowledgeDocumentUploadForm />
         </div>
         <div className={websiteStyles.formFrame}>
+          <KnowledgeSourceForm />
+        </div>
+      </section>
+
+      <section className={websiteStyles.twoColumn}>
+        <div className={websiteStyles.formFrame}>
           <ContentExampleForm />
+        </div>
+        <div className={websiteStyles.formFrame}>
+          <WebsiteSection
+            eyebrow="How to use"
+            title="Document learning tips"
+            description="Upload brand guides, sales decks, proposals, service PDFs, FAQs, and client proof documents. VIP stores the extracted text as private workspace knowledge and uses it as context when generating campaigns."
+          >
+            <div className={websiteStyles.empty}>
+              Best results come from clean PDFs or DOCX files with selectable text. Scanned PDFs may need OCR before upload.
+            </div>
+          </WebsiteSection>
         </div>
       </section>
 

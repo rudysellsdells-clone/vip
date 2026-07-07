@@ -15,7 +15,9 @@
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "zod": "latest"
+    "zod": "latest",
+    "mammoth": "^1.8.0",
+    "pdf-parse": "^1.1.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.0",

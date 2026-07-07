@@ -111,6 +111,10 @@ export function buildVisualAssetPrompt(input: VisualPromptContext) {
   const coreOffers = stringOrNull(brandProfile?.core_offers);
   const serviceAreas = stringOrNull(brandProfile?.service_areas);
   const notes = stringOrNull(brandProfile?.notes);
+  const brandColors = Array.isArray(brandProfile?.brand_colors)
+    ? brandProfile.brand_colors.map((color) => String(color ?? "").trim()).filter(Boolean).join(", ")
+    : null;
+  const hasLogo = Boolean(stringOrNull(brandProfile?.logo_url));
 
   return [
     `Create a polished ${imageUseLabel(imageUse)} for ${companyName}.`,
@@ -124,6 +128,8 @@ export function buildVisualAssetPrompt(input: VisualPromptContext) {
     coreOffers ? `- Core offers/services: ${coreOffers}` : null,
     serviceAreas ? `- Service areas/market: ${serviceAreas}` : null,
     `- Brand tone: ${tone}`,
+    brandColors ? `- Brand colors to reference: ${brandColors}` : null,
+    hasLogo ? "- Logo: uploaded in brand profile; do not invent or distort a fake logo inside the generated image." : null,
     notes ? `- Brand notes: ${notes}` : null,
     "",
     "Campaign/content context:",
@@ -147,6 +153,9 @@ export function buildVisualAssetPrompt(input: VisualPromptContext) {
     "- Do not include distorted text, fake logos, fake UI, watermarks, or unreadable typography.",
     "- Avoid putting readable text directly into the image. The post caption or email/blog copy will carry the message.",
     "- Leave clean negative space where the brand could later place copy if needed.",
+    brandColors
+      ? "- Use the saved brand colors as visual inspiration for backgrounds, accents, and overall palette. Do not force every color into the image."
+      : null,
     "- Keep it professional, modern, polished, and appropriate for a small-to-mid-sized business marketing campaign.",
     "- The image should be safe for public social media and business publishing.",
   ]

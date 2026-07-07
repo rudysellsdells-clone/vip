@@ -4,8 +4,49 @@ import {
   nullableTextValue,
   userCanManageAccount,
 } from "@/lib/accounts/account-utils";
+import { normalizeBrandColors, storeBrandLogo } from "@/lib/brand-assets/brand-profile-assets";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
+
+export const runtime = "nodejs";
+
+type BrandProfileBody = Record<string, unknown>;
+
+function isMultipart(request: Request) {
+  return request.headers.get("content-type")?.toLowerCase().includes("multipart/form-data") ?? false;
+}
+
+async function readBrandProfileBody(request: Request) {
+  if (!isMultipart(request)) {
+    const body = await request.json().catch(() => ({}));
+
+    return {
+      body: body as BrandProfileBody,
+      logo: null as File | null,
+    };
+  }
+
+  const formData = await request.formData();
+  const logoValue = formData.get("logo");
+  const logo = logoValue instanceof File && logoValue.size > 0 ? logoValue : null;
+
+  return {
+    body: {
+      companyName: formData.get("companyName"),
+      websiteUrl: formData.get("websiteUrl"),
+      primaryCta: formData.get("primaryCta"),
+      phone: formData.get("phone"),
+      targetAudience: formData.get("targetAudience"),
+      tone: formData.get("tone"),
+      serviceAreas: formData.get("serviceAreas"),
+      coreOffers: formData.get("coreOffers"),
+      approvedHashtags: formData.get("approvedHashtags"),
+      brandColors: formData.get("brandColors"),
+      notes: formData.get("notes"),
+    },
+    logo,
+  };
+}
 
 export async function PUT(
   request: Request,
@@ -42,8 +83,10 @@ export async function PUT(
       );
     }
 
-    const body = await request.json();
-    const payload = {
+    const { body, logo } = await readBrandProfileBody(request);
+    const logoAsset = logo ? await storeBrandLogo({ accountId, file: logo }) : null;
+
+    const payload: Record<string, unknown> = {
       account_id: accountId,
       company_name: nullableTextValue(body.companyName),
       website_url: nullableTextValue(body.websiteUrl),
@@ -54,9 +97,19 @@ export async function PUT(
       service_areas: nullableTextValue(body.serviceAreas),
       core_offers: nullableTextValue(body.coreOffers),
       approved_hashtags: nullableTextValue(body.approvedHashtags),
+      brand_colors: normalizeBrandColors(body.brandColors),
       notes: nullableTextValue(body.notes),
       updated_at: new Date().toISOString(),
     };
+
+    if (logoAsset) {
+      payload.logo_url = logoAsset.publicUrl;
+      payload.logo_storage_bucket = logoAsset.bucket;
+      payload.logo_storage_path = logoAsset.storagePath;
+      payload.logo_file_name = logoAsset.fileName;
+      payload.logo_mime_type = logoAsset.contentType;
+      payload.logo_size_bytes = logoAsset.fileSizeBytes;
+    }
 
     const { data, error } = await writeSupabase
       .from("account_brand_profiles")

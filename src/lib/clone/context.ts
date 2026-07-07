@@ -3,6 +3,7 @@ import { untypedSupabase } from "@/lib/supabase/untyped";
 
 export type DigitalCloneContext = {
   profile: unknown | null;
+  accountBrandProfile: unknown | null;
   brandRules: unknown[];
   contentExamples: unknown[];
   knowledgeSources: unknown[];
@@ -50,6 +51,34 @@ function formatProfile(profile: unknown) {
     `Sales Outcomes: ${getString(profile.sales_outcome_summary)}`,
   ]
     .filter(Boolean)
+    .join("\n");
+}
+
+function formatAccountBrandProfile(profile: unknown) {
+  if (!isRecord(profile)) {
+    return "";
+  }
+
+  const colors = Array.isArray(profile.brand_colors)
+    ? profile.brand_colors.map((color) => getString(color)).filter(Boolean).join(", ")
+    : "";
+
+  return [
+    "## Account Brand Profile",
+    `Company: ${getString(profile.company_name)}`,
+    `Website: ${getString(profile.website_url)}`,
+    `Primary CTA: ${getString(profile.primary_cta)}`,
+    `Phone: ${getString(profile.phone)}`,
+    `Target Audience: ${getString(profile.target_audience)}`,
+    `Tone: ${getString(profile.tone)}`,
+    `Service Areas: ${getString(profile.service_areas)}`,
+    `Core Offers: ${getString(profile.core_offers)}`,
+    `Approved Hashtags: ${getString(profile.approved_hashtags)}`,
+    colors ? `Brand Colors: ${colors}` : "",
+    getString(profile.logo_url) ? "Logo: Uploaded and available in the account brand profile." : "",
+    `Notes: ${getString(profile.notes)}`,
+  ]
+    .filter((line) => line.trim().length > 0 && !line.endsWith(": "))
     .join("\n");
 }
 
@@ -130,6 +159,7 @@ function formatKnowledgeSources(sources: unknown[]) {
 
 export function formatDigitalCloneContext(input: {
   profile: unknown | null;
+  accountBrandProfile: unknown | null;
   brandRules: unknown[];
   contentExamples: unknown[];
   knowledgeSources: unknown[];
@@ -139,6 +169,7 @@ export function formatDigitalCloneContext(input: {
 }) {
   return [
     formatProfile(input.profile),
+    formatAccountBrandProfile(input.accountBrandProfile),
     formatBrandRules(input.brandRules),
     formatServiceLines(input.serviceLines),
     formatBuyerSegments(input.buyerSegments),
@@ -159,6 +190,7 @@ export async function loadDigitalCloneContext(userId: string, accountId?: string
 
   const [
     profileResult,
+    accountBrandProfileResult,
     brandRulesResult,
     contentExamplesResult,
     knowledgeSourcesResult,
@@ -171,6 +203,10 @@ export async function loadDigitalCloneContext(userId: string, accountId?: string
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+
+    accountId
+      ? supabase.from("account_brand_profiles").select("*").eq("account_id", accountId).maybeSingle()
+      : Promise.resolve({ data: null }),
 
     scoped("brand_rules")
       .eq("active", true)
@@ -201,6 +237,7 @@ export async function loadDigitalCloneContext(userId: string, accountId?: string
   ]);
 
   const profile = profileResult.data ?? null;
+  const accountBrandProfile = accountBrandProfileResult.data ?? null;
   const brandRules = brandRulesResult.data ?? [];
   const contentExamples = contentExamplesResult.data ?? [];
   const knowledgeSources = knowledgeSourcesResult.data ?? [];
@@ -210,6 +247,7 @@ export async function loadDigitalCloneContext(userId: string, accountId?: string
 
   return {
     profile,
+    accountBrandProfile,
     brandRules,
     contentExamples,
     knowledgeSources,
@@ -218,6 +256,7 @@ export async function loadDigitalCloneContext(userId: string, accountId?: string
     offers,
     formattedContext: formatDigitalCloneContext({
       profile,
+      accountBrandProfile,
       brandRules,
       contentExamples,
       knowledgeSources,
