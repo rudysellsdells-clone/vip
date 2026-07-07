@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { AssetTitleLink } from "@/components/assets/AssetTitleLink";
 import { RemoveAssetButton } from "@/components/assets/RemoveAssetButton";
 import { DeleteCampaignButton } from "@/components/campaigns/DeleteCampaignButton";
-import { GenerateCampaignAssetsButton } from "@/components/campaigns/GenerateCampaignAssetsButton";
 import { StartLumaYoutubeVideoButton } from "@/components/campaigns/StartLumaYoutubeVideoButton";
 import { SyncLumaVideoRunButton } from "@/components/campaigns/SyncLumaVideoRunButton";
 import {
@@ -150,41 +149,37 @@ export default async function CampaignDetailPage({ params }: PageProps) {
 
       <section className={websiteStyles.twoColumn}>
         <WebsiteSection
-          eyebrow="Brief"
-          title="Campaign strategy inputs"
-          description="The business context VIP uses to generate campaign assets."
+          eyebrow="Marketing Spine"
+          title="Use the spine workflow for strategy-led generation"
+          description="This campaign record is retained for reference and one-off campaign history. New content generation should happen in the Content Calendar, where the Marketing Spine is reviewed and locked before execution."
         >
-          <div className={websiteStyles.cardGrid}>
-            <article className={websiteStyles.card}>
-              <h3 className={websiteStyles.cardTitle}>Buyer and audience</h3>
-              <p className={websiteStyles.cardText}>
-                <strong>Buyer segment:</strong> {campaign.buyer_segment ?? "Not specified"}
-              </p>
-              <p className={websiteStyles.cardText}>
-                <strong>Audience:</strong> {campaign.audience ?? "Not specified"}
-              </p>
-            </article>
-
-            <article className={websiteStyles.card}>
-              <h3 className={websiteStyles.cardTitle}>Goal and CTA</h3>
-              <p className={websiteStyles.cardText}>
-                <strong>Goal:</strong> {campaign.goal ?? "Not specified"}
-              </p>
-              <p className={websiteStyles.cardText}>
-                <strong>CTA:</strong> {campaign.cta ?? "Not specified"}
-              </p>
-            </article>
-          </div>
+          <article className={websiteStyles.card}>
+            <h3 className={websiteStyles.cardTitle}>Campaign snapshot</h3>
+            <p className={websiteStyles.cardText}>
+              <strong>Buyer segment:</strong> {campaign.buyer_segment ?? "Not specified"}
+            </p>
+            <p className={websiteStyles.cardText}>
+              <strong>Audience:</strong> {campaign.audience ?? "Not specified"}
+            </p>
+            <p className={websiteStyles.cardText}>
+              <strong>Goal:</strong> {campaign.goal ?? "Not specified"}
+            </p>
+            <p className={websiteStyles.cardText}>
+              <strong>CTA:</strong> {campaign.cta ?? "Not specified"}
+            </p>
+          </article>
 
           <div className={websiteStyles.actionRow}>
-            <GenerateCampaignAssetsButton campaignId={campaign.id} />
+            <Link href="/content-calendar" className={websiteStyles.primarySubmit}>
+              Open Marketing Spine Workflow
+            </Link>
           </div>
         </WebsiteSection>
 
         <WebsiteSection
           eyebrow="Status"
           title="Campaign controls"
-          description="Generate assets, create a Luma YouTube video, or delete this campaign if it was created by mistake."
+          description="View this campaign record, create a Luma YouTube video, or delete this campaign if it was created by mistake."
         >
           <article className={websiteStyles.card}>
             <WebsiteBadge status={campaign.status} />
