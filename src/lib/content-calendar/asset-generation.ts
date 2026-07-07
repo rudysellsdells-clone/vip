@@ -1,5 +1,6 @@
 import { buildAssetTypeDetailStandardsSection, buildSpecificityContractSection } from "@/lib/ai/content-specificity";
 import { buildContextToCopyFirewallSection } from "@/lib/ai/prompt-doctrine";
+import { buildAudiencePerspectivePrompt } from "@/lib/content-generation/audience-perspective";
 
 type CalendarItem = {
   id: string;
@@ -195,6 +196,12 @@ export function buildCalendarAssetPrompt({
     "",
     buildContextToCopyFirewallSection(),
     "",
+    buildAudiencePerspectivePrompt({
+      audience: plan.target_audience,
+      topic: item.content_angle || item.title || plan.monthly_theme,
+      offer: plan.offer_focus || item.cta,
+    }),
+    "",
     buildAssetTypeDetailStandardsSection([mapCalendarItemToAssetType(item.item_type)]),
     "",
     "PRIVATE MONTHLY PLAN CONTEXT — USE FOR GUIDANCE ONLY, DO NOT QUOTE OR PRINT FIELD LABELS:",
@@ -218,7 +225,7 @@ export function buildCalendarAssetPrompt({
     "Pre-review detail pass:",
     "Before finalizing, revise your own draft once to remove generic filler, add concrete detail, strengthen the CTA, and make the asset useful enough for human review.",
     "Read the final content as if it were being posted by a real company. If any sentence sounds like field values were stitched together, rewrite it in plain English.",
-    "Confirm the final asset does not include raw context labels, intake-field wording, or copied strategy notes.",
+    "Confirm the final asset does not include raw context labels, intake-field wording, copied strategy notes, or marketer-facing commentary about the campaign/content itself.",
   ]
     .filter(Boolean)
     .join("\n");

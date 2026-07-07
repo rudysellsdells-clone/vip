@@ -50,6 +50,19 @@ export function buildContextToCopyFirewallSection() {
   ]);
 }
 
+
+export function buildAudiencePerspectiveDoctrineSection() {
+  return lines([
+    "## Audience Perspective Rules",
+    "- The final asset must be written for the end buyer, owner, operator, patient, homeowner, or decision-maker named in the campaign audience.",
+    "- Do not write to marketers unless marketers are explicitly the target audience.",
+    "- Do not describe the campaign, article, post, email, buyer journey, content strategy, or messaging strategy from the outside.",
+    "- Do not say phrases like this week's campaign, this article should, this content should, a useful article should, the reader needs, the buyer needs, generic messaging, or content about the topic.",
+    "- Translate strategy into plain everyday language that the final reader would use to describe their problem.",
+    "- The copy should sound like a helpful business is speaking directly to the intended audience, not like a marketing strategist explaining the campaign to another marketer.",
+  ]);
+}
+
 export function buildEvidenceIntegritySection() {
   return lines([
     "## Evidence Integrity Rules",
@@ -191,6 +204,7 @@ export function buildGenerationPromptDoctrineSection(channels: PromptDoctrineCha
     buildPromptSourceHierarchySection(),
     buildStrategyInheritanceSection(),
     buildContextToCopyFirewallSection(),
+    buildAudiencePerspectiveDoctrineSection(),
     buildEvidenceIntegritySection(),
     buildOriginalityRequirementSection(),
     buildAntiGenericRulesSection(),
@@ -202,6 +216,7 @@ export function buildGenerationPromptDoctrineSection(channels: PromptDoctrineCha
 export function buildRepairPromptDoctrineSection() {
   return [
     buildContextToCopyFirewallSection(),
+    buildAudiencePerspectiveDoctrineSection(),
     buildEvidenceIntegritySection(),
     buildOriginalityRequirementSection(),
     buildAntiGenericRulesSection(),

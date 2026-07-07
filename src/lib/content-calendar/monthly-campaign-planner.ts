@@ -15,6 +15,13 @@ import {
   buildGalaxyAiSocialImagePrompt,
 } from "@/lib/galaxyai/image-prompt-builder";
 import { buildGenerationPromptDoctrineSection } from "@/lib/ai/prompt-doctrine";
+import {
+  buildAudiencePerspectivePrompt,
+  directAudienceAddress,
+  publicAudienceLabel,
+  publicAudienceTitle,
+  resolveAudiencePerspective,
+} from "@/lib/content-generation/audience-perspective";
 
 export type MonthlyCampaignStrategyInput = {
   monthlyObjective?: string;
@@ -184,7 +191,10 @@ function titleCase(value: string) {
   return value
     .split(/\s+/)
     .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .map((word) => {
+      if (/^(ai|aio|seo|crm|ppc)$/i.test(word)) return word.toUpperCase();
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
     .join(" ");
 }
 
@@ -215,7 +225,7 @@ function publicTitleForTopic(
   strategy: MonthlyCampaignStrategyInput,
 ) {
   const safeTopic = titleCase(simpleNounPhrase(topic, "better marketing visibility"));
-  const audience = titleCase(simpleNounPhrase(strategy.targetAudience, "business owners"));
+  const audience = publicAudienceTitle(strategy.targetAudience);
 
   if (/ai|search|seo|aio|visibility/i.test(safeTopic)) {
     return `Why ${safeTopic} Matters for ${audience}`;
@@ -265,14 +275,15 @@ function publicCampaignAngle({
 }) {
   const topic = topicLabel(strategy, weekNumber, marketingSpine);
   const audience = audienceLabel(strategy, marketingSpine);
+  const directAddress = directAudienceAddress(audience);
   const offer = offerLabel(strategy, marketingSpine);
 
   const angles = [
-    `This week's campaign helps ${audience} understand ${topic} in plain language before pointing them toward ${offer}.`,
-    `The goal is to make ${topic} easier to understand, easier to trust, and easier to act on.`,
-    `This message should connect a recognizable buyer problem to a practical next step without sounding like a generic service pitch.`,
-    `A strong campaign this week should help the reader see what is happening, why it matters, and what they can do next.`,
-    `The content should build trust by explaining the problem first, then positioning ${offer} as the natural next move.`,
+    `When ${audience} cannot tell why ${directAddress} is not showing up where people are searching, the next marketing move can feel like a guess.`,
+    `The practical opportunity is to make ${topic} easier to understand, easier to trust, and easier to act on before someone chooses another provider.`,
+    `A clear explanation can help ${audience} see what is being missed, why it matters, and what a sensible next step looks like.`,
+    `The strongest angle is to connect ${topic} to a real decision the business owner already cares about: time, trust, visibility, and better conversations.`,
+    `${offer} works best when it feels like a helpful first step, not another vague marketing pitch.`,
   ];
 
   return angles[(weekNumber - 1) % angles.length];
@@ -307,6 +318,12 @@ function privateGenerationPrompt({
     "",
     "Use the following strategy inputs to guide the angle, examples, offer positioning, and CTA.",
     marketingSpine ? formatMarketingSpineForPrompt(marketingSpine) : "",
+    "",
+    buildAudiencePerspectivePrompt({
+      audience: strategy.targetAudience,
+      topic: publicTitle,
+      offer: strategy.primaryOffer,
+    }),
     "",
     buildGenerationPromptDoctrineSection(["blog", "email", "linkedin", "facebook", "video", "visual"]),
     "Do not publish these labels, raw notes, internal month, campaign name, week number, or planning identifiers in the content.",
@@ -470,12 +487,7 @@ function lowercaseFirst(value: string) {
 }
 
 function audienceLabel(strategy: MonthlyCampaignStrategyInput, marketingSpine?: MarketingSpine | null) {
-  return lowercaseFirst(
-    simpleNounPhrase(
-      marketingSpine?.audience || strategy.targetAudience,
-      "the right buyers",
-    ),
-  );
+  return lowercaseFirst(publicAudienceLabel(marketingSpine?.audience || strategy.targetAudience));
 }
 
 function offerLabel(strategy: MonthlyCampaignStrategyInput, marketingSpine?: MarketingSpine | null) {
@@ -774,49 +786,51 @@ function contentForAsset({
   );
 
   switch (assetType) {
-    case "blog_post":
+    case "blog_post": {
+      const perspective = resolveAudiencePerspective(audience);
+      const firstConcern = perspective.everydayConcerns[0] ?? buyerProblem;
+      const example = perspective.exampleSituations[0] ?? "someone comparing options before they reach out";
+
       return [
         `# ${publicTitle}`,
         "",
-        "Most people do not act because a business has a service to sell. They act when the problem becomes clear enough to understand and the next step feels safe enough to take.",
+        `Most ${audience} do not have extra time to chase every new marketing trend. They need to know what is actually affecting ${perspective.directAddress}, what matters now, and what can wait.`,
         "",
         humanAngle,
         "",
-        `For ${audience}, the challenge is usually simple: ${buyerProblem}. That is why content about ${topic} has to do more than announce an offer. It has to help the reader recognize the problem in plain language and see a practical way forward.`,
+        `That is why ${topic} matters. The real issue is not the label. The issue is ${firstConcern}. When that problem is unclear, it is easy to spend time on the wrong fix while better-fit opportunities keep going somewhere else.`,
         "",
-        "## What the reader needs to understand",
-        "A useful article should answer the questions the buyer is already asking quietly:",
+        `For example, think about ${example}. Before that person calls, they are already forming an opinion from search results, reviews, website pages, local listings, and now AI-generated answers. If ${perspective.directAddress} is hard to find or hard to understand in those moments, the opportunity can be lost before a conversation ever starts.`,
         "",
-        "- What is actually holding us back?",
-        "- What should we look at first?",
-        "- What would a realistic next step look like?",
-        "- How do we avoid wasting time on the wrong fix?",
+        "## What to look at first",
+        "A practical review should make the problem easier to understand, not more confusing. Start with questions like:",
         "",
-        `That is where ${offer} can become useful. The offer should not feel like a hard sell. It should feel like a practical way to get ${outcome}.`,
+        `- Can people quickly understand what ${perspective.directAddress} offers?`,
+        "- Are the most important services easy to find in search?",
+        "- Do reviews, website pages, and local listings support the same message?",
+        "- Are there obvious gaps that would keep someone from taking the next step?",
         "",
-        "## Why generic messaging falls flat",
-        "Generic content usually talks about the service too soon. It says what the business does before it proves that the business understands the customer’s situation.",
+        `This is where ${offer} can be useful. It gives you ${outcome} without forcing you to guess or commit to a bigger plan before you understand the issue.`,
         "",
-        `A better message starts with the real concern: ${objection}. When the content addresses that concern directly, the reader has a reason to keep going.`,
+        "## Why this matters",
+        `The concern is usually not just ${objection}. It is the time wasted trying random fixes without knowing whether they address the real problem. A clearer review helps separate what feels urgent from what is actually important.`,
         "",
-        "## A better way to frame the conversation",
-        `Start with the problem behind ${topic}. Explain what the buyer may be missing, what the consequence is, and what they can do next. Then connect that explanation to ${offer} as the natural next step.`,
+        "## A practical next step",
+        `If ${topic} is already on your mind, start with clarity. Look at what people can see, what they may be missing, and what would make the next decision easier.`,
         "",
-        "This approach makes the content more useful, more believable, and easier to act on. It also keeps the message from sounding like every other business making the same claim.",
-        "",
-        "## Practical next step",
-        `If this is already on your mind, the next move is not to guess. ${callToAction}`,
+        callToAction,
       ].join("\n");
+    }
 
     case "linkedin_post":
       return [
-        `${socialEmojiSet({ topic, assetType })} Most buyers do not need another generic marketing pitch.`,
+        `${socialEmojiSet({ topic, assetType })} ${publicAudienceTitle(audience)} do not need another vague marketing promise.`,
         "",
-        "They need a clear explanation of the problem they are already trying to solve.",
+        `They need a clear explanation of what may be holding ${directAudienceAddress(audience)} back and what to look at first.`,
         "",
-        `For ${audience}, ${buyerProblem}. That is the part good content has to make simple.`,
+        `For ${audience}, ${buyerProblem}. That problem needs to be explained simply before anyone can feel confident about the next step.`,
         "",
-        `The offer matters, but only after the reader understands why it is useful. That is where ${offer} can help: it gives them ${outcome}.`,
+        `The offer matters, but only after the problem is clear. That is where ${offer} can help: it gives ${audience} ${outcome}.`,
         "",
         "The goal is not to sound clever. The goal is to make the next decision easier.",
         "",
@@ -827,13 +841,13 @@ function contentForAsset({
 
     case "facebook_post":
       return [
-        `${socialEmojiSet({ topic, assetType })} Quick thought for business owners:`,
+        `${socialEmojiSet({ topic, assetType })} Quick thought for ${audience}:`,
         "",
-        "Your best marketing message usually is not the thing you want to say first.",
+        `The next step usually feels easier when you can see what is holding ${directAudienceAddress(audience)} back.`,
         "",
-        "It is the thing your customer needs to understand before they are ready to act.",
+        "That starts with a plain-language explanation, not a pile of marketing terms.",
         "",
-        `For ${audience}, ${buyerProblem}. A helpful message explains that in plain language, answers the obvious concern, and points to one easy next step.`,
+        `For ${audience}, ${buyerProblem}. A good first step should make that problem easier to understand and easier to act on.`,
         "",
         `That is the role of ${offer}: helping people get ${outcome}.`,
         "",
@@ -849,9 +863,9 @@ function contentForAsset({
         "",
         "Hi there,",
         "",
-        `A lot of marketing gets ignored because it starts with the service instead of the problem. For ${audience}, the real issue is often that ${buyerProblem}.`,
+        `You do not need another vague marketing idea. You need a clear way to understand what may be holding ${directAudienceAddress(audience)} back.`,
         "",
-        `That is why ${topic} needs to be explained in everyday language. The reader should be able to understand what is happening, what it may be costing them, and what they can do next.`,
+        `For ${audience}, the real issue is often that ${buyerProblem}. That is why ${topic} needs to be explained in everyday language, with a practical next step attached.`,
         "",
         `A practical next step is ${offer}, especially if the goal is to get ${outcome}.`,
         "",
@@ -867,7 +881,7 @@ function contentForAsset({
         "",
         "20-second video script:",
         "",
-        "Hook: Most marketing fails when it talks about the service before it explains the customer’s problem.",
+        `Hook: If ${directAudienceAddress(audience)} is not showing up where people are looking, guessing at the next fix can waste a lot of time.`,
         "",
         `Problem: For ${audience}, ${buyerProblem}.`,
         "",

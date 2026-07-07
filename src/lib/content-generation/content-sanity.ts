@@ -17,6 +17,8 @@ const RAW_LABEL_PATTERNS = [
   /\binternal week\b/i,
   /\basset id\s*:/i,
   /\breview id\s*:/i,
+  /\bthis week'?s campaign\b/i,
+  /\bprivate positioning note\b/i,
 ];
 
 const CAMPAIGN_LABEL_PATTERNS = [
@@ -47,6 +49,24 @@ const NONSENSE_OR_FIELD_STITCH_PATTERNS = [
   /\bproof\s+points?\s*\/\s*supporting\s+context\b/i,
   /\b[a-z]+\s+needs\s+a\s+clearer\s+way\s+to\s+understand\s+and\s+act\s+on\s+[A-Z]/i,
   /\bto\s+a\s+believable\s+next\s+step\s*:/i,
+];
+
+
+const META_MARKETING_PERSPECTIVE_PATTERNS = [
+  /\bthis week'?s campaign\b/i,
+  /\bthis campaign (?:helps|should|needs|will|is designed)\b/i,
+  /\bthis (?:blog|post|article|email|content|asset) (?:helps|should|needs|will|is designed)\b/i,
+  /\ba useful (?:article|post|email|asset) should\b/i,
+  /\bcontent about [^.!?]{1,80} has to\b/i,
+  /\bthe content (?:should|has to|needs to|must)\b/i,
+  /\bthe article (?:should|has to|needs to|must)\b/i,
+  /\bthe post (?:should|has to|needs to|must)\b/i,
+  /\bthe reader needs? to understand\b/i,
+  /\bthe buyer (?:is already|needs|has|should|may be|cares)\b/i,
+  /\bgeneric messaging\b/i,
+  /\bgeneric content\b/i,
+  /\ba better message starts\b/i,
+  /\bpositioning [^.!?]{0,80} as the natural next (?:step|move)\b/i,
 ];
 
 const UNSUPPORTED_CLAIM_PATTERNS = [
@@ -148,6 +168,10 @@ export function validatePublishReadyContent({
 
   if (NONSENSE_OR_FIELD_STITCH_PATTERNS.some((pattern) => pattern.test(text))) {
     issues.push("Content appears to contain stitched field fragments or nonsensical planning language.");
+  }
+
+  if (META_MARKETING_PERSPECTIVE_PATTERNS.some((pattern) => pattern.test(text))) {
+    issues.push("Content appears to be written from a marketing planner perspective instead of the final reader perspective.");
   }
 
   if (UNSUPPORTED_CLAIM_PATTERNS.some((pattern) => pattern.test(text))) {

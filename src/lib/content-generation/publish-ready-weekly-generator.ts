@@ -3,6 +3,7 @@ import { summarizeMemoryForPrompt, BusinessMemoryContext } from "@/lib/content-g
 import { validatePublishReadyContent } from "@/lib/content-generation/content-sanity";
 import { buildMonthlyCampaignPlan } from "@/lib/content-calendar/monthly-campaign-planner";
 import { buildGenerationPromptDoctrineSection, buildRepairPromptDoctrineSection } from "@/lib/ai/prompt-doctrine";
+import { buildAudiencePerspectivePrompt } from "@/lib/content-generation/audience-perspective";
 
 type WeeklyPlan = ReturnType<typeof buildMonthlyCampaignPlan>[number];
 
@@ -138,6 +139,12 @@ function packagePrompt({
     "- Campaign strategy should guide the output; it should not appear verbatim as raw labels.",
     "- If memory or strategy contains awkward wording, fragments, lists, or notes, translate the meaning into clear public copy instead of copying it.",
     "",
+    buildAudiencePerspectivePrompt({
+      audience: week.strategy?.targetAudience,
+      topic: week.publicTopic,
+      offer: week.strategy?.primaryOffer,
+    }),
+    "",
     buildGenerationPromptDoctrineSection(["blog", "email", "linkedin", "facebook", "video", "visual"]),
     "",
     "PRIVATE SAVED BUSINESS MEMORY:",
@@ -149,7 +156,7 @@ function packagePrompt({
     `Internal campaign name: ${week.campaignName}`,
     `Public topic: ${week.publicTopic ?? "Use the weekly topic from the campaign plan."}`,
     `Public title direction: ${week.publicTitle ?? "Create a clear public title."}`,
-    `Campaign angle: ${week.campaignAngle}`,
+    `Private positioning note, not public copy: ${week.campaignAngle}`,
     businessContext ? `Additional monthly context: ${businessContext}` : "",
     "",
     "ASSETS TO WRITE:",
@@ -162,6 +169,9 @@ function packagePrompt({
     "- Each object must include: slotId, title, content.",
     "- Do not include markdown code fences.",
     "- Do not include private memory labels, internal campaign labels, week labels, prompt notes, strategy labels, review notes, or asset IDs in public content.",
+    "- Do not write from a marketer's perspective unless marketers are the explicit target audience.",
+    "- Do not mention this week's campaign, the article, this content, generic messaging, the reader, the buyer, or what content should do.",
+    "- For business-type audiences such as dental practices, contractors, clinics, or service companies, write to the owner/operator/decision-maker in that business.",
     "- Social posts must include natural emoji and relevant hashtags.",
     "- Blogs must be structured, useful, and nearly publish-ready.",
     "- Emails must sound like a person wrote them and include a clear next step.",
@@ -241,7 +251,13 @@ async function repairAsset({
     "Private memory context:",
     summarizeMemoryForPrompt(memory),
     "",
-    "Campaign angle:",
+    buildAudiencePerspectivePrompt({
+      audience: week.strategy?.targetAudience,
+      topic: week.publicTopic,
+      offer: week.strategy?.primaryOffer,
+    }),
+    "",
+    "Private positioning note, not public copy:",
     week.campaignAngle,
     "",
     "Asset type:",
@@ -258,7 +274,8 @@ async function repairAsset({
     "",
     "Rules:",
     buildRepairPromptDoctrineSection(),
-    "- Write the actual final public-facing content.",
+    "- Write the actual final public-facing content for the intended end reader.",
+    "- If the current draft sounds like it is written for a marketer reviewing a campaign, rewrite it completely for the business owner/operator audience.",
     "- Do not include private labels, internal campaign names, week labels, IDs, or prompt notes.",
     "- Do not invent unsupported claims.",
     "- Keep a friendly, supportive, confident, authoritative human voice.",
