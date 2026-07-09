@@ -64,6 +64,14 @@ function isApprovedEnough(status: string | null) {
   );
 }
 
+function visualStatusLabel(status: string | null) {
+  const normalized = String(status ?? "stored").trim().toLowerCase();
+  if (normalized === "approved") return "Approved";
+  if (normalized === "rejected") return "Rejected";
+  if (normalized === "stored") return "Needs review";
+  return normalized.replaceAll("_", " ");
+}
+
 export function VisualAssetPanel({
   assetId,
   canManage,
@@ -73,8 +81,11 @@ export function VisualAssetPanel({
 }: VisualAssetPanelProps) {
   const router = useRouter();
   const [imageUse, setImageUse] = useState("social_square");
+  const [visualInstructions, setVisualInstructions] = useState("");
   const [loading, setLoading] = useState(false);
   const [selectingId, setSelectingId] = useState<string | null>(null);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,8 +99,12 @@ export function VisualAssetPanel({
     });
   }, [primaryVisualAssetId, visualAssets]);
 
-  async function generateVisual() {
-    setLoading(true);
+  async function generateVisual(options?: {
+    imageUseOverride?: string;
+    regeneratedFromVisualAssetId?: string;
+  }) {
+    setLoading(!options?.regeneratedFromVisualAssetId);
+    setRegeneratingId(options?.regeneratedFromVisualAssetId ?? null);
     setMessage(null);
     setError(null);
 
@@ -97,7 +112,11 @@ export function VisualAssetPanel({
       const response = await fetch(`/api/assets/${assetId}/visuals`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUse }),
+        body: JSON.stringify({
+          imageUse: options?.imageUseOverride ?? imageUse,
+          visualInstructions: visualInstructions.trim(),
+          regeneratedFromVisualAssetId: options?.regeneratedFromVisualAssetId ?? null,
+        }),
       });
 
       const result = await response.json().catch(() => ({}));
@@ -106,12 +125,19 @@ export function VisualAssetPanel({
         throw new Error(result.error ?? "Unable to generate image.");
       }
 
-      setMessage(result.isPrimary ? "Image generated and selected as primary." : "Image generated.");
+      setMessage(
+        options?.regeneratedFromVisualAssetId
+          ? "Image regenerated and saved for review."
+          : result.isPrimary
+            ? "Image generated and selected as primary."
+            : "Image generated for review.",
+      );
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected error generating image.");
     } finally {
       setLoading(false);
+      setRegeneratingId(null);
     }
   }
 
@@ -140,6 +166,33 @@ export function VisualAssetPanel({
     }
   }
 
+  async function reviewVisual(visualAssetId: string, action: "approve" | "reject") {
+    setReviewingId(`${action}:${visualAssetId}`);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/assets/${assetId}/visuals/${visualAssetId}/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(result.error ?? `Unable to ${action} image.`);
+      }
+
+      setMessage(action === "approve" ? "Image approved and selected as primary." : "Image rejected.");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Unexpected error while trying to ${action} image.`);
+    } finally {
+      setReviewingId(null);
+    }
+  }
+
   const canGenerate = canManage && isApprovedEnough(sourceStatus);
 
   return (
@@ -147,7 +200,7 @@ export function VisualAssetPanel({
       <div className={formStyles.header}>
         <h3 className={formStyles.smallTitle}>Visual assets</h3>
         <p className={formStyles.description}>
-          Generate, store, download, regenerate, and choose the primary image that will later travel with this post or asset into publishing.
+          Generate, review, approve, reject, regenerate, and choose the primary image that will later travel with this post or asset into publishing.
         </p>
       </div>
 
@@ -168,15 +221,30 @@ export function VisualAssetPanel({
               <option value="email_banner">Email banner image</option>
             </select>
             <span className={formStyles.help}>
-              VIP will use the approved content, campaign, account, and brand profile to build a detailed OpenAI image prompt.
+              VIP will use the approved content, campaign, account, and brand profile to build a detailed image prompt.
+            </span>
+          </label>
+
+          <label className={formStyles.field}>
+            <span className={formStyles.label}>Additional image direction</span>
+            <textarea
+              value={visualInstructions}
+              onChange={(event) => setVisualInstructions(event.target.value)}
+              rows={4}
+              className={formStyles.textarea}
+              disabled={loading}
+              placeholder="Example: Show a dental practice owner reviewing search visibility gaps on a clean dashboard. Use our blue and gold palette. No logos, no text overlays, no fake UI labels."
+            />
+            <span className={formStyles.help}>
+              These notes guide the image. VIP will not render them as visible text, labels, slogans, or logo marks inside the image.
             </span>
           </label>
 
           <div className={formStyles.actions} style={{ marginTop: 0 }}>
             <button
               type="button"
-              onClick={generateVisual}
-              disabled={loading || !canGenerate}
+              onClick={() => generateVisual()}
+              disabled={loading || Boolean(regeneratingId) || !canGenerate}
               className={formStyles.submit}
             >
               {loading ? "Generating Image..." : "Generate Image"}
@@ -205,6 +273,10 @@ export function VisualAssetPanel({
               visual.id === primaryVisualAssetId ||
               metadata.isPrimary === true ||
               metadata.selectedForPublish === true;
+            const normalizedStatus = String(visual.status ?? "stored").toLowerCase();
+            const isApproved = normalizedStatus === "approved";
+            const isRejected = normalizedStatus === "rejected";
+            const visualImageUse = stringOrNull(metadata.imageUse) ?? imageUse;
 
             return (
               <article key={visual.id} className={websiteStyles.card}>
@@ -229,6 +301,7 @@ export function VisualAssetPanel({
 
                 <div className="flex flex-wrap gap-2" style={{ marginTop: 12 }}>
                   {isPrimary ? <span className={websiteStyles.badge}>Primary image</span> : null}
+                  <span className={websiteStyles.badge}>{visualStatusLabel(visual.status)}</span>
                   <span className={websiteStyles.badge}>
                     {String(metadata.imageUse ?? visual.asset_type ?? "visual").replaceAll("_", " ")}
                   </span>
@@ -246,11 +319,47 @@ export function VisualAssetPanel({
                     </a>
                   ) : null}
 
-                  {canManage && !isPrimary ? (
+                  {canManage && !isApproved ? (
+                    <button
+                      type="button"
+                      onClick={() => reviewVisual(visual.id, "approve")}
+                      disabled={Boolean(reviewingId) || Boolean(regeneratingId)}
+                      className={formStyles.submit}
+                      style={{ minHeight: 42, padding: "0 14px", fontSize: 13 }}
+                    >
+                      {reviewingId === `approve:${visual.id}` ? "Approving..." : "Approve"}
+                    </button>
+                  ) : null}
+
+                  {canManage && !isRejected ? (
+                    <button
+                      type="button"
+                      onClick={() => reviewVisual(visual.id, "reject")}
+                      disabled={Boolean(reviewingId) || Boolean(regeneratingId)}
+                      className={formStyles.secondaryButton}
+                      style={{ minHeight: 42, padding: "0 14px", fontSize: 13 }}
+                    >
+                      {reviewingId === `reject:${visual.id}` ? "Rejecting..." : "Reject"}
+                    </button>
+                  ) : null}
+
+                  {canManage ? (
+                    <button
+                      type="button"
+                      onClick={() => generateVisual({ imageUseOverride: visualImageUse, regeneratedFromVisualAssetId: visual.id })}
+                      disabled={Boolean(reviewingId) || Boolean(regeneratingId) || !canGenerate}
+                      className={formStyles.secondaryButton}
+                      style={{ minHeight: 42, padding: "0 14px", fontSize: 13 }}
+                    >
+                      {regeneratingId === visual.id ? "Regenerating..." : "Regenerate"}
+                    </button>
+                  ) : null}
+
+                  {canManage && !isPrimary && !isRejected ? (
                     <button
                       type="button"
                       onClick={() => makePrimary(visual.id)}
-                      disabled={selectingId === visual.id}
+                      disabled={selectingId === visual.id || Boolean(reviewingId) || Boolean(regeneratingId)}
                       className={formStyles.secondaryButton}
                       style={{ minHeight: 42, padding: "0 14px", fontSize: 13 }}
                     >

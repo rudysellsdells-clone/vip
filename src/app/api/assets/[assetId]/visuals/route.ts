@@ -7,7 +7,7 @@ import { logActivity } from "@/lib/security/auditLog";
 import { buildVisualAssetPrompt, normalizeImageUse, suggestedImageSize } from "@/lib/visual-assets/prompt-builder";
 import { generateOpenAiImage } from "@/lib/visual-assets/openai-image";
 import { storeGeneratedVisual } from "@/lib/visual-assets/storage";
-import { jsonRecord, mergeVisualMetadata, stringOrNull } from "@/lib/visual-assets/metadata";
+import { mergeVisualMetadata, stringOrNull } from "@/lib/visual-assets/metadata";
 
 const VISUAL_ASSET_TYPES = ["generated_visual", "generated_social_image"];
 const VISUAL_ELIGIBLE_STATUSES = new Set([
@@ -77,7 +77,12 @@ export async function POST(request: Request, context: RouteContext) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const imageUse = normalizeImageUse(toJsonRecord(body).imageUse, asset.asset_type);
+    const bodyRecord = toJsonRecord(body);
+    const imageUse = normalizeImageUse(bodyRecord.imageUse, asset.asset_type);
+    const visualInstructions = stringOrNull(
+      bodyRecord.visualInstructions ?? bodyRecord.additionalInstructions ?? bodyRecord.instructions,
+    );
+    const regeneratedFromVisualAssetId = stringOrNull(bodyRecord.regeneratedFromVisualAssetId);
 
     const [{ data: account }, { data: brandProfile }, campaignResult, existingVisualsResult] = await Promise.all([
       accountId
@@ -112,6 +117,7 @@ export async function POST(request: Request, context: RouteContext) {
       account,
       brandProfile,
       imageUse,
+      visualInstructions,
     });
     const imageSize = suggestedImageSize(imageUse);
     const image = await generateOpenAiImage({ prompt, size: imageSize });
@@ -127,17 +133,18 @@ export async function POST(request: Request, context: RouteContext) {
       filePrefix: imageUse,
     });
 
-    const existingPrimary = existingVisuals.some((visual) => {
-      const metadata = jsonRecord(visual.metadata);
-      return metadata.isPrimary === true || metadata.selectedForPublish === true;
-    });
-    const shouldMakePrimary = !existingPrimary && existingVisuals.length === 0;
+    // New visuals should go through the same review decision as written assets.
+    // They are not selected as the publishing image until the user approves them.
+    const shouldMakePrimary = false;
     const version = existingVisuals.length + 1;
 
     const visualMetadata = mergeVisualMetadata({}, {
       provider: "openai",
       assetRole: "generated_visual",
-      hVersion: "H1.5A",
+      hVersion: "H1.6C11",
+      logoPolicy: "no_logo_marks_no_text_overlays",
+      visualInstructions,
+      regeneratedFromVisualAssetId,
       sourceAssetId: asset.id,
       sourceAssetType: asset.asset_type,
       sourceAssetTitle: asset.title ?? null,
@@ -210,7 +217,9 @@ export async function POST(request: Request, context: RouteContext) {
       userId: user.id,
       activityType: "visual_asset_generated",
       title: "Visual asset generated",
-      description: `Generated a ${imageUse.replaceAll("_", " ")} for ${asset.title ?? "an asset"}.`,
+      description: regeneratedFromVisualAssetId
+        ? `Regenerated a ${imageUse.replaceAll("_", " ")} for ${asset.title ?? "an asset"}.`
+        : `Generated a ${imageUse.replaceAll("_", " ")} for ${asset.title ?? "an asset"}.`,
       metadata: mergeVisualMetadata({}, {
         sourceAssetId: asset.id,
         visualAssetId: createdVisual.id,
@@ -218,6 +227,8 @@ export async function POST(request: Request, context: RouteContext) {
         campaignId: asset.campaign_id ?? null,
         imageUse,
         publicUrl: stored.publicUrl,
+        visualInstructions,
+        regeneratedFromVisualAssetId,
       }),
     });
 

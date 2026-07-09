@@ -15,6 +15,7 @@ export type VisualPromptContext = {
   account?: Record<string, unknown> | null;
   brandProfile?: Record<string, unknown> | null;
   imageUse?: VisualImageUse;
+  visualInstructions?: string | null;
 };
 
 function compactText(value: unknown, fallback = "Not provided") {
@@ -115,6 +116,7 @@ export function buildVisualAssetPrompt(input: VisualPromptContext) {
     ? brandProfile.brand_colors.map((color) => String(color ?? "").trim()).filter(Boolean).join(", ")
     : null;
   const hasLogo = Boolean(stringOrNull(brandProfile?.logo_url));
+  const visualInstructions = stringOrNull(input.visualInstructions);
 
   return [
     `Create a polished ${imageUseLabel(imageUse)} for ${companyName}.`,
@@ -129,7 +131,7 @@ export function buildVisualAssetPrompt(input: VisualPromptContext) {
     serviceAreas ? `- Service areas/market: ${serviceAreas}` : null,
     `- Brand tone: ${tone}`,
     brandColors ? `- Brand colors to reference: ${brandColors}` : null,
-    hasLogo ? "- Logo: uploaded in brand profile; do not invent or distort a fake logo inside the generated image." : null,
+    hasLogo ? "- Logo: uploaded in brand profile for brand reference only. Do not place the logo or any logo-like mark inside the generated image." : null,
     notes ? `- Brand notes: ${notes}` : null,
     "",
     "Campaign/content context:",
@@ -144,10 +146,20 @@ export function buildVisualAssetPrompt(input: VisualPromptContext) {
     "Source content to visually support:",
     truncate(asset.content, 1600),
     "",
+    visualInstructions ? "Additional visual direction from the user:" : null,
+    visualInstructions ? truncate(visualInstructions, 1200) : null,
+    visualInstructions
+      ? "Use this as creative direction only. Do not render these notes as visible text inside the image."
+      : null,
+    visualInstructions ? "" : null,
     buildVisualPromptDoctrineSection(),
     "",
     "Creative direction:",
     "- Make the image feel premium, useful, and business-relevant.",
+    "- Do not include any logo, fake logo, logo-like mark, badge, seal, monogram, watermark, brand stamp, random emblem, or decorative mark that could be mistaken for a logo.",
+    "- Do not place brand marks in corners, headers, footers, backgrounds, clothing, signage, screens, walls, documents, dashboards, or overlays.",
+    "- Do not include readable text, headlines, slogans, labels, fake UI words, charts with words, or typography inside the image.",
+    "- Use brand colors, mood, composition, and subject matter to imply the brand instead of drawing a logo.",
     "- Show a clear situation, outcome, visual metaphor, or realistic business scene tied to the asset content.",
     "- Avoid vague technology glow, random charts, and generic people smiling at laptops unless the content specifically calls for that.",
     "- Do not include distorted text, fake logos, fake UI, watermarks, or unreadable typography.",
