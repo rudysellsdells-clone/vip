@@ -125,7 +125,9 @@ function hasUsableAssetPackContent(assetPack: MarketingAssetPack | null | undefi
   return assetPackHasEnoughTotalFields(assetPack);
 }
 
-function assetPackIsReviewReady(assetPack: MarketingAssetPack | null | undefined) {
+function assetPackIsReviewReady(
+  assetPack: MarketingAssetPack | null | undefined,
+): assetPack is MarketingAssetPack {
   if (!assetPack) return false;
 
   return assetPackHasUsablePublicCopy(assetPack) && !assetPackHasRawContextLeak(assetPack);
