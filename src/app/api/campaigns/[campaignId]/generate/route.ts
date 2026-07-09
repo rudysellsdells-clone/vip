@@ -6,6 +6,7 @@ import { logActivity } from "@/lib/security/auditLog";
 import { loadDigitalCloneContext } from "@/lib/clone/context";
 import { generateMarketingAssetPackWithCloneMemory } from "@/lib/ai/asset-pack-generator";
 import { marketingAssetPackToAssets } from "@/lib/ai/asset-pack-types";
+import { preparePublicAssetContent } from "@/lib/content/public-content-cleaner";
 import type { Json } from "@/types/database.types";
 
 type RouteContext = {
@@ -37,12 +38,12 @@ function normalizeCampaignForPrompt(campaign: {
   notes: string | null;
   strategy?: unknown;
 }) {
-  const strategyNotes =
+  const strategy =
     campaign.strategy &&
     typeof campaign.strategy === "object" &&
     !Array.isArray(campaign.strategy)
-      ? `One-off campaign strategy context:\n${JSON.stringify(campaign.strategy, null, 2)}`
-      : "";
+      ? (campaign.strategy as Record<string, unknown>)
+      : null;
 
   return {
     name: campaign.name,
@@ -53,7 +54,8 @@ function normalizeCampaignForPrompt(campaign: {
     platforms: campaign.platforms ?? [],
     tone: campaign.tone,
     cta: campaign.cta,
-    notes: [campaign.notes, strategyNotes].filter(Boolean).join("\n\n"),
+    notes: campaign.notes,
+    strategy,
   };
 }
 
@@ -98,16 +100,6 @@ export async function POST(_request: Request, context: RouteContext) {
       );
     }
 
-    if (!accountId) {
-      return NextResponse.json(
-        {
-          error:
-            "This campaign is not attached to an active workspace. Create a new campaign inside the selected account workspace before generating assets.",
-        },
-        { status: 400 },
-      );
-    }
-
     const cloneContext = await loadDigitalCloneContext(user.id, accountId);
 
     const oneOffCampaignStrategy =
@@ -127,18 +119,14 @@ export async function POST(_request: Request, context: RouteContext) {
       offers: cloneContext.offers as Record<string, unknown>[],
     });
 
-    const assets = marketingAssetPackToAssets(assetPack);
-
-    if (!assets.length) {
-      return NextResponse.json(
-        {
-          error:
-            "VIP could not produce a usable asset pack from the current campaign brief. Add a little more campaign detail or try again.",
-        },
-        { status: 400 },
-      );
-    }
-
+    const assets = marketingAssetPackToAssets(assetPack).map((asset) => ({
+      ...asset,
+      content: preparePublicAssetContent({
+        content: asset.content,
+        assetType: asset.assetType,
+        title: asset.title,
+      }),
+    }));
     const memorySnapshot = {
       profileLoaded: Boolean(cloneContext.profile),
       brandRuleCount: cloneContext.brandRules.length,
@@ -164,6 +152,7 @@ export async function POST(_request: Request, context: RouteContext) {
           metadata: toJson({
             generatedBy: "campaign_asset_pack",
             sprint: "5.7",
+            oneOffBriefPriorityContract: "h1_6c9",
             contentSpecificityContract: "h1_4g1",
             preReviewEnrichment: true,
             cloneMemoryUsed: true,

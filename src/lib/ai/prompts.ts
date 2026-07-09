@@ -1,18 +1,13 @@
 import { buildAssetTypeDetailStandardsSection, buildSpecificityContractSection } from "./content-specificity";
-import { buildCampaignDetailPromptSection } from "@/lib/content-generation/campaign-detail";
 import { buildGenerationPromptDoctrineSection, buildRepairPromptDoctrineSection } from "./prompt-doctrine";
+import {
+  buildOneOffCampaignControlBriefSection,
+  buildOneOffCampaignExecutionContractSection,
+  buildOneOffCampaignPerspectiveSections,
+  type OneOffPromptCampaign,
+} from "@/lib/content-generation/one-off-campaign-brief";
 
-type PromptCampaign = {
-  name: string;
-  idea: string;
-  buyer_segment: string | null;
-  audience: string | null;
-  goal: string | null;
-  platforms: string[] | null;
-  tone: string | null;
-  cta: string | null;
-  notes: string | null;
-};
+type PromptCampaign = OneOffPromptCampaign;
 
 type PromptEntity = Record<string, unknown>;
 
@@ -50,15 +45,17 @@ Your job is to create revenue-focused marketing assets for Rudy McCormick.
 Write in clear, polished, human English. Be practical, specific, and business-focused.
 Avoid robotic phrasing, vague hype, fake guarantees, and filler.
 Use Rudy's digital clone memory, brand rules, knowledge library, offers, and examples whenever provided.
+The user's one-off campaign brief is the controlling strategy. Brand and training context supports it; brand/training context must never replace or drown out detailed user instructions.
 
 First-draft quality standard:
 - The first draft must already feel ready for a serious human marketing review.
 - Do not submit generic placeholder content for later cleanup.
-- Every asset must include concrete detail, channel-aware structure, and a clear reason the audience should care.
+- Every asset must include concrete detail from the campaign idea/control brief, channel-aware structure, and a clear reason the audience should care.
 - If the brief is thin, use the available business context to make the content more useful without inventing fake claims.
 
 Safety rules:
 - Do not claim anything that is not supported by the provided context.
+- Do not copy source context, brand notes, training notes, or user prompt wording verbatim into public assets unless it is an exact offer name, CTA, proper noun, approved tagline, or explicitly supplied quote.
 - Do not create legal, medical, or financial guarantees.
 - Do not imply any action has been sent, posted, published, or launched.
 - All external actions require Rudy's approval.
@@ -104,13 +101,6 @@ export function buildMarketingAssetPackUserPrompt(input: {
   const serviceLines = formatUnknownList("Service Lines", input.serviceLines);
   const buyerSegments = formatUnknownList("Buyer Segments", input.buyerSegments);
   const offers = formatUnknownList("Offers", input.offers);
-  const campaignDetail = buildCampaignDetailPromptSection({
-    audience: campaign.audience ?? campaign.buyer_segment,
-    topic: campaign.idea,
-    offer: campaign.cta,
-    objective: campaign.goal,
-    businessContext: campaign.notes,
-  });
 
   return `Create a complete Marketing Asset Pack for this campaign.
 
@@ -125,7 +115,7 @@ Tone: ${campaign.tone ?? "Clear, practical, confident"}
 CTA: ${campaign.cta ?? "Book a call"}
 Notes: ${campaign.notes ?? "None"}
 
-${campaignDetail}
+${buildOneOffCampaignPerspectiveSections(campaign)}
 
 ## Rudy Digital Clone Memory
 ${cloneMemory}
@@ -153,6 +143,8 @@ ${buildAssetTypeDetailStandardsSection()}
 8. Make the GalaxyAI prompt visual and specific with scene, camera, mood, action, and exclusions.
 9. Include an approval checklist that helps Rudy decide whether the campaign is safe, specific, and useful.
 10. Before finalizing, quietly improve any asset that still sounds like it could apply to any random business.
+11. Before finalizing, verify that the user's detailed campaign instructions were actually used. If the output could have been written without reading the user notes/core messages/proof points, rewrite it.
+12. Never paste the campaign notes, strategy context, knowledge context, or core-message bullets as raw public copy. Convert them into fresh, natural sentences.
 
 Return only valid JSON.`;
 }
@@ -171,7 +163,7 @@ export function buildPreReviewEnrichmentSystemPrompt() {
 
 Your job is to improve an already generated Marketing Asset Pack before it reaches human quality review.
 Do not change the campaign strategy or invent unsupported proof.
-Do make every asset more specific, detailed, structured, and useful.
+Do make every asset more specific, detailed, structured, and useful. The user's one-off campaign brief outranks generic brand memory.
 
 ${buildRepairPromptDoctrineSection()}
 
@@ -194,13 +186,6 @@ export function buildPreReviewEnrichmentUserPrompt(input: {
     input.digitalCloneMemoryContext ??
     input.cloneMemoryContext ??
     "No digital clone memory was provided.";
-  const campaignDetail = buildCampaignDetailPromptSection({
-    audience: input.campaign.audience ?? input.campaign.buyer_segment,
-    topic: input.campaign.idea,
-    offer: input.campaign.cta,
-    objective: input.campaign.goal,
-    businessContext: input.campaign.notes,
-  });
 
   return `Strengthen this Marketing Asset Pack before review.
 
@@ -215,7 +200,9 @@ Tone: ${input.campaign.tone ?? "Clear, practical, confident"}
 CTA: ${input.campaign.cta ?? "Book a call"}
 Notes: ${input.campaign.notes ?? "None"}
 
-${campaignDetail}
+${buildOneOffCampaignControlBriefSection(input.campaign)}
+
+${buildOneOffCampaignExecutionContractSection(input.campaign)}
 
 ## Rudy Digital Clone Memory
 ${cloneMemory}
@@ -237,6 +224,8 @@ ${buildRepairPromptDoctrineSection()}
 - Add examples, buyer-specific pain points, objections, scenario language, workflow steps, or implementation detail where appropriate.
 - Strengthen the CTA without becoming pushy.
 - Remove generic marketing filler.
+- Make sure the user's detailed prompt, core messages, differentiator, proof points, and objections are reflected in the public assets as rewritten ideas.
+- Do not paste source fields or user notes verbatim into public-facing assets.
 - Do not add unsupported claims, fake statistics, fake testimonials, fake rankings, or fake client results.
 - Do not mention this enrichment pass.
 
