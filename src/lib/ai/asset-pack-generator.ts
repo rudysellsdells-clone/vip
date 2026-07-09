@@ -47,7 +47,7 @@ function coerceAssetPack(value: unknown): MarketingAssetPack | null {
 
   const record = value as Record<string, unknown>;
 
-  return {
+  const pack: MarketingAssetPack = {
     campaignStrategy: getString(record.campaignStrategy, ""),
     audienceAngle: getString(record.audienceAngle, ""),
     coreMessage: getString(record.coreMessage, ""),
@@ -60,7 +60,56 @@ function coerceAssetPack(value: unknown): MarketingAssetPack | null {
     galaxyAiCreativePrompt: getString(record.galaxyAiCreativePrompt, ""),
     approvalChecklist: getString(record.approvalChecklist, ""),
   };
+
+  return hasUsableAssetPackContent(pack) ? pack : null;
 }
+
+function hasUsableAssetPackContent(assetPack: MarketingAssetPack | null | undefined) {
+  if (!assetPack) return false;
+
+  const requiredPublicAssets = [
+    assetPack.emailDraft,
+    assetPack.linkedinPost,
+    assetPack.facebookPost,
+    assetPack.shortVideoScript,
+  ];
+
+  const usablePublicAssets = requiredPublicAssets.filter(
+    (value) => typeof value === "string" && value.trim().length >= 40,
+  ).length;
+
+  const usableTotalFields = Object.values(assetPack).filter(
+    (value) => typeof value === "string" && value.trim().length >= 20,
+  ).length;
+
+  return usablePublicAssets >= 2 && usableTotalFields >= 5;
+}
+
+function isOpenAiFallbackEnabled() {
+  return process.env.VIP_DISABLE_ASSET_PACK_FALLBACK !== "1";
+}
+
+function timeoutFromEnv(name: string, fallbackMs: number) {
+  const raw = process.env[name];
+  const parsed = raw ? Number(raw) : Number.NaN;
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackMs;
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 
 function createFallbackAssetPack(input: GenerateMarketingAssetPackInput): MarketingAssetPack {
   const campaign = input.campaign;
@@ -117,7 +166,7 @@ async function callOpenAiForAssetPack(input: GenerateMarketingAssetPackInput) {
   const systemPrompt = buildMarketingAssetPackSystemPrompt();
   const userPrompt = buildMarketingAssetPackUserPrompt(input);
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -137,7 +186,7 @@ async function callOpenAiForAssetPack(input: GenerateMarketingAssetPackInput) {
         },
       ],
     }),
-  });
+  }, timeoutFromEnv("VIP_ASSET_PACK_OPENAI_TIMEOUT_MS", 18000));
 
   const text = await response.text();
 
@@ -177,12 +226,16 @@ async function enrichAssetPackBeforeReview(
 ) {
   const apiKey = process.env.OPENAI_API_KEY;
 
-  if (!apiKey || process.env.VIP_DISABLE_PRE_REVIEW_ENRICHMENT === "1") {
+  if (
+    !apiKey ||
+    process.env.VIP_ENABLE_PRE_REVIEW_ENRICHMENT !== "1" ||
+    process.env.VIP_DISABLE_PRE_REVIEW_ENRICHMENT === "1"
+  ) {
     return assetPack;
   }
 
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -202,7 +255,7 @@ async function enrichAssetPackBeforeReview(
           },
         ],
       }),
-    });
+    }, timeoutFromEnv("VIP_ASSET_PACK_ENRICHMENT_TIMEOUT_MS", 8000));
 
     const text = await response.text();
 
@@ -241,15 +294,31 @@ async function enrichAssetPackBeforeReview(
 export async function generateMarketingAssetPackWithCloneMemory(
   input: GenerateMarketingAssetPackInput
 ) {
-  const openAiResult = await callOpenAiForAssetPack(input);
+  let openAiResult: MarketingAssetPack | null = null;
 
-  if (openAiResult) {
+  try {
+    openAiResult = await callOpenAiForAssetPack(input);
+  } catch (error) {
+    if (!isOpenAiFallbackEnabled()) {
+      throw error;
+    }
+
+    console.error("Asset pack OpenAI generation failed; using safe fallback asset pack.", error);
+  }
+
+  if (openAiResult && hasUsableAssetPackContent(openAiResult)) {
     const enriched = await enrichAssetPackBeforeReview(input, openAiResult);
-    return normalizeGalaxyAiPromptFromVideoScript(enriched, input);
+    return normalizeGalaxyAiPromptFromVideoScript(
+      hasUsableAssetPackContent(enriched) ? enriched : openAiResult,
+      input,
+    );
   }
 
   const fallback = createFallbackAssetPack(input);
   const enrichedFallback = await enrichAssetPackBeforeReview(input, fallback);
 
-  return normalizeGalaxyAiPromptFromVideoScript(enrichedFallback, input);
+  return normalizeGalaxyAiPromptFromVideoScript(
+    hasUsableAssetPackContent(enrichedFallback) ? enrichedFallback : fallback,
+    input,
+  );
 }

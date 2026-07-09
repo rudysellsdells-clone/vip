@@ -1,4 +1,5 @@
 import { buildAssetTypeDetailStandardsSection, buildSpecificityContractSection } from "./content-specificity";
+import { buildCampaignDetailPromptSection } from "@/lib/content-generation/campaign-detail";
 import { buildGenerationPromptDoctrineSection, buildRepairPromptDoctrineSection } from "./prompt-doctrine";
 
 type PromptCampaign = {
@@ -103,6 +104,13 @@ export function buildMarketingAssetPackUserPrompt(input: {
   const serviceLines = formatUnknownList("Service Lines", input.serviceLines);
   const buyerSegments = formatUnknownList("Buyer Segments", input.buyerSegments);
   const offers = formatUnknownList("Offers", input.offers);
+  const campaignDetail = buildCampaignDetailPromptSection({
+    audience: campaign.audience ?? campaign.buyer_segment,
+    topic: campaign.idea,
+    offer: campaign.cta,
+    objective: campaign.goal,
+    businessContext: campaign.notes,
+  });
 
   return `Create a complete Marketing Asset Pack for this campaign.
 
@@ -116,6 +124,8 @@ Platforms: ${normalizePlatforms(campaign.platforms)}
 Tone: ${campaign.tone ?? "Clear, practical, confident"}
 CTA: ${campaign.cta ?? "Book a call"}
 Notes: ${campaign.notes ?? "None"}
+
+${campaignDetail}
 
 ## Rudy Digital Clone Memory
 ${cloneMemory}
@@ -184,6 +194,13 @@ export function buildPreReviewEnrichmentUserPrompt(input: {
     input.digitalCloneMemoryContext ??
     input.cloneMemoryContext ??
     "No digital clone memory was provided.";
+  const campaignDetail = buildCampaignDetailPromptSection({
+    audience: input.campaign.audience ?? input.campaign.buyer_segment,
+    topic: input.campaign.idea,
+    offer: input.campaign.cta,
+    objective: input.campaign.goal,
+    businessContext: input.campaign.notes,
+  });
 
   return `Strengthen this Marketing Asset Pack before review.
 
@@ -197,6 +214,8 @@ Platforms: ${normalizePlatforms(input.campaign.platforms)}
 Tone: ${input.campaign.tone ?? "Clear, practical, confident"}
 CTA: ${input.campaign.cta ?? "Book a call"}
 Notes: ${input.campaign.notes ?? "None"}
+
+${campaignDetail}
 
 ## Rudy Digital Clone Memory
 ${cloneMemory}

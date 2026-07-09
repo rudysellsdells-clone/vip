@@ -98,6 +98,16 @@ export async function POST(_request: Request, context: RouteContext) {
       );
     }
 
+    if (!accountId) {
+      return NextResponse.json(
+        {
+          error:
+            "This campaign is not attached to an active workspace. Create a new campaign inside the selected account workspace before generating assets.",
+        },
+        { status: 400 },
+      );
+    }
+
     const cloneContext = await loadDigitalCloneContext(user.id, accountId);
 
     const oneOffCampaignStrategy =
@@ -118,6 +128,17 @@ export async function POST(_request: Request, context: RouteContext) {
     });
 
     const assets = marketingAssetPackToAssets(assetPack);
+
+    if (!assets.length) {
+      return NextResponse.json(
+        {
+          error:
+            "VIP could not produce a usable asset pack from the current campaign brief. Add a little more campaign detail or try again.",
+        },
+        { status: 400 },
+      );
+    }
+
     const memorySnapshot = {
       profileLoaded: Boolean(cloneContext.profile),
       brandRuleCount: cloneContext.brandRules.length,
