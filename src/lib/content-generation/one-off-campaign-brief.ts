@@ -77,7 +77,7 @@ export function buildOneOffCampaignControlBriefSection(campaign: OneOffPromptCam
 
   return [
     "## One-Off Campaign Control Brief — Highest Priority",
-    "Use this section as the controlling strategy for the asset pack.",
+    "This private section defines the strategy source material for the asset pack. Do not quote this section or its labels in the output.",
     "The meaning of these inputs must shape the assets, but the wording must not be copied into public-facing content unless it is an exact offer name, CTA, proper noun, approved tagline, or clearly marked quote.",
     "If the user supplied detailed notes, core messages, proof points, objections, or source context, the assets must reflect those ideas directly and specifically.",
     "Do not bury the user's instructions under generic brand memory. Brand memory supports the brief; it does not replace it.",
@@ -103,7 +103,8 @@ export function buildOneOffCampaignExecutionContractSection(campaign: OneOffProm
     "Public copy rules:",
     "- Do not write sentences that sound like form fields were stitched together.",
     "- Do not print labels such as core messages, proof points, objections, strategy context, source context, buyer segment, or campaign idea.",
-    "- Do not say this campaign, this asset pack, this content, this post, the reader should, or the buyer needs.",
+    "- Do not say this campaign, this asset pack, this content, this post, the reader should, or the buyer needs.
+- Do not repeat any private instruction from this prompt inside campaignStrategy, audienceAngle, coreMessage, or public assets.",
     "- Rewrite every source idea into original everyday language for the final audience.",
     "- Every public-facing asset must lead from a real problem to a practical insight to a natural next step.",
     "- The final reader should understand what is being offered, why it matters, what it helps clarify, and why the next step is reasonable.",

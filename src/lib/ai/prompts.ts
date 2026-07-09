@@ -66,6 +66,14 @@ ${buildSpecificityContractSection()}
 
 ${buildAssetTypeDetailStandardsSection()}
 
+
+Asset-pack field standards:
+- campaignStrategy must be a finished strategic summary for Rudy. It should explain the campaign angle, audience problem, offer logic, and desired conclusion. It must not include prompt instructions, meta commentary, or phrases like "write to X," "not to marketers," "use the user brief," "controlling strategy," or "translate into public copy."
+- audienceAngle must describe what the final audience cares about in plain business language. It must not describe how to write the content.
+- coreMessage must be the campaign's central human-readable message, not a label dump or planning note.
+- emailDraft, LinkedIn, Facebook, YouTube, and video assets must sound like finished content for the intended audience.
+- Treat all brand notes, knowledge, training, and campaign fields as private source material. Do not paste them into the final asset fields as raw text.
+
 Return only valid JSON matching this shape:
 
 {
@@ -145,6 +153,8 @@ ${buildAssetTypeDetailStandardsSection()}
 10. Before finalizing, quietly improve any asset that still sounds like it could apply to any random business.
 11. Before finalizing, verify that the user's detailed campaign instructions were actually used. If the output could have been written without reading the user notes/core messages/proof points, rewrite it.
 12. Never paste the campaign notes, strategy context, knowledge context, or core-message bullets as raw public copy. Convert them into fresh, natural sentences.
+13. For campaignStrategy, do not output internal instructions. Write the actual strategy: audience problem, campaign point of view, offer explanation, proof/detail to emphasize, and desired next step.
+14. If any field starts to sound like a prompt instruction, rewrite it as finished marketing strategy or finished channel copy before returning JSON.
 
 Return only valid JSON.`;
 }
