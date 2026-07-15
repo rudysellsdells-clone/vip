@@ -13,6 +13,7 @@ import {
   startAnalyticsSyncRun,
   type AnalyticsSyncTrigger,
 } from "@/lib/analytics/sync-runs";
+import { normalizeUtmToken } from "@/lib/analytics/utm-taxonomy";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -30,6 +31,23 @@ type OAuthCredentialRow = {
   expires_at: string | null;
 };
 
+type CampaignAttributionRow = {
+  id: string;
+  analytics_campaign_slug: string | null;
+};
+
+type AssetAttributionRow = {
+  id: string;
+  campaign_id: string | null;
+  analytics_content_slug: string | null;
+};
+
+type AttributionMaps = {
+  campaignsBySlug: Map<string, string>;
+  assetsByCampaignAndSlug: Map<string, string>;
+  uniqueAssetsBySlug: Map<string, string>;
+};
+
 function numericValue(value: string | undefined) {
   const number = Number(value ?? 0);
   return Number.isFinite(number) ? number : 0;
@@ -39,6 +57,95 @@ function ga4Date(value: string | undefined) {
   const safe = String(value ?? "");
   if (!/^\d{8}$/.test(safe)) return null;
   return `${safe.slice(0, 4)}-${safe.slice(4, 6)}-${safe.slice(6, 8)}`;
+}
+
+function meaningfulGa4Dimension(value: string | undefined) {
+  const text = String(value ?? "").trim();
+  if (!text || text === "(not set)" || text === "(not provided)") return "";
+  return text;
+}
+
+function campaignAssetKey(campaignId: string, contentSlug: string) {
+  return `${campaignId}|${contentSlug}`;
+}
+
+async function loadAttributionMaps(admin: any, accountId: string): Promise<AttributionMaps> {
+  const [{ data: campaignData, error: campaignError }, { data: assetData, error: assetError }] =
+    await Promise.all([
+      admin
+        .from("campaigns")
+        .select("id,analytics_campaign_slug")
+        .eq("account_id", accountId)
+        .is("archived_at", null),
+      admin
+        .from("generated_assets")
+        .select("id,campaign_id,analytics_content_slug")
+        .eq("account_id", accountId)
+        .is("archived_at", null),
+    ]);
+
+  if (campaignError) throw new Error(campaignError.message);
+  if (assetError) throw new Error(assetError.message);
+
+  const campaignsBySlug = new Map<string, string>();
+  for (const row of (campaignData ?? []) as CampaignAttributionRow[]) {
+    const slug = normalizeUtmToken(row.analytics_campaign_slug);
+    if (slug) campaignsBySlug.set(slug, row.id);
+  }
+
+  const assetsByCampaignAndSlug = new Map<string, string>();
+  const candidateAssetsBySlug = new Map<string, string[]>();
+
+  for (const row of (assetData ?? []) as AssetAttributionRow[]) {
+    const slug = normalizeUtmToken(row.analytics_content_slug);
+    if (!slug) continue;
+
+    if (row.campaign_id) {
+      assetsByCampaignAndSlug.set(campaignAssetKey(row.campaign_id, slug), row.id);
+    }
+
+    const candidates = candidateAssetsBySlug.get(slug) ?? [];
+    candidates.push(row.id);
+    candidateAssetsBySlug.set(slug, candidates);
+  }
+
+  const uniqueAssetsBySlug = new Map<string, string>();
+  for (const [slug, candidates] of candidateAssetsBySlug.entries()) {
+    if (candidates.length === 1) uniqueAssetsBySlug.set(slug, candidates[0]);
+  }
+
+  return {
+    campaignsBySlug,
+    assetsByCampaignAndSlug,
+    uniqueAssetsBySlug,
+  };
+}
+
+function resolveGa4Attribution({
+  campaignName,
+  contentName,
+  maps,
+}: {
+  campaignName: string;
+  contentName: string;
+  maps: AttributionMaps;
+}) {
+  const campaignSlug = normalizeUtmToken(campaignName);
+  const contentSlug = normalizeUtmToken(contentName);
+  const campaignId = campaignSlug ? maps.campaignsBySlug.get(campaignSlug) ?? null : null;
+
+  const assetId = contentSlug
+    ? (campaignId
+        ? maps.assetsByCampaignAndSlug.get(campaignAssetKey(campaignId, contentSlug))
+        : null) ?? maps.uniqueAssetsBySlug.get(contentSlug) ?? null
+    : null;
+
+  return {
+    campaignId,
+    assetId,
+    campaignSlug,
+    contentSlug,
+  };
 }
 
 async function getValidAccessToken(admin: any, source: AnalyticsSourceRow) {
@@ -138,7 +245,10 @@ export async function syncGa4AnalyticsSource({
   });
 
   try {
-    const accessToken = await getValidAccessToken(admin, source);
+    const [accessToken, attributionMaps] = await Promise.all([
+      getValidAccessToken(admin, source),
+      loadAttributionMaps(admin, source.account_id),
+    ]);
     const report = await runGoogleAnalyticsReport({
       accessToken,
       propertyId: source.external_property_id,
@@ -152,6 +262,9 @@ export async function syncGa4AnalyticsSource({
     const metricNames = (report.metricHeaders ?? []).map(
       (header) => header.name ?? "",
     );
+
+    let matchedCampaignRows = 0;
+    let matchedAssetRows = 0;
 
     const records = (report.rows ?? [])
       .map((row) => {
@@ -172,14 +285,39 @@ export async function syncGa4AnalyticsSource({
           dimensions.get("sessionDefaultChannelGroup") || "Unattributed";
         const trafficSource = dimensions.get("sessionSource") || "(direct)";
         const trafficMedium = dimensions.get("sessionMedium") || "(none)";
+        const campaignName = meaningfulGa4Dimension(
+          dimensions.get("sessionManualCampaignName"),
+        );
+        const contentName = meaningfulGa4Dimension(
+          dimensions.get("sessionManualAdContent"),
+        );
+        const termName = meaningfulGa4Dimension(
+          dimensions.get("sessionManualTerm"),
+        );
+        const attribution = resolveGa4Attribution({
+          campaignName,
+          contentName,
+          maps: attributionMaps,
+        });
+
+        if (attribution.campaignId) matchedCampaignRows += 1;
+        if (attribution.assetId) matchedAssetRows += 1;
 
         return {
           account_id: source.account_id,
           source_id: source.id,
           metric_date: metricDate,
-          dimension_key: ["ga4", channel, trafficSource, trafficMedium].join("|"),
-          campaign_id: null,
-          asset_id: null,
+          dimension_key: [
+            "ga4",
+            channel,
+            trafficSource,
+            trafficMedium,
+            attribution.campaignSlug || "none",
+            attribution.contentSlug || "none",
+            normalizeUtmToken(termName) || "none",
+          ].join("|"),
+          campaign_id: attribution.campaignId,
+          asset_id: attribution.assetId,
           channel,
           traffic_source: trafficSource,
           traffic_medium: trafficMedium,
@@ -228,6 +366,9 @@ export async function syncGa4AnalyticsSource({
           last_start_date: startDate,
           last_end_date: endDate,
           row_count: records.length,
+          matched_campaign_rows: matchedCampaignRows,
+          matched_asset_rows: matchedAssetRows,
+          attribution_version: "h1.7c2",
         },
         updated_at: syncedAt,
       })
@@ -241,6 +382,9 @@ export async function syncGa4AnalyticsSource({
       details: {
         property_id: source.external_property_id,
         report_rows: report.rows?.length ?? 0,
+        matched_campaign_rows: matchedCampaignRows,
+        matched_asset_rows: matchedAssetRows,
+        attribution_version: "h1.7c2",
       },
     });
 
@@ -251,6 +395,8 @@ export async function syncGa4AnalyticsSource({
       startDate,
       endDate,
       rows: records.length,
+      matchedCampaignRows,
+      matchedAssetRows,
       syncedAt,
     };
   } catch (error) {

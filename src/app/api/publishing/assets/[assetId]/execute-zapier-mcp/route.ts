@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { attachAccountPublishingSettingsToAsset } from "@/lib/accounts/account-publishing-settings";
+import {
+  attachAttributionToPublishingRun,
+  persistPublishingAttribution,
+  prepareAttributedPublishingPayload,
+} from "@/lib/analytics/publishing-attribution";
 import { executeZapierMcpWriteAction } from "@/lib/mcp/mcp-write-clients";
 import {
   completeZapierMcpPublishingExecution,
@@ -7,6 +12,7 @@ import {
   isAlreadySentOrPublished,
   isLinkedInPostAsset,
   publishingAssetState,
+  publishingChannelForAsset,
   publishingPreflightForAsset,
   startZapierMcpPublishingExecution,
   validatePublishingDestination,
@@ -62,7 +68,7 @@ export async function POST(_request: Request, context: RouteContext) {
         error: preflight.error,
         assetState: preflight.assetState,
       },
-      { status: preflight.status }
+      { status: preflight.status },
     );
   }
 
@@ -74,13 +80,24 @@ export async function POST(_request: Request, context: RouteContext) {
         error: missingZapierMcpConfigMessage(asset),
         assetType: assetForPublishing.asset_type,
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
-  const params = buildPublishingOutputParams(assetForPublishing);
-  const paramsRecord = params as Record<string, unknown>;
-  const destinationError = validatePublishingDestination({ asset: assetForPublishing, params: paramsRecord });
+  const baseParams = buildPublishingOutputParams(assetForPublishing) as Record<string, unknown>;
+  const channel = publishingChannelForAsset(assetForPublishing.asset_type);
+  const attributed = await prepareAttributedPublishingPayload({
+    supabase,
+    asset: assetForPublishing,
+    params: baseParams,
+    channel,
+  });
+  const assetForExecution = attributed.asset;
+  const paramsRecord = attributed.params as Record<string, unknown>;
+  const destinationError = validatePublishingDestination({
+    asset: assetForExecution,
+    params: paramsRecord,
+  });
 
   if (destinationError) {
     return NextResponse.json(
@@ -89,28 +106,62 @@ export async function POST(_request: Request, context: RouteContext) {
         payloadPreview: {
           app: config.app,
           action: config.action,
-          params,
+          params: paramsRecord,
+          attribution: attributed.attribution,
           accountPublishingSettingsResolution:
-            assetForPublishing.account_publishing_settings_resolution ?? null,
+            assetForExecution.account_publishing_settings_resolution ?? null,
         },
       },
       { status: 400 },
     );
   }
 
-  const instructions = buildPublishingInstructions(assetForPublishing);
+  const instructions = buildPublishingInstructions(assetForExecution);
   let publishingRun: Record<string, any> | null = null;
+  let trackingLink: Record<string, unknown> | null = null;
+  let attributionWarning: string | null = attributed.attribution.reason;
 
   try {
-    publishingRun = await startZapierMcpPublishingExecution({
+    try {
+      trackingLink = await persistPublishingAttribution({
+        supabase,
+        userId: user.id,
+        asset: assetForExecution,
+        attribution: attributed.attribution,
+        accountId: attributed.context.accountId,
+      });
+    } catch (error) {
+      attributionWarning =
+        error instanceof Error ? error.message : "Unable to persist the tracking link.";
+    }
+
+    const startedRun = await startZapierMcpPublishingExecution({
       supabase,
       userId: user.id,
-      asset: assetForPublishing,
+      asset: assetForExecution,
       assetId,
       config,
       params: paramsRecord,
       instructions,
     });
+    publishingRun = startedRun;
+
+    if (attributed.attribution.ready) {
+      try {
+        const updatedRun = await attachAttributionToPublishingRun({
+          supabase,
+          runId: startedRun.id,
+          userId: user.id,
+          asset: assetForExecution,
+          attribution: attributed.attribution,
+          trackingLink,
+        });
+        if (updatedRun) publishingRun = updatedRun as Record<string, any>;
+      } catch (error) {
+        attributionWarning =
+          error instanceof Error ? error.message : "Unable to attach attribution to the run.";
+      }
+    }
 
     const result = await executeZapierMcpWriteAction({
       app: config.app,
@@ -125,7 +176,7 @@ export async function POST(_request: Request, context: RouteContext) {
       supabase,
       userId: user.id,
       assetId,
-      asset: assetForPublishing,
+      asset: assetForExecution,
       config,
       run: publishingRun,
       providerResult: result,
@@ -136,6 +187,9 @@ export async function POST(_request: Request, context: RouteContext) {
       asset: sentAsset,
       run: completedRun,
       mcp: result,
+      attribution: attributed.attribution,
+      trackingLink,
+      attributionWarning,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -144,7 +198,7 @@ export async function POST(_request: Request, context: RouteContext) {
       supabase,
       userId: user.id,
       assetId,
-      asset: assetForPublishing,
+      asset: assetForExecution,
       config,
       run: publishingRun,
       errorMessage: message,
@@ -152,15 +206,16 @@ export async function POST(_request: Request, context: RouteContext) {
 
     return NextResponse.json(
       {
-        error:
-          message || "Unable to execute ZapierMCP action.",
+        error: message || "Unable to execute ZapierMCP action.",
         payloadPreview: {
           app: config.app,
           action: config.action,
-          params,
+          params: paramsRecord,
+          attribution: attributed.attribution,
         },
+        attributionWarning,
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 }
@@ -194,30 +249,40 @@ export async function GET(_request: Request, context: RouteContext) {
     asset,
   });
   const config = zapierMcpConfigForAsset(assetForPublishing);
-  const params = buildPublishingOutputParams(assetForPublishing);
-  const paramsRecord = params as Record<string, unknown>;
-  const destinationError = validatePublishingDestination({
+  const baseParams = buildPublishingOutputParams(assetForPublishing) as Record<string, unknown>;
+  const channel = publishingChannelForAsset(assetForPublishing.asset_type);
+  const attributed = await prepareAttributedPublishingPayload({
+    supabase,
     asset: assetForPublishing,
+    params: baseParams,
+    channel,
+  });
+  const paramsRecord = attributed.params as Record<string, unknown>;
+  const destinationError = validatePublishingDestination({
+    asset: attributed.asset,
     params: paramsRecord,
   });
 
   return NextResponse.json({
     ok: true,
     assetId,
-    alreadySentOrPublished: isAlreadySentOrPublished(assetForPublishing),
-    approvedForPublishing: isApprovedForPublishing(assetForPublishing),
-    assetState: publishingAssetState(assetForPublishing),
+    alreadySentOrPublished: isAlreadySentOrPublished(attributed.asset),
+    approvedForPublishing: isApprovedForPublishing(attributed.asset),
+    assetState: publishingAssetState(attributed.asset),
     app: config.app || null,
     action: config.action || null,
-    params,
+    params: paramsRecord,
+    attribution: attributed.attribution,
+    taxonomySettings: attributed.context.settings,
     accountPublishingSettingsResolution:
-      assetForPublishing.account_publishing_settings_resolution ?? null,
-    accountPublishingSettingsFound:
-      Boolean(assetForPublishing.account_publishing_settings),
-    linkedinDestinationLocked: isLinkedInPostAsset(assetForPublishing.asset_type)
+      attributed.asset.account_publishing_settings_resolution ?? null,
+    accountPublishingSettingsFound: Boolean(
+      attributed.asset.account_publishing_settings,
+    ),
+    linkedinDestinationLocked: isLinkedInPostAsset(attributed.asset.asset_type)
       ? !destinationError
       : null,
     linkedinDestinationError: destinationError || null,
-    instructions: buildPublishingInstructions(assetForPublishing),
+    instructions: buildPublishingInstructions(attributed.asset),
   });
 }

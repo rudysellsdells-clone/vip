@@ -165,6 +165,12 @@ function buildNavGroups({
           description: "Connect traffic, engagement, leads, conversions, and revenue.",
           requiresAccount: true,
         },
+        {
+          label: "UTM Taxonomy",
+          href: "/analytics/taxonomy",
+          description: "Control campaign naming, source/medium rules, and attributed links.",
+          requiresAccount: true,
+        },
       ],
     },
     {

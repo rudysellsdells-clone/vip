@@ -243,6 +243,9 @@ export async function runGoogleAnalyticsReport({
           { name: "sessionDefaultChannelGroup" },
           { name: "sessionSource" },
           { name: "sessionMedium" },
+          { name: "sessionManualCampaignName" },
+          { name: "sessionManualAdContent" },
+          { name: "sessionManualTerm" },
         ],
         metrics: [
           { name: "totalUsers" },
