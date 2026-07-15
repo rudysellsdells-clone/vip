@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { syncGa4AnalyticsSource } from "@/lib/analytics/ga4-sync";
 import {
   AnalyticsHttpError,
+  assertRequestedAnalyticsAccount,
   errorMessage,
   errorStatus,
   requireAnalyticsAccountManager,
@@ -33,6 +34,8 @@ export async function POST(request: Request) {
     } catch {
       body = {};
     }
+
+    assertRequestedAnalyticsAccount(body.accountId, accountId);
 
     const defaults = defaultDateRange();
     const startDate = validDate(textValue(body.startDate, 10)) || defaults.startDate;

@@ -352,6 +352,9 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
 
       {schemaReady ? (
         <AnalyticsSetupPanel
+          key={activeAccountId}
+          activeAccountId={activeAccountId}
+          activeAccountName={accountContext.activeAccountName ?? "Active workspace"}
           nativeSource={nativeSource ? {
             status: nativeSource.status,
             name: nativeSource.name,
@@ -442,6 +445,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
 
       {schemaReady ? (
         <AnalyticsGoalsPanel
+          key={`goals-${activeAccountId}`}
           goals={goalViews}
           eventOptions={ANALYTICS_EVENT_DEFINITIONS.map((event) => ({ name: event.name, label: event.label, category: event.category, description: event.description }))}
           canManage={accountContext.canManageActiveAccount}
@@ -450,6 +454,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
 
       {schemaReady ? (
         <AnalyticsOperationsPanel
+          key={`operations-${activeAccountId}`}
           runs={syncRunViews}
           canManage={accountContext.canManageActiveAccount}
           cronConfigured={Boolean(process.env.CRON_SECRET?.trim())}

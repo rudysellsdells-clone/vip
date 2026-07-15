@@ -58,12 +58,16 @@ function formatDateTime(value: string | null) {
 }
 
 export function AnalyticsSetupPanel({
+  activeAccountId,
+  activeAccountName,
   nativeSource,
   ga4Source,
   canManage,
   googleConfigured,
   trackerBaseUrl,
 }: {
+  activeAccountId: string;
+  activeAccountName: string;
   nativeSource: NativeSource;
   ga4Source: Ga4Source;
   canManage: boolean;
@@ -82,6 +86,8 @@ export function AnalyticsSetupPanel({
   const [rollupBusy, setRollupBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<"success" | "error">("success");
+  const ga4Connected = Boolean(ga4Source?.propertyId);
+  const ga4Authorized = Boolean(ga4Source?.availableProperties.length);
 
   useEffect(() => {
     if (!origin && typeof window !== "undefined") {
@@ -107,7 +113,7 @@ export function AnalyticsSetupPanel({
       const response = await fetch("/api/analytics/native/source", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ websiteUrl, rotateKey }),
+        body: JSON.stringify({ accountId: activeAccountId, websiteUrl, rotateKey }),
       });
       const payload = (await response.json()) as {
         source?: { collection_key?: string; website_url?: string };
@@ -160,7 +166,7 @@ export function AnalyticsSetupPanel({
       const response = await fetch("/api/analytics/ga4/property", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ propertyId: selectedPropertyId }),
+        body: JSON.stringify({ accountId: activeAccountId, propertyId: selectedPropertyId }),
       });
       const payload = (await response.json()) as {
         error?: string;
@@ -186,6 +192,64 @@ export function AnalyticsSetupPanel({
     }
   }
 
+  function reconnectGa4() {
+    if (!canManage || !googleConfigured) return;
+
+    const confirmed = window.confirm(
+      `Replace the Google Analytics authorization for ${activeAccountName}? This affects only this Marketing VIP account. Other account connections will not change.`,
+    );
+
+    if (confirmed) {
+      window.location.assign(
+        `/api/analytics/ga4/connect?replace=1&account_id=${encodeURIComponent(activeAccountId)}`,
+      );
+    }
+  }
+
+  async function disconnectGa4() {
+    if (!canManage || !ga4Source) return;
+
+    const confirmed = window.confirm(
+      `Disconnect Google Analytics from ${activeAccountName}? Stored Google credentials will be removed and automatic syncing will stop. Existing imported reporting will remain available.`,
+    );
+
+    if (!confirmed) return;
+
+    setGa4Busy(true);
+    setMessage(null);
+
+    try {
+      const response = await fetch("/api/analytics/ga4/disconnect", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountId: activeAccountId }),
+      });
+      const payload = (await response.json()) as {
+        error?: string;
+        message?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(responseMessage(payload, "Google Analytics disconnect failed."));
+      }
+
+      showMessage(
+        "success",
+        payload.message ||
+          `Google Analytics was disconnected from ${activeAccountName}. Cached reporting was retained.`,
+      );
+      setSelectedPropertyId("");
+      router.refresh();
+    } catch (error) {
+      showMessage(
+        "error",
+        error instanceof Error ? error.message : "Google Analytics disconnect failed.",
+      );
+    } finally {
+      setGa4Busy(false);
+    }
+  }
+
   async function syncGa4() {
     setGa4Busy(true);
     setMessage(null);
@@ -194,7 +258,7 @@ export function AnalyticsSetupPanel({
       const response = await fetch("/api/analytics/ga4/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ accountId: activeAccountId }),
       });
       const payload = (await response.json()) as { error?: string };
 
@@ -252,7 +316,17 @@ export function AnalyticsSetupPanel({
             Install first-party tracking for Marketing VIP attribution, then connect GA4 for historical traffic and familiar website reporting.
           </p>
         </div>
-        <span className={styles.panelPill}>H1.7B</span>
+        <span className={styles.panelPill}>H1.7C3</span>
+      </div>
+
+      <div className={styles.accountScopeBanner}>
+        <div>
+          <span>Active analytics account</span>
+          <strong>{activeAccountName}</strong>
+        </div>
+        <p>
+          Native tracking, GA4 credentials, property selection, imported metrics, goals, and UTM settings are isolated to this Marketing VIP account.
+        </p>
       </div>
 
       {message ? (
@@ -346,14 +420,22 @@ export function AnalyticsSetupPanel({
             <div>
               <span className={styles.sourceIcon}>G4</span>
             </div>
-            <span className={ga4Source?.propertyId ? styles.sourceActive : styles.sourcePending}>
-              {ga4Source?.propertyId ? "Connected" : ga4Source ? "Property required" : "Not connected"}
+            <span className={ga4Connected ? styles.sourceActive : styles.sourcePending}>
+              {ga4Connected
+                ? "Connected"
+                : ga4Authorized
+                  ? "Property required"
+                  : "Not connected"}
             </span>
           </div>
           <h3>Google Analytics 4</h3>
           <p>
             Import users, sessions, engagement, page views, channel attribution, key events, and revenue into Marketing VIP's cached reporting model.
           </p>
+
+          <div className={styles.connectionScopeNote}>
+            This connection belongs only to <strong>{activeAccountName}</strong>. Switch accounts before connecting a different client's GA4 property.
+          </div>
 
           {!googleConfigured ? (
             <div className={styles.inlineWarning}>
@@ -383,46 +465,79 @@ export function AnalyticsSetupPanel({
           ) : null}
 
           <div className={styles.setupActions}>
-            {!ga4Source ? (
+            {!ga4Connected && !ga4Authorized ? (
               <a
                 className={styles.setupPrimaryLink}
-                href={googleConfigured && canManage ? "/api/analytics/ga4/connect" : undefined}
+                href={
+                  googleConfigured && canManage
+                    ? `/api/analytics/ga4/connect?account_id=${encodeURIComponent(activeAccountId)}`
+                    : undefined
+                }
                 aria-disabled={!googleConfigured || !canManage}
               >
-                Connect Google Analytics
+                Connect Google Analytics for {activeAccountName}
               </a>
-            ) : ga4Source.availableProperties.length && !ga4Source.propertyId ? (
-              <button
-                type="button"
-                className={styles.setupPrimaryButton}
-                onClick={selectProperty}
-                disabled={!canManage || ga4Busy || !selectedPropertyId}
-              >
-                {ga4Busy ? "Connecting…" : "Use Selected Property"}
-              </button>
+            ) : ga4Authorized && !ga4Connected ? (
+              <>
+                <button
+                  type="button"
+                  className={styles.setupPrimaryButton}
+                  onClick={selectProperty}
+                  disabled={!canManage || ga4Busy || !selectedPropertyId}
+                >
+                  {ga4Busy ? "Connecting…" : "Use Selected Property"}
+                </button>
+                <button
+                  type="button"
+                  className={styles.setupTextButton}
+                  onClick={disconnectGa4}
+                  disabled={!canManage || ga4Busy}
+                >
+                  Cancel Google Connection
+                </button>
+              </>
             ) : (
               <>
                 <button
                   type="button"
                   className={styles.setupPrimaryButton}
                   onClick={syncGa4}
-                  disabled={!canManage || ga4Busy || !ga4Source.propertyId}
+                  disabled={!canManage || ga4Busy || !ga4Source?.propertyId}
                 >
                   {ga4Busy ? "Synchronizing…" : "Sync Last 30 Days"}
                 </button>
-                <a
-                  className={styles.setupSecondaryLink}
-                  href={googleConfigured && canManage ? "/api/analytics/ga4/connect" : undefined}
-                  aria-disabled={!googleConfigured || !canManage}
+                <button
+                  type="button"
+                  className={styles.setupSecondaryButton}
+                  onClick={reconnectGa4}
+                  disabled={!googleConfigured || !canManage || ga4Busy}
                 >
-                  Reconnect Google
-                </a>
+                  Replace GA4 Connection
+                </button>
+                <button
+                  type="button"
+                  className={styles.setupDangerButton}
+                  onClick={disconnectGa4}
+                  disabled={!canManage || ga4Busy}
+                >
+                  Disconnect GA4
+                </button>
               </>
             )}
           </div>
 
+          {ga4Connected ? (
+            <div className={styles.connectionReplacementWarning}>
+              Replacing this authorization changes GA4 access only for <strong>{activeAccountName}</strong>. It does not alter any other Marketing VIP account.
+            </div>
+          ) : null}
+
           {ga4Source?.selectedProperty ? (
             <dl className={styles.setupDetails}>
+              <div>
+                <dt>GA4 account</dt>
+                <dd>{ga4Source.selectedProperty.accountDisplayName}</dd>
+              </div>
               <div>
                 <dt>Property</dt>
                 <dd>{ga4Source.selectedProperty.propertyDisplayName}</dd>

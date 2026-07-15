@@ -104,6 +104,30 @@ export async function requireAnalyticsAccountManager() {
   };
 }
 
+
+export function assertRequestedAnalyticsAccount(
+  requestedAccountId: unknown,
+  activeAccountId: string,
+) {
+  const requested = optionalUuid(requestedAccountId);
+
+  if (!requested) {
+    throw new AnalyticsHttpError(
+      "The analytics request did not identify the active Marketing VIP account.",
+      400,
+    );
+  }
+
+  if (requested !== activeAccountId) {
+    throw new AnalyticsHttpError(
+      "The active Marketing VIP account changed before this analytics action completed. Refresh the page and try again.",
+      409,
+    );
+  }
+
+  return requested;
+}
+
 export function errorStatus(error: unknown) {
   return error instanceof AnalyticsHttpError ? error.status : 500;
 }

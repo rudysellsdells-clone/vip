@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   AnalyticsHttpError,
+  assertRequestedAnalyticsAccount,
   createAnalyticsCollectionKey,
   errorMessage,
   errorStatus,
@@ -37,6 +38,7 @@ export async function POST(request: Request) {
   try {
     const { admin, user, accountId } = await requireAnalyticsAccountManager();
     const body = (await request.json()) as Record<string, unknown>;
+    assertRequestedAnalyticsAccount(body.accountId, accountId);
     const websiteUrl = normalizeWebsiteUrl(body.websiteUrl);
     const requestedName = textValue(body.name, 120) || "Marketing VIP Native";
     const rotateKey = body.rotateKey === true;

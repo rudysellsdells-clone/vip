@@ -119,6 +119,7 @@ export default async function UtmTaxonomyPage() {
         description="These settings apply to the active workspace and are used by the canonical publishing attribution layer."
       >
         <UtmTaxonomyPanel
+          key={accountId}
           accountId={accountId}
           canManage={accountContext.canManageActiveAccount}
           initialSettings={settings}

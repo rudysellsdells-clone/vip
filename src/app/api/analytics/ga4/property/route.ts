@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { syncGa4AnalyticsSource } from "@/lib/analytics/ga4-sync";
 import {
   AnalyticsHttpError,
+  assertRequestedAnalyticsAccount,
   errorMessage,
   errorStatus,
   requireAnalyticsAccountManager,
@@ -25,6 +26,7 @@ export async function POST(request: Request) {
   try {
     const { admin, accountId, user } = await requireAnalyticsAccountManager();
     const body = (await request.json()) as Record<string, unknown>;
+    assertRequestedAnalyticsAccount(body.accountId, accountId);
     const propertyId = textValue(body.propertyId, 50).replace(/^properties\//, "");
 
     if (!propertyId) {
