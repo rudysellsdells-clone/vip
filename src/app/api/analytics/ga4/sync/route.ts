@@ -26,7 +26,7 @@ function validDate(value: string) {
 
 export async function POST(request: Request) {
   try {
-    const { admin, accountId } = await requireAnalyticsAccountManager();
+    const { admin, accountId, user } = await requireAnalyticsAccountManager();
     let body: Record<string, unknown> = {};
     try {
       body = (await request.json()) as Record<string, unknown>;
@@ -66,6 +66,8 @@ export async function POST(request: Request) {
       sourceId: String(source.id),
       startDate,
       endDate,
+      triggerType: "manual",
+      createdBy: user.id,
     });
 
     return NextResponse.json({ synced: true, result });

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { rollupNativeAnalyticsSource } from "@/lib/analytics/native-rollup";
 import {
   AnalyticsHttpError,
   errorMessage,
@@ -6,8 +7,6 @@ import {
   requireAnalyticsAccountManager,
   textValue,
 } from "@/lib/analytics/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { untypedSupabase } from "@/lib/supabase/untyped";
 
 export const runtime = "nodejs";
 
@@ -26,42 +25,19 @@ function validDate(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : "";
 }
 
-async function handle(request: Request) {
+export async function POST(request: Request) {
   try {
-    const cronSecret = process.env.CRON_SECRET?.trim() ?? "";
-    const authorization = request.headers.get("authorization") ?? "";
-    const isCron = Boolean(
-      cronSecret && authorization === `Bearer ${cronSecret}`,
-    );
-    let targetAccountId: string | null = null;
-
-    if (!isCron) {
-      const manager = await requireAnalyticsAccountManager();
-      targetAccountId = manager.accountId;
+    const { admin, accountId, user } = await requireAnalyticsAccountManager();
+    let body: Record<string, unknown> = {};
+    try {
+      body = (await request.json()) as Record<string, unknown>;
+    } catch {
+      body = {};
     }
 
     const defaults = defaultRange();
-    const requestUrl = new URL(request.url);
-    let body: Record<string, unknown> = {};
-
-    if (request.method === "POST") {
-      try {
-        body = (await request.json()) as Record<string, unknown>;
-      } catch {
-        body = {};
-      }
-    }
-
-    const startDate =
-      validDate(
-        textValue(body.startDate, 10) ||
-          textValue(requestUrl.searchParams.get("startDate"), 10),
-      ) || defaults.startDate;
-    const endDate =
-      validDate(
-        textValue(body.endDate, 10) ||
-          textValue(requestUrl.searchParams.get("endDate"), 10),
-      ) || defaults.endDate;
+    const startDate = validDate(textValue(body.startDate, 10)) || defaults.startDate;
+    const endDate = validDate(textValue(body.endDate, 10)) || defaults.endDate;
 
     if (new Date(endDate).getTime() < new Date(startDate).getTime()) {
       throw new AnalyticsHttpError(
@@ -69,28 +45,34 @@ async function handle(request: Request) {
       );
     }
 
-    const admin = untypedSupabase(createAdminClient());
-    const { data, error } = await admin.rpc("rollup_native_analytics", {
-      start_date: startDate,
-      end_date: endDate,
-      target_account_id: targetAccountId,
+    const { data: source, error: sourceError } = await admin
+      .from("analytics_data_sources")
+      .select("id")
+      .eq("account_id", accountId)
+      .eq("source_type", "native")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (sourceError) throw new AnalyticsHttpError(sourceError.message);
+    if (!source) {
+      throw new AnalyticsHttpError("Enable Marketing VIP Native before refreshing metrics.");
+    }
+
+    const result = await rollupNativeAnalyticsSource({
+      sourceId: String(source.id),
+      accountId,
+      startDate,
+      endDate,
+      triggerType: "manual",
+      createdBy: user.id,
     });
 
-    if (error) throw new AnalyticsHttpError(error.message);
-
-    return NextResponse.json({ rolledUp: true, result: data });
+    return NextResponse.json({ rolledUp: true, result });
   } catch (error) {
     return NextResponse.json(
       { error: errorMessage(error, "Native analytics rollup failed.") },
       { status: errorStatus(error) },
     );
   }
-}
-
-export async function GET(request: Request) {
-  return handle(request);
-}
-
-export async function POST(request: Request) {
-  return handle(request);
 }

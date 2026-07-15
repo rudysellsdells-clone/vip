@@ -3,12 +3,43 @@ import { redirect } from "next/navigation";
 import { getUserAccountContext } from "@/lib/accounts/account-context";
 import { ANALYTICS_EVENT_DEFINITIONS } from "@/lib/analytics/event-taxonomy";
 import { googleAnalyticsOAuthIsConfigured } from "@/lib/analytics/google";
-import { AnalyticsSetupPanel, type AnalyticsPropertyOption } from "@/components/analytics/AnalyticsSetupPanel";
+import {
+  EMPTY_ANALYTICS_TOTALS,
+  addAnalyticsMetricRow,
+  analyticsConversionRate,
+  analyticsEngagementRate,
+  analyticsQueryString,
+  dateKey,
+  formatAnalyticsCurrency,
+  formatAnalyticsDateTime,
+  formatAnalyticsInteger,
+  resolveAnalyticsDateRange,
+  resolveAnalyticsSourceFilter,
+  safeAnalyticsNumber,
+  type AnalyticsDailyMetricRow,
+  type AnalyticsMetricTotals,
+} from "@/lib/analytics/reporting";
+import {
+  AnalyticsSetupPanel,
+  type AnalyticsPropertyOption,
+} from "@/components/analytics/AnalyticsSetupPanel";
+import {
+  AnalyticsGoalsPanel,
+  type AnalyticsGoalView,
+} from "@/components/analytics/AnalyticsGoalsPanel";
+import {
+  AnalyticsOperationsPanel,
+  type AnalyticsSyncRunView,
+} from "@/components/analytics/AnalyticsOperationsPanel";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 import styles from "./Analytics.module.css";
 
 export const dynamic = "force-dynamic";
+
+type PageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
 
 type DataSourceRow = {
   id: string;
@@ -21,181 +52,209 @@ type DataSourceRow = {
   last_error: string | null;
   collection_key: string | null;
   key_rotated_at: string | null;
+  auto_sync_enabled: boolean;
+  sync_frequency: string;
+  next_sync_at: string | null;
   settings: Record<string, unknown> | null;
 };
 
-type DailyMetricRow = {
-  metric_date: string;
-  channel: string | null;
-  users_count: number | string | null;
-  sessions_count: number | string | null;
-  engaged_sessions_count: number | string | null;
-  page_views_count: number | string | null;
-  leads_count: number | string | null;
-  conversions_count: number | string | null;
-  revenue: number | string | null;
+type GoalRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  event_name: string;
+  goal_type: string;
+  is_primary: boolean;
+  is_active: boolean;
+  default_value: number | string | null;
+  currency_code: string;
 };
 
-type MetricTotals = {
-  users: number;
-  sessions: number;
-  engagedSessions: number;
-  pageViews: number;
-  leads: number;
-  conversions: number;
-  revenue: number;
+type SyncRunRow = {
+  id: string;
+  source_id: string | null;
+  source_type: "native" | "ga4";
+  trigger_type: string;
+  status: "running" | "completed" | "failed";
+  start_date: string;
+  end_date: string;
+  rows_processed: number | string;
+  error_message: string | null;
+  started_at: string;
+  completed_at: string | null;
 };
 
-const EMPTY_TOTALS: MetricTotals = {
-  users: 0,
-  sessions: 0,
-  engagedSessions: 0,
-  pageViews: 0,
-  leads: 0,
-  conversions: 0,
-  revenue: 0,
+type CampaignRow = { id: string; name: string; status: string | null };
+type AssetRow = {
+  id: string;
+  title: string | null;
+  asset_type: string | null;
+  status: string | null;
+  campaign_id: string | null;
 };
-
-function safeNumber(value: unknown) {
-  const parsed = typeof value === "number" ? value : Number(value ?? 0);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function formatInteger(value: number) {
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
-}
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function formatDateTime(value: string | null) {
-  if (!value) return "Not synced yet";
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function dateKey(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
-
-function buildDateWindow(days: number) {
-  const end = new Date();
-  const start = new Date();
-  start.setUTCDate(start.getUTCDate() - (days - 1));
-
-  return {
-    end,
-    startKey: dateKey(start),
-    endKey: dateKey(end),
-  };
-}
-
-function addMetricRow(totals: MetricTotals, row: DailyMetricRow): MetricTotals {
-  return {
-    users: totals.users + safeNumber(row.users_count),
-    sessions: totals.sessions + safeNumber(row.sessions_count),
-    engagedSessions: totals.engagedSessions + safeNumber(row.engaged_sessions_count),
-    pageViews: totals.pageViews + safeNumber(row.page_views_count),
-    leads: totals.leads + safeNumber(row.leads_count),
-    conversions: totals.conversions + safeNumber(row.conversions_count),
-    revenue: totals.revenue + safeNumber(row.revenue),
-  };
-}
 
 function statusLabel(status: DataSourceRow["status"]) {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
-function engagementRate(totals: MetricTotals) {
-  if (!totals.sessions) return 0;
-  return (totals.engagedSessions / totals.sessions) * 100;
+function totalsByIdentifier(
+  metrics: AnalyticsDailyMetricRow[],
+  key: "campaign_id" | "asset_id",
+) {
+  const map = new Map<string, AnalyticsMetricTotals>();
+  metrics.forEach((row) => {
+    const identifier = row[key];
+    if (!identifier) return;
+    map.set(identifier, addAnalyticsMetricRow(map.get(identifier) ?? EMPTY_ANALYTICS_TOTALS, row));
+  });
+  return map;
 }
 
-function conversionRate(totals: MetricTotals) {
-  if (!totals.sessions) return 0;
-  return (totals.conversions / totals.sessions) * 100;
-}
-
-export default async function AnalyticsPage() {
+export default async function AnalyticsPage({ searchParams }: PageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const range = resolveAnalyticsDateRange(resolvedSearchParams.days);
+  const sourceFilter = resolveAnalyticsSourceFilter(resolvedSearchParams.source);
   const supabase = untypedSupabase(await createClient());
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    redirect("/login");
-  }
+  if (!user) redirect("/login");
 
   const accountContext = await getUserAccountContext({ supabase, userId: user.id });
   const activeAccountId = accountContext.activeAccountId;
+  if (!activeAccountId) redirect("/accounts");
 
-  if (!activeAccountId) {
-    redirect("/accounts");
-  }
+  const sourcesResult = await supabase
+    .from("analytics_data_sources")
+    .select(
+      "id,source_type,status,name,website_url,external_property_id,last_synced_at,last_error,collection_key,key_rotated_at,auto_sync_enabled,sync_frequency,next_sync_at,settings",
+    )
+    .eq("account_id", activeAccountId)
+    .order("created_at", { ascending: true });
 
-  const window = buildDateWindow(30);
-  const [sourcesResult, metricsResult, goalsResult] = await Promise.all([
-    supabase
-      .from("analytics_data_sources")
-      .select("id,source_type,status,name,website_url,external_property_id,last_synced_at,last_error,collection_key,key_rotated_at,settings")
-      .eq("account_id", activeAccountId)
-      .order("created_at", { ascending: true }),
-    supabase
+  const sources = (sourcesResult.data ?? []) as DataSourceRow[];
+  const filteredSourceIds = sources
+    .filter((source) => sourceFilter === "all" || source.source_type === sourceFilter)
+    .map((source) => source.id);
+
+  let metricsResult: { data: unknown[] | null; error: { message?: string } | null } = {
+    data: [],
+    error: null,
+  };
+
+  if (sourceFilter === "all" || filteredSourceIds.length) {
+    let metricsQuery = supabase
       .from("analytics_daily_metrics")
       .select(
-        "metric_date,channel,users_count,sessions_count,engaged_sessions_count,page_views_count,leads_count,conversions_count,revenue",
+        "source_id,metric_date,campaign_id,asset_id,channel,traffic_source,traffic_medium,users_count,sessions_count,engaged_sessions_count,page_views_count,leads_count,conversions_count,revenue",
       )
       .eq("account_id", activeAccountId)
-      .gte("metric_date", window.startKey)
-      .lte("metric_date", window.endKey)
-      .order("metric_date", { ascending: true }),
+      .gte("metric_date", range.startDate)
+      .lte("metric_date", range.endDate)
+      .order("metric_date", { ascending: true });
+
+    if (sourceFilter !== "all") metricsQuery = metricsQuery.in("source_id", filteredSourceIds);
+    metricsResult = await metricsQuery;
+  }
+
+  const [goalsResult, syncRunsResult] = await Promise.all([
     supabase
       .from("analytics_goals")
-      .select("id")
+      .select(
+        "id,name,description,event_name,goal_type,is_primary,is_active,default_value,currency_code",
+      )
       .eq("account_id", activeAccountId)
-      .eq("is_active", true),
+      .order("is_primary", { ascending: false })
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("analytics_sync_runs")
+      .select(
+        "id,source_id,source_type,trigger_type,status,start_date,end_date,rows_processed,error_message,started_at,completed_at",
+      )
+      .eq("account_id", activeAccountId)
+      .order("started_at", { ascending: false })
+      .limit(12),
   ]);
 
-  const schemaReady = !sourcesResult.error && !metricsResult.error && !goalsResult.error;
-  const sources = (sourcesResult.data ?? []) as DataSourceRow[];
-  const metrics = (metricsResult.data ?? []) as DailyMetricRow[];
-  const activeGoalCount = goalsResult.data?.length ?? 0;
-  const totals = metrics.reduce(addMetricRow, EMPTY_TOTALS);
+  const schemaReady =
+    !sourcesResult.error && !metricsResult.error && !goalsResult.error && !syncRunsResult.error;
+  const metrics = (metricsResult.data ?? []) as AnalyticsDailyMetricRow[];
+  const goals = (goalsResult.data ?? []) as GoalRow[];
+  const syncRuns = (syncRunsResult.data ?? []) as SyncRunRow[];
+  const totals = metrics.reduce(addAnalyticsMetricRow, EMPTY_ANALYTICS_TOTALS);
 
-  const channelMap = new Map<string, MetricTotals>();
+  const campaignTotals = totalsByIdentifier(metrics, "campaign_id");
+  const assetTotals = totalsByIdentifier(metrics, "asset_id");
+  const campaignIds = Array.from(campaignTotals.keys());
+  const assetIds = Array.from(assetTotals.keys());
+
+  const [campaignsResult, assetsResult] = await Promise.all([
+    campaignIds.length
+      ? supabase
+          .from("campaigns")
+          .select("id,name,status")
+          .eq("account_id", activeAccountId)
+          .in("id", campaignIds)
+      : Promise.resolve({ data: [], error: null }),
+    assetIds.length
+      ? supabase
+          .from("generated_assets")
+          .select("id,title,asset_type,status,campaign_id")
+          .eq("account_id", activeAccountId)
+          .in("id", assetIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  const campaignMap = new Map(
+    ((campaignsResult.data ?? []) as CampaignRow[]).map((campaign) => [campaign.id, campaign]),
+  );
+  const assetMap = new Map(
+    ((assetsResult.data ?? []) as AssetRow[]).map((asset) => [asset.id, asset]),
+  );
+  const queryString = analyticsQueryString({ days: range.days, source: sourceFilter });
+
+  const campaignPerformance = Array.from(campaignTotals.entries())
+    .map(([id, performance]) => ({
+      id,
+      name: campaignMap.get(id)?.name ?? "Unknown campaign",
+      status: campaignMap.get(id)?.status ?? null,
+      performance,
+    }))
+    .sort((a, b) => b.performance.conversions - a.performance.conversions || b.performance.sessions - a.performance.sessions)
+    .slice(0, 10);
+
+  const assetPerformance = Array.from(assetTotals.entries())
+    .map(([id, performance]) => ({
+      id,
+      title: assetMap.get(id)?.title ?? `${assetMap.get(id)?.asset_type ?? "Generated"} asset`,
+      assetType: assetMap.get(id)?.asset_type ?? "asset",
+      performance,
+    }))
+    .sort((a, b) => b.performance.conversions - a.performance.conversions || b.performance.sessions - a.performance.sessions)
+    .slice(0, 10);
+
+  const channelMap = new Map<string, AnalyticsMetricTotals>();
   metrics.forEach((row) => {
     const channel = row.channel?.trim() || "Unattributed";
-    const current = channelMap.get(channel) ?? EMPTY_TOTALS;
-    channelMap.set(channel, addMetricRow(current, row));
+    channelMap.set(channel, addAnalyticsMetricRow(channelMap.get(channel) ?? EMPTY_ANALYTICS_TOTALS, row));
   });
-
   const channelRows = Array.from(channelMap.entries())
-    .map(([channel, channelTotals]) => ({ channel, totals: channelTotals }))
-    .sort((a, b) => b.totals.sessions - a.totals.sessions)
-    .slice(0, 6);
+    .map(([channel, performance]) => ({ channel, performance }))
+    .sort((a, b) => b.performance.sessions - a.performance.sessions)
+    .slice(0, 8);
 
   const dailySessions = new Map<string, number>();
   metrics.forEach((row) => {
     dailySessions.set(
       row.metric_date,
-      (dailySessions.get(row.metric_date) ?? 0) + safeNumber(row.sessions_count),
+      (dailySessions.get(row.metric_date) ?? 0) + safeAnalyticsNumber(row.sessions_count),
     );
   });
-
-  const trendDays = Array.from({ length: 14 }, (_, index) => {
-    const day = new Date(window.end);
-    day.setUTCDate(day.getUTCDate() - (13 - index));
+  const trendLength = Math.min(14, range.days);
+  const trendDays = Array.from({ length: trendLength }, (_, index) => {
+    const day = new Date();
+    day.setUTCDate(day.getUTCDate() - (trendLength - 1 - index));
     const key = dateKey(day);
     return {
       key,
@@ -216,28 +275,48 @@ export default async function AnalyticsPage() {
       ? (ga4Settings.selected_property as AnalyticsPropertyOption)
       : null;
   const trackerBaseUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
-  const googleConfigured = googleAnalyticsOAuthIsConfigured();
+
+  const goalViews: AnalyticsGoalView[] = goals.map((goal) => ({
+    id: goal.id,
+    name: goal.name,
+    description: goal.description,
+    eventName: goal.event_name,
+    goalType: goal.goal_type,
+    isPrimary: goal.is_primary,
+    isActive: goal.is_active,
+    defaultValue: goal.default_value === null ? null : safeAnalyticsNumber(goal.default_value),
+    currencyCode: goal.currency_code,
+  }));
+  const sourceNameMap = new Map(sources.map((source) => [source.id, source.name]));
+  const syncRunViews: AnalyticsSyncRunView[] = syncRuns.map((run) => ({
+    id: run.id,
+    sourceName: run.source_id ? sourceNameMap.get(run.source_id) ?? run.source_type : run.source_type,
+    sourceType: run.source_type,
+    triggerType: run.trigger_type,
+    status: run.status,
+    startDate: run.start_date,
+    endDate: run.end_date,
+    rowsProcessed: safeAnalyticsNumber(run.rows_processed),
+    errorMessage: run.error_message,
+    startedAt: run.started_at,
+    completedAt: run.completed_at,
+  }));
 
   return (
     <main className={styles.page}>
       <section className={styles.hero}>
         <div>
-          <p className={styles.eyebrow}>
-            Analytics · {accountContext.activeAccountName ?? "Active workspace"}
-          </p>
-          <h1 className={styles.heroTitle}>See what is working—and what to do next.</h1>
+          <p className={styles.eyebrow}>Analytics · {accountContext.activeAccountName ?? "Active workspace"}</p>
+          <h1 className={styles.heroTitle}>Connect marketing activity to business results.</h1>
           <p className={styles.heroCopy}>
-            Marketing VIP analytics will connect strategy, content, traffic, leads, conversions,
-            and revenue without making Google Analytics the permanent source of truth.
+            Review traffic, conversions, revenue, campaign performance, and data health from one account-scoped reporting system.
           </p>
         </div>
         <div className={styles.heroStatus}>
           <span className={schemaReady ? styles.statusReady : styles.statusWarning}>
-            {schemaReady ? "Collection and connections ready" : "H1.7B migration required"}
+            {schemaReady ? "H1.7C reporting operational" : "H1.7C migration required"}
           </span>
-          <p>
-            Reporting window: {window.startKey} through {window.endKey}
-          </p>
+          <p>{range.startDate} through {range.endDate}</p>
         </div>
       </section>
 
@@ -245,13 +324,31 @@ export default async function AnalyticsPage() {
         <section className={styles.notice}>
           <div>
             <p className={styles.noticeLabel}>Setup required</p>
-            <h2>Apply the H1.7A and H1.7B analytics migrations.</h2>
-            <p>
-              The analytics page is installed, but the account-scoped collection or connection fields are unavailable. Apply both migrations in order, then reload this page.
-            </p>
+            <h2>Apply the H1.7C1 analytics migration.</h2>
+            <p>The dashboard needs sync-history and reporting-operation fields before this release can run.</p>
           </div>
         </section>
       ) : null}
+
+      <form className={styles.filterBar} method="get">
+        <div>
+          <label htmlFor="analytics-days">Reporting window</label>
+          <select id="analytics-days" name="days" defaultValue={String(range.days)}>
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
+          </select>
+        </div>
+        <div>
+          <label htmlFor="analytics-source">Data source</label>
+          <select id="analytics-source" name="source" defaultValue={sourceFilter}>
+            <option value="all">All sources</option>
+            <option value="native">Marketing VIP Native</option>
+            <option value="ga4">Google Analytics 4</option>
+          </select>
+        </div>
+        <button type="submit" className={styles.secondaryButton}>Apply Filters</button>
+      </form>
 
       {schemaReady ? (
         <AnalyticsSetupPanel
@@ -272,198 +369,113 @@ export default async function AnalyticsPage() {
             selectedProperty,
           } : null}
           canManage={accountContext.canManageActiveAccount}
-          googleConfigured={googleConfigured}
+          googleConfigured={googleAnalyticsOAuthIsConfigured()}
           trackerBaseUrl={trackerBaseUrl}
         />
       ) : null}
 
       <section className={styles.metricGrid} aria-label="Analytics summary">
-        <article className={styles.metricCard}>
-          <p>Sessions</p>
-          <strong>{formatInteger(totals.sessions)}</strong>
-          <span>{formatInteger(totals.users)} users</span>
-        </article>
-        <article className={styles.metricCard}>
-          <p>Page views</p>
-          <strong>{formatInteger(totals.pageViews)}</strong>
-          <span>{engagementRate(totals).toFixed(1)}% engagement rate</span>
-        </article>
-        <article className={styles.metricCard}>
-          <p>Leads</p>
-          <strong>{formatInteger(totals.leads)}</strong>
-          <span>{activeGoalCount} active goals</span>
-        </article>
-        <article className={styles.metricCard}>
-          <p>Conversions</p>
-          <strong>{formatInteger(totals.conversions)}</strong>
-          <span>{conversionRate(totals).toFixed(1)}% session conversion rate</span>
-        </article>
-        <article className={styles.metricCard}>
-          <p>Attributed revenue</p>
-          <strong>{formatCurrency(totals.revenue)}</strong>
-          <span>Campaign and asset attribution</span>
-        </article>
+        <article className={styles.metricCard}><p>Sessions</p><strong>{formatAnalyticsInteger(totals.sessions)}</strong><span>{formatAnalyticsInteger(totals.users)} users</span></article>
+        <article className={styles.metricCard}><p>Page views</p><strong>{formatAnalyticsInteger(totals.pageViews)}</strong><span>{analyticsEngagementRate(totals).toFixed(1)}% engagement rate</span></article>
+        <article className={styles.metricCard}><p>Leads</p><strong>{formatAnalyticsInteger(totals.leads)}</strong><span>{goalViews.filter((goal) => goal.isActive).length} active goals</span></article>
+        <article className={styles.metricCard}><p>Conversions</p><strong>{formatAnalyticsInteger(totals.conversions)}</strong><span>{analyticsConversionRate(totals).toFixed(1)}% session conversion rate</span></article>
+        <article className={styles.metricCard}><p>Attributed revenue</p><strong>{formatAnalyticsCurrency(totals.revenue)}</strong><span>Native campaign and asset attribution</span></article>
       </section>
 
       <div className={styles.twoColumn}>
         <section className={styles.panel}>
-          <div className={styles.panelHeader}>
-            <div>
-              <p className={styles.panelEyebrow}>Traffic trend</p>
-              <h2>Sessions over the last 14 days</h2>
-            </div>
-            <span className={styles.panelPill}>Cached reporting</span>
-          </div>
-
-          {totals.sessions > 0 ? (
+          <div className={styles.panelHeader}><div><p className={styles.panelEyebrow}>Traffic trend</p><h2>Recent sessions</h2></div><span className={styles.panelPill}>{range.label}</span></div>
+          {totals.sessions ? (
             <div className={styles.chart}>
               {trendDays.map((day) => (
                 <div key={day.key} className={styles.chartColumn} title={`${day.label}: ${day.sessions} sessions`}>
-                  <div className={styles.chartTrack}>
-                    <span
-                      className={styles.chartBar}
-                      style={{ height: `${Math.max((day.sessions / maxDailySessions) * 100, day.sessions ? 5 : 0)}%` }}
-                    />
-                  </div>
+                  <div className={styles.chartTrack}><span className={styles.chartBar} style={{ height: `${Math.max((day.sessions / maxDailySessions) * 100, day.sessions ? 5 : 0)}%` }} /></div>
                   <span>{day.label}</span>
                 </div>
               ))}
             </div>
-          ) : (
-            <div className={styles.emptyState}>
-              <strong>No reporting data yet.</strong>
-              <p>Traffic will appear after the native collector or GA4 synchronization is enabled.</p>
-            </div>
-          )}
+          ) : <div className={styles.emptyState}><strong>No reporting data in this view.</strong><p>Change the source or date filter, or run a synchronization.</p></div>}
         </section>
 
         <section className={styles.panel}>
-          <div className={styles.panelHeader}>
-            <div>
-              <p className={styles.panelEyebrow}>Acquisition</p>
-              <h2>Channel performance</h2>
-            </div>
-          </div>
-
+          <div className={styles.panelHeader}><div><p className={styles.panelEyebrow}>Acquisition</p><h2>Channel performance</h2></div></div>
           {channelRows.length ? (
             <div className={styles.channelTable}>
-              <div className={styles.channelHeader}>
-                <span>Channel</span>
-                <span>Sessions</span>
-                <span>Leads</span>
-                <span>Conversions</span>
-              </div>
+              <div className={styles.channelHeader}><span>Channel</span><span>Sessions</span><span>Leads</span><span>Conversions</span></div>
               {channelRows.map((row) => (
-                <div key={row.channel} className={styles.channelRow}>
-                  <strong>{row.channel}</strong>
-                  <span>{formatInteger(row.totals.sessions)}</span>
-                  <span>{formatInteger(row.totals.leads)}</span>
-                  <span>{formatInteger(row.totals.conversions)}</span>
-                </div>
+                <div key={row.channel} className={styles.channelRow}><strong>{row.channel}</strong><span>{formatAnalyticsInteger(row.performance.sessions)}</span><span>{formatAnalyticsInteger(row.performance.leads)}</span><span>{formatAnalyticsInteger(row.performance.conversions)}</span></div>
               ))}
             </div>
-          ) : (
-            <div className={styles.emptyState}>
-              <strong>No channel data yet.</strong>
-              <p>Source, medium, and channel summaries will populate through the shared reporting model.</p>
-            </div>
-          )}
+          ) : <div className={styles.emptyState}><strong>No channel data yet.</strong><p>Channel reporting will populate from native events and GA4.</p></div>}
         </section>
       </div>
 
-      <section className={styles.panel}>
-        <div className={styles.panelHeader}>
-          <div>
-            <p className={styles.panelEyebrow}>Data sources</p>
-            <h2>Hybrid analytics architecture</h2>
-            <p className={styles.panelCopy}>
-              Native Marketing VIP events provide product ownership. GA4 adds historical and familiar website reporting.
-            </p>
-          </div>
-        </div>
+      <div className={styles.twoColumn}>
+        <section className={styles.panel}>
+          <div className={styles.panelHeader}><div><p className={styles.panelEyebrow}>Campaign attribution</p><h2>Campaign performance</h2><p className={styles.panelCopy}>Attributed native activity is connected to the campaign UUID captured by the tracker.</p></div></div>
+          {campaignPerformance.length ? (
+            <div className={styles.performanceTable}>
+              <div className={styles.performanceHeader}><span>Campaign</span><span>Sessions</span><span>Conversions</span><span>Revenue</span></div>
+              {campaignPerformance.map((row) => (
+                <Link key={row.id} href={`/analytics/campaigns/${row.id}?${queryString}`} className={styles.performanceRow}>
+                  <strong>{row.name}</strong><span>{formatAnalyticsInteger(row.performance.sessions)}</span><span>{formatAnalyticsInteger(row.performance.conversions)}</span><span>{formatAnalyticsCurrency(row.performance.revenue)}</span>
+                </Link>
+              ))}
+            </div>
+          ) : <div className={styles.emptyState}><strong>No attributed campaigns yet.</strong><p>C2 will automatically enrich outbound Marketing VIP links; native URLs containing a valid <code>vip_campaign</code> parameter are already supported.</p></div>}
+        </section>
 
+        <section className={styles.panel}>
+          <div className={styles.panelHeader}><div><p className={styles.panelEyebrow}>Asset attribution</p><h2>Asset performance</h2><p className={styles.panelCopy}>Compare generated assets using captured visits, leads, conversions, and revenue.</p></div></div>
+          {assetPerformance.length ? (
+            <div className={styles.performanceTable}>
+              <div className={styles.performanceHeader}><span>Asset</span><span>Sessions</span><span>Conversions</span><span>Revenue</span></div>
+              {assetPerformance.map((row) => (
+                <Link key={row.id} href={`/analytics/assets/${row.id}?${queryString}`} className={styles.performanceRow}>
+                  <strong>{row.title}<small>{row.assetType}</small></strong><span>{formatAnalyticsInteger(row.performance.sessions)}</span><span>{formatAnalyticsInteger(row.performance.conversions)}</span><span>{formatAnalyticsCurrency(row.performance.revenue)}</span>
+                </Link>
+              ))}
+            </div>
+          ) : <div className={styles.emptyState}><strong>No attributed assets yet.</strong><p>Asset-level results will appear when tracked links include a valid <code>vip_asset</code> identifier.</p></div>}
+        </section>
+      </div>
+
+      {schemaReady ? (
+        <AnalyticsGoalsPanel
+          goals={goalViews}
+          eventOptions={ANALYTICS_EVENT_DEFINITIONS.map((event) => ({ name: event.name, label: event.label, category: event.category, description: event.description }))}
+          canManage={accountContext.canManageActiveAccount}
+        />
+      ) : null}
+
+      {schemaReady ? (
+        <AnalyticsOperationsPanel
+          runs={syncRunViews}
+          canManage={accountContext.canManageActiveAccount}
+          cronConfigured={Boolean(process.env.CRON_SECRET?.trim())}
+        />
+      ) : null}
+
+      <section className={styles.panel}>
+        <div className={styles.panelHeader}><div><p className={styles.panelEyebrow}>Data sources</p><h2>Hybrid analytics architecture</h2></div></div>
         <div className={styles.sourceGrid}>
-          <article className={styles.sourceCard}>
-            <div className={styles.sourceTop}>
-              <span className={styles.sourceIcon}>VIP</span>
-              <span className={nativeSource?.status === "active" ? styles.sourceActive : styles.sourcePending}>
-                {nativeSource ? statusLabel(nativeSource.status) : "Foundation installed"}
-              </span>
-            </div>
-            <h3>Marketing VIP Native</h3>
-            <p>
-              Own campaign visits, asset interactions, leads, conversions, and attributed revenue as first-party events.
-            </p>
-            <dl>
-              <div>
-                <dt>Source</dt>
-                <dd>{nativeSource?.name ?? "Native collector—not configured"}</dd>
-              </div>
-              <div>
-                <dt>Last activity</dt>
-                <dd>{formatDateTime(nativeSource?.last_synced_at ?? null)}</dd>
-              </div>
-            </dl>
-          </article>
-
-          <article className={styles.sourceCard}>
-            <div className={styles.sourceTop}>
-              <span className={styles.sourceIcon}>G4</span>
-              <span className={ga4Source?.status === "active" ? styles.sourceActive : styles.sourcePending}>
-                {ga4Source ? statusLabel(ga4Source.status) : "Phase H1.7B"}
-              </span>
-            </div>
-            <h3>Google Analytics 4</h3>
-            <p>
-              Import users, sessions, engagement, landing pages, campaign dimensions, and key events into cached reporting tables.
-            </p>
-            <dl>
-              <div>
-                <dt>Property</dt>
-                <dd>{ga4Source?.external_property_id ?? "Not connected"}</dd>
-              </div>
-              <div>
-                <dt>Last sync</dt>
-                <dd>{formatDateTime(ga4Source?.last_synced_at ?? null)}</dd>
-              </div>
-            </dl>
-          </article>
-        </div>
-      </section>
-
-      <section className={styles.panel}>
-        <div className={styles.panelHeader}>
-          <div>
-            <p className={styles.panelEyebrow}>Canonical event model</p>
-            <h2>Events Marketing VIP will understand</h2>
-            <p className={styles.panelCopy}>
-              These names are now the shared vocabulary for the native collector, GA4 mapping, goals, attribution, and future AI recommendations.
-            </p>
-          </div>
-        </div>
-        <div className={styles.eventGrid}>
-          {ANALYTICS_EVENT_DEFINITIONS.map((event) => (
-            <article key={event.name} className={styles.eventCard}>
-              <span>{event.category}</span>
-              <h3>{event.label}</h3>
-              <code>{event.name}</code>
-              <p>{event.description}</p>
+          {sources.map((source) => (
+            <article key={source.id} className={styles.sourceCard}>
+              <div className={styles.sourceTop}><span className={styles.sourceIcon}>{source.source_type === "ga4" ? "G4" : "VIP"}</span><span className={source.status === "active" ? styles.sourceActive : styles.sourcePending}>{statusLabel(source.status)}</span></div>
+              <h3>{source.name}</h3>
+              <dl>
+                <div><dt>Last sync</dt><dd>{formatAnalyticsDateTime(source.last_synced_at)}</dd></div>
+                <div><dt>Next sync</dt><dd>{source.auto_sync_enabled ? formatAnalyticsDateTime(source.next_sync_at) : "Manual only"}</dd></div>
+              </dl>
+              {source.last_error ? <p className={styles.sourceError}>{source.last_error}</p> : null}
             </article>
           ))}
         </div>
       </section>
 
       <section className={styles.nextStep}>
-        <div>
-          <p className={styles.panelEyebrow}>Next implementation gate</p>
-          <h2>H1.7C: campaign attribution and scheduled synchronization</h2>
-          <p>
-            Native collection and GA4 connection are now operational. The next phase will automate recurring syncs, enrich generated links with campaign and asset identifiers, and add campaign-level performance views.
-          </p>
-        </div>
-        <Link href="/campaigns" className={styles.secondaryButton}>
-          Review campaigns
-        </Link>
+        <div><p className={styles.panelEyebrow}>Next implementation gate</p><h2>H1.7C2: automatic link attribution</h2><p>The reporting model is ready. C2 will inject campaign and asset identifiers into canonical publishing links so attribution happens automatically across outbound content.</p></div>
+        <Link href="/campaigns" className={styles.secondaryButton}>Review campaigns</Link>
       </section>
     </main>
   );

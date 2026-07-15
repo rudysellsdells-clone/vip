@@ -23,7 +23,7 @@ function thirtyDayRange() {
 
 export async function POST(request: Request) {
   try {
-    const { admin, accountId } = await requireAnalyticsAccountManager();
+    const { admin, accountId, user } = await requireAnalyticsAccountManager();
     const body = (await request.json()) as Record<string, unknown>;
     const propertyId = textValue(body.propertyId, 50).replace(/^properties\//, "");
 
@@ -69,6 +69,9 @@ export async function POST(request: Request) {
         external_property_id: selected.propertyId,
         name: selected.propertyDisplayName,
         status: "active",
+        auto_sync_enabled: true,
+        sync_frequency: "daily",
+        next_sync_at: new Date().toISOString(),
         last_error: null,
         settings: {
           ...settings,
@@ -89,6 +92,8 @@ export async function POST(request: Request) {
       sync = await syncGa4AnalyticsSource({
         sourceId: String(sourceData.id),
         ...range,
+        triggerType: "initial",
+        createdBy: user.id,
       });
     } catch (error) {
       syncWarning =

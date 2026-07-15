@@ -6,6 +6,13 @@ import {
   refreshGoogleAccessToken,
   runGoogleAnalyticsReport,
 } from "@/lib/analytics/google";
+import {
+  completeAnalyticsSyncRun,
+  failAnalyticsSyncRun,
+  nextDailySyncAt,
+  startAnalyticsSyncRun,
+  type AnalyticsSyncTrigger,
+} from "@/lib/analytics/sync-runs";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -34,15 +41,10 @@ function ga4Date(value: string | undefined) {
   return `${safe.slice(0, 4)}-${safe.slice(4, 6)}-${safe.slice(6, 8)}`;
 }
 
-async function getValidAccessToken(
-  admin: any,
-  source: AnalyticsSourceRow,
-) {
+async function getValidAccessToken(admin: any, source: AnalyticsSourceRow) {
   const { data, error } = await admin
     .from("analytics_oauth_credentials")
-    .select(
-      "id,access_token_encrypted,refresh_token_encrypted,expires_at",
-    )
+    .select("id,access_token_encrypted,refresh_token_encrypted,expires_at")
     .eq("source_id", source.id)
     .eq("provider", "ga4")
     .maybeSingle();
@@ -98,10 +100,14 @@ export async function syncGa4AnalyticsSource({
   sourceId,
   startDate,
   endDate,
+  triggerType = "manual",
+  createdBy = null,
 }: {
   sourceId: string;
   startDate: string;
   endDate: string;
+  triggerType?: AnalyticsSyncTrigger;
+  createdBy?: string | null;
 }) {
   const admin = untypedSupabase(createAdminClient());
 
@@ -119,6 +125,17 @@ export async function syncGa4AnalyticsSource({
   if (!source.external_property_id) {
     throw new Error("Select a GA4 property before synchronizing data.");
   }
+
+  const runId = await startAnalyticsSyncRun({
+    accountId: source.account_id,
+    sourceId: source.id,
+    sourceType: "ga4",
+    triggerType,
+    startDate,
+    endDate,
+    createdBy,
+    details: { property_id: source.external_property_id },
+  });
 
   try {
     const accessToken = await getValidAccessToken(admin, source);
@@ -160,12 +177,7 @@ export async function syncGa4AnalyticsSource({
           account_id: source.account_id,
           source_id: source.id,
           metric_date: metricDate,
-          dimension_key: [
-            "ga4",
-            channel,
-            trafficSource,
-            trafficMedium,
-          ].join("|"),
+          dimension_key: ["ga4", channel, trafficSource, trafficMedium].join("|"),
           campaign_id: null,
           asset_id: null,
           channel,
@@ -211,6 +223,7 @@ export async function syncGa4AnalyticsSource({
         status: "active",
         last_synced_at: syncedAt,
         last_error: null,
+        next_sync_at: nextDailySyncAt(),
         sync_cursor: {
           last_start_date: startDate,
           last_end_date: endDate,
@@ -222,7 +235,17 @@ export async function syncGa4AnalyticsSource({
 
     if (sourceUpdateError) throw new Error(sourceUpdateError.message);
 
+    await completeAnalyticsSyncRun({
+      runId,
+      rowsProcessed: records.length,
+      details: {
+        property_id: source.external_property_id,
+        report_rows: report.rows?.length ?? 0,
+      },
+    });
+
     return {
+      runId,
       sourceId: source.id,
       propertyId: source.external_property_id,
       startDate,
@@ -237,9 +260,16 @@ export async function syncGa4AnalyticsSource({
         status: "error",
         last_error:
           error instanceof Error ? error.message.slice(0, 1000) : "GA4 sync failed.",
+        next_sync_at: nextDailySyncAt(),
         updated_at: new Date().toISOString(),
       })
       .eq("id", source.id);
+
+    await failAnalyticsSyncRun({
+      runId,
+      error,
+      details: { property_id: source.external_property_id },
+    });
 
     throw error;
   }
