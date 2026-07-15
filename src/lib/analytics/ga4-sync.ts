@@ -13,6 +13,10 @@ import {
   startAnalyticsSyncRun,
   type AnalyticsSyncTrigger,
 } from "@/lib/analytics/sync-runs";
+import {
+  aggregateGa4DailyMetricRecords,
+  type Ga4DailyMetricRecord,
+} from "@/lib/analytics/ga4-metrics";
 import { normalizeUtmToken } from "@/lib/analytics/utm-taxonomy";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { untypedSupabase } from "@/lib/supabase/untyped";
@@ -266,7 +270,7 @@ export async function syncGa4AnalyticsSource({
     let matchedCampaignRows = 0;
     let matchedAssetRows = 0;
 
-    const records = (report.rows ?? [])
+    const rawRecords = (report.rows ?? [])
       .map((row) => {
         const dimensions = new Map<string, string>();
         const metrics = new Map<string, string>();
@@ -335,7 +339,10 @@ export async function syncGa4AnalyticsSource({
           updated_at: new Date().toISOString(),
         };
       })
-      .filter(Boolean) as Array<Record<string, unknown>>;
+      .filter(Boolean) as Ga4DailyMetricRecord[];
+
+    const records = aggregateGa4DailyMetricRecords(rawRecords);
+    const mergedCollisionRows = Math.max(0, rawRecords.length - records.length);
 
     const { error: deleteError } = await admin
       .from("analytics_daily_metrics")
@@ -366,9 +373,11 @@ export async function syncGa4AnalyticsSource({
           last_start_date: startDate,
           last_end_date: endDate,
           row_count: records.length,
+          raw_report_rows: rawRecords.length,
+          merged_collision_rows: mergedCollisionRows,
           matched_campaign_rows: matchedCampaignRows,
           matched_asset_rows: matchedAssetRows,
-          attribution_version: "h1.7c2",
+          attribution_version: "h1.7c3a",
         },
         updated_at: syncedAt,
       })
@@ -382,9 +391,12 @@ export async function syncGa4AnalyticsSource({
       details: {
         property_id: source.external_property_id,
         report_rows: report.rows?.length ?? 0,
+        normalized_rows: rawRecords.length,
+        aggregated_rows: records.length,
+        merged_collision_rows: mergedCollisionRows,
         matched_campaign_rows: matchedCampaignRows,
         matched_asset_rows: matchedAssetRows,
-        attribution_version: "h1.7c2",
+        attribution_version: "h1.7c3a",
       },
     });
 
@@ -395,6 +407,8 @@ export async function syncGa4AnalyticsSource({
       startDate,
       endDate,
       rows: records.length,
+      rawRows: rawRecords.length,
+      mergedCollisionRows,
       matchedCampaignRows,
       matchedAssetRows,
       syncedAt,

@@ -33,7 +33,20 @@ export async function startAnalyticsSyncRun(input: StartSyncRunInput) {
     .select("id")
     .single();
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (
+      error.code === "23505" &&
+      (error.message.includes("analytics_sync_runs_one_running_per_source_idx") ||
+        error.message.includes("duplicate key value"))
+    ) {
+      throw new Error(
+        "A synchronization is already running for this analytics connection. Wait for it to finish, then try again.",
+      );
+    }
+
+    throw new Error(error.message);
+  }
+
   return String(data.id);
 }
 
