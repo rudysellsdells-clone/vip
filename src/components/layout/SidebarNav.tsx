@@ -156,6 +156,18 @@ function buildNavGroups({
       ],
     },
     {
+      label: "Measure",
+      requiresAccount: true,
+      items: [
+        {
+          label: "Analytics",
+          href: "/analytics",
+          description: "Connect traffic, engagement, leads, conversions, and revenue.",
+          requiresAccount: true,
+        },
+      ],
+    },
+    {
       label: "Grow",
       masterOnly: true,
       items: [
@@ -212,9 +224,23 @@ function buildNavGroups({
   return groups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => shouldShowItem(item, { activeAccountId, canManageActiveAccount, isMaster })),
+      items: group.items.filter((item) =>
+        shouldShowItem(item, {
+          activeAccountId,
+          canManageActiveAccount,
+          isMaster,
+        }),
+      ),
     }))
-    .filter((group) => group.items.length > 0 && shouldShowGroup(group, { activeAccountId, canManageActiveAccount, isMaster }));
+    .filter(
+      (group) =>
+        group.items.length > 0 &&
+        shouldShowGroup(group, {
+          activeAccountId,
+          canManageActiveAccount,
+          isMaster,
+        }),
+    );
 }
 
 function shouldShowGroup(group: NavGroup, context: NavContext) {
@@ -226,7 +252,12 @@ function shouldShowGroup(group: NavGroup, context: NavContext) {
 function shouldShowItem(item: NavItem, context: NavContext) {
   if (item.masterOnly && !context.isMaster) return false;
   if (item.requiresAccount && !context.activeAccountId) return false;
-  if (item.manageAccountOnly && !context.isMaster && !context.canManageActiveAccount) return false;
+  if (
+    item.manageAccountOnly &&
+    !context.isMaster &&
+    !context.canManageActiveAccount
+  )
+    return false;
   return true;
 }
 
@@ -272,10 +303,19 @@ export function SidebarNav({
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const navGroups = useMemo(
-    () => buildNavGroups({ activeAccountId, canManageActiveAccount, isMaster }),
+    () =>
+      buildNavGroups({
+        activeAccountId,
+        canManageActiveAccount,
+        isMaster,
+      }),
     [activeAccountId, canManageActiveAccount, isMaster],
   );
-  const roleLabel = isMaster ? "MASTER" : activeAccountRole ? activeAccountRole.replaceAll("_", " ") : platformRole;
+  const roleLabel = isMaster
+    ? "MASTER"
+    : activeAccountRole
+      ? activeAccountRole.replaceAll("_", " ")
+      : platformRole;
 
   return (
     <header className={styles.header}>
@@ -334,7 +374,11 @@ export function SidebarNav({
         <div className={styles.rightSide}>
           <div className={styles.accountSwitcherWrap}>
             <span className={styles.accountLabel}>Active workspace</span>
-            <AccountSwitcher accounts={accounts} activeAccountId={activeAccountId} isMaster={isMaster} />
+            <AccountSwitcher
+              accounts={accounts}
+              activeAccountId={activeAccountId}
+              isMaster={isMaster}
+            />
           </div>
 
           <div className={styles.account}>
@@ -343,7 +387,9 @@ export function SidebarNav({
             {activeAccountName ? (
               <span className={styles.accountContext}>{activeAccountName}</span>
             ) : null}
-            {roleLabel ? <span className={styles.accountContext}>{roleLabel}</span> : null}
+            {roleLabel ? (
+              <span className={styles.accountContext}>{roleLabel}</span>
+            ) : null}
             <SignOutButton className={styles.signOutButton} />
           </div>
 
@@ -364,7 +410,11 @@ export function SidebarNav({
           <div className={styles.mobileInner}>
             <div className={styles.mobileActiveAccount}>
               <span className={styles.accountLabel}>Active workspace</span>
-              <AccountSwitcher accounts={accounts} activeAccountId={activeAccountId} isMaster={isMaster} />
+              <AccountSwitcher
+                accounts={accounts}
+                activeAccountId={activeAccountId}
+                isMaster={isMaster}
+              />
             </div>
 
             {navGroups.map((group) => (
@@ -386,7 +436,9 @@ export function SidebarNav({
                         aria-current={active ? "page" : undefined}
                       >
                         <span>
-                          <span className={styles.mobileLinkTitle}>{item.label}</span>
+                          <span className={styles.mobileLinkTitle}>
+                            {item.label}
+                          </span>
                           {item.description ? (
                             <span className={styles.mobileLinkDescription}>
                               {item.description}

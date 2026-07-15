@@ -2,6 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getUserAccountContext } from "@/lib/accounts/account-context";
 import { ANALYTICS_EVENT_DEFINITIONS } from "@/lib/analytics/event-taxonomy";
+import { googleAnalyticsOAuthIsConfigured } from "@/lib/analytics/google";
+import { AnalyticsSetupPanel, type AnalyticsPropertyOption } from "@/components/analytics/AnalyticsSetupPanel";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 import styles from "./Analytics.module.css";
@@ -17,6 +19,9 @@ type DataSourceRow = {
   external_property_id: string | null;
   last_synced_at: string | null;
   last_error: string | null;
+  collection_key: string | null;
+  key_rotated_at: string | null;
+  settings: Record<string, unknown> | null;
 };
 
 type DailyMetricRow = {
@@ -143,7 +148,7 @@ export default async function AnalyticsPage() {
   const [sourcesResult, metricsResult, goalsResult] = await Promise.all([
     supabase
       .from("analytics_data_sources")
-      .select("id,source_type,status,name,website_url,external_property_id,last_synced_at,last_error")
+      .select("id,source_type,status,name,website_url,external_property_id,last_synced_at,last_error,collection_key,key_rotated_at,settings")
       .eq("account_id", activeAccountId)
       .order("created_at", { ascending: true }),
     supabase
@@ -202,6 +207,16 @@ export default async function AnalyticsPage() {
 
   const nativeSource = sources.find((source) => source.source_type === "native") ?? null;
   const ga4Source = sources.find((source) => source.source_type === "ga4") ?? null;
+  const ga4Settings = ga4Source?.settings ?? {};
+  const availableProperties = Array.isArray(ga4Settings.available_properties)
+    ? (ga4Settings.available_properties as AnalyticsPropertyOption[])
+    : [];
+  const selectedProperty =
+    ga4Settings.selected_property && typeof ga4Settings.selected_property === "object"
+      ? (ga4Settings.selected_property as AnalyticsPropertyOption)
+      : null;
+  const trackerBaseUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
+  const googleConfigured = googleAnalyticsOAuthIsConfigured();
 
   return (
     <main className={styles.page}>
@@ -218,7 +233,7 @@ export default async function AnalyticsPage() {
         </div>
         <div className={styles.heroStatus}>
           <span className={schemaReady ? styles.statusReady : styles.statusWarning}>
-            {schemaReady ? "Analytics foundation ready" : "Database migration required"}
+            {schemaReady ? "Collection and connections ready" : "H1.7B migration required"}
           </span>
           <p>
             Reporting window: {window.startKey} through {window.endKey}
@@ -230,13 +245,36 @@ export default async function AnalyticsPage() {
         <section className={styles.notice}>
           <div>
             <p className={styles.noticeLabel}>Setup required</p>
-            <h2>Apply the H1.7A analytics database migration.</h2>
+            <h2>Apply the H1.7A and H1.7B analytics migrations.</h2>
             <p>
-              The page is installed, but the account-scoped analytics tables are not available yet.
-              Apply the included SQL migration in Supabase, then reload this page.
+              The analytics page is installed, but the account-scoped collection or connection fields are unavailable. Apply both migrations in order, then reload this page.
             </p>
           </div>
         </section>
+      ) : null}
+
+      {schemaReady ? (
+        <AnalyticsSetupPanel
+          nativeSource={nativeSource ? {
+            status: nativeSource.status,
+            name: nativeSource.name,
+            websiteUrl: nativeSource.website_url,
+            collectionKey: nativeSource.collection_key,
+            keyRotatedAt: nativeSource.key_rotated_at,
+          } : null}
+          ga4Source={ga4Source ? {
+            status: ga4Source.status,
+            name: ga4Source.name,
+            propertyId: ga4Source.external_property_id,
+            lastSyncedAt: ga4Source.last_synced_at,
+            lastError: ga4Source.last_error,
+            availableProperties,
+            selectedProperty,
+          } : null}
+          canManage={accountContext.canManageActiveAccount}
+          googleConfigured={googleConfigured}
+          trackerBaseUrl={trackerBaseUrl}
+        />
       ) : null}
 
       <section className={styles.metricGrid} aria-label="Analytics summary">
@@ -418,9 +456,9 @@ export default async function AnalyticsPage() {
       <section className={styles.nextStep}>
         <div>
           <p className={styles.panelEyebrow}>Next implementation gate</p>
-          <h2>H1.7B: native collection endpoint and GA4 authorization</h2>
+          <h2>H1.7C: campaign attribution and scheduled synchronization</h2>
           <p>
-            The next patch will create guarded event ingestion, site identifiers, setup controls, and the Google OAuth connection flow without changing this reporting contract.
+            Native collection and GA4 connection are now operational. The next phase will automate recurring syncs, enrich generated links with campaign and asset identifiers, and add campaign-level performance views.
           </p>
         </div>
         <Link href="/campaigns" className={styles.secondaryButton}>

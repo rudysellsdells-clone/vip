@@ -507,3 +507,244 @@
     font-size: 11px;
   }
 }
+
+.setupPanel {
+  margin-top: 28px;
+  border: 1px solid #dbe5ef;
+  border-radius: 32px;
+  background: #ffffff;
+  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.06);
+  padding: 26px;
+}
+
+.setupGrid {
+  display: grid;
+  gap: 20px;
+  margin-top: 24px;
+}
+
+.setupCard {
+  border: 1px solid #dbe5ef;
+  border-radius: 26px;
+  background: #f8fafc;
+  padding: 24px;
+}
+
+.setupCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.setupCard h3 {
+  margin: 20px 0 0;
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 950;
+  letter-spacing: -0.025em;
+}
+
+.setupCard > p {
+  margin: 12px 0 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.setupLabel {
+  display: block;
+  margin-top: 22px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.setupInput {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #0f172a;
+  font: inherit;
+  padding: 0 14px;
+}
+
+.setupInput:focus {
+  border-color: #0b4a7a;
+  box-shadow: 0 0 0 3px rgba(11, 74, 122, 0.12);
+  outline: none;
+}
+
+.setupInput:disabled {
+  background: #e2e8f0;
+  color: #64748b;
+}
+
+.setupActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.setupPrimaryButton,
+.setupSecondaryButton,
+.setupTextButton,
+.setupPrimaryLink,
+.setupSecondaryLink {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 900;
+  padding: 0 16px;
+  text-decoration: none;
+  transition: transform 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+
+.setupPrimaryButton,
+.setupPrimaryLink {
+  border: 0;
+  background: #0b4a7a;
+  color: #ffffff;
+  box-shadow: 0 10px 20px rgba(11, 74, 122, 0.18);
+  cursor: pointer;
+}
+
+.setupSecondaryButton,
+.setupSecondaryLink {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.setupTextButton {
+  border: 0;
+  background: transparent;
+  color: #0b4a7a;
+  cursor: pointer;
+}
+
+.setupPrimaryButton:hover:not(:disabled),
+.setupSecondaryButton:hover:not(:disabled),
+.setupPrimaryLink:hover,
+.setupSecondaryLink:hover,
+.setupTextButton:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.setupPrimaryButton:disabled,
+.setupSecondaryButton:disabled,
+.setupTextButton:disabled,
+.setupPrimaryLink[aria-disabled="true"],
+.setupSecondaryLink[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.48;
+  pointer-events: none;
+}
+
+.snippetBox {
+  margin-top: 20px;
+  border: 1px solid #bfdbfe;
+  border-radius: 18px;
+  background: #eff6ff;
+  padding: 16px;
+}
+
+.snippetBox p {
+  margin: 0;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.snippetBox > code {
+  display: block;
+  overflow-x: auto;
+  margin-top: 12px;
+  border-radius: 12px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 14px;
+  white-space: nowrap;
+}
+
+.setupDetails {
+  display: grid;
+  gap: 10px;
+  margin: 20px 0 0;
+}
+
+.setupDetails div {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 12px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 10px;
+}
+
+.setupDetails dt {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.setupDetails dd {
+  margin: 0;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.setupSuccess,
+.setupError,
+.inlineWarning {
+  margin-top: 18px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.6;
+  padding: 14px 16px;
+}
+
+.setupSuccess {
+  border: 1px solid #a7f3d0;
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+.setupError,
+.inlineWarning {
+  border: 1px solid #fecaca;
+  background: #fff1f2;
+  color: #9f1239;
+}
+
+.setupMeta,
+.setupReadOnly {
+  margin: 14px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.setupReadOnly {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 18px;
+}
+
+@media (min-width: 980px) {
+  .setupGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
