@@ -7,6 +7,7 @@ import { loadDigitalCloneContext } from "@/lib/clone/context";
 import { generateMarketingAssetPackWithCloneMemory } from "@/lib/ai/asset-pack-generator";
 import { marketingAssetPackToAssets } from "@/lib/ai/asset-pack-types";
 import { preparePublicAssetContent } from "@/lib/content/public-content-cleaner";
+import { buildCampaignIntelligenceContext } from "@/lib/content-generation/campaign-intelligence";
 import type { Json } from "@/types/database.types";
 
 type RouteContext = {
@@ -38,12 +39,19 @@ function normalizeCampaignForPrompt(campaign: {
   notes: string | null;
   strategy?: unknown;
 }) {
-  const strategy =
+  const storedStrategy =
     campaign.strategy &&
     typeof campaign.strategy === "object" &&
     !Array.isArray(campaign.strategy)
       ? (campaign.strategy as Record<string, unknown>)
       : null;
+  const originalOneOffStrategy =
+    storedStrategy?.oneOffCampaignStrategy &&
+    typeof storedStrategy.oneOffCampaignStrategy === "object" &&
+    !Array.isArray(storedStrategy.oneOffCampaignStrategy)
+      ? (storedStrategy.oneOffCampaignStrategy as Record<string, unknown>)
+      : null;
+  const strategy = originalOneOffStrategy ?? storedStrategy;
 
   return {
     name: campaign.name,
@@ -101,22 +109,28 @@ export async function POST(_request: Request, context: RouteContext) {
     }
 
     const cloneContext = await loadDigitalCloneContext(user.id, accountId);
+    const normalizedCampaign = normalizeCampaignForPrompt(campaign);
+    const campaignIntelligence = buildCampaignIntelligenceContext({
+      campaign: normalizedCampaign,
+      cloneContext,
+      enabled: process.env.VIP_DISABLE_CAMPAIGN_INTELLIGENCE !== "1",
+    });
 
-    const oneOffCampaignStrategy =
-      campaign.strategy && typeof campaign.strategy === "object" && !Array.isArray(campaign.strategy)
-        ? (campaign.strategy as Record<string, unknown>)
-        : null;
+    const oneOffCampaignStrategy = normalizedCampaign.strategy;
 
     const assetPack = await generateMarketingAssetPackWithCloneMemory({
-      campaign: normalizeCampaignForPrompt(campaign),
+      campaign: normalizedCampaign,
       digitalCloneProfile:
         cloneContext.profile && typeof cloneContext.profile === "object"
           ? (cloneContext.profile as Record<string, unknown>)
           : null,
-      digitalCloneMemoryContext: cloneContext.formattedContext,
-      serviceLines: cloneContext.serviceLines as Record<string, unknown>[],
-      buyerSegments: cloneContext.buyerSegments as Record<string, unknown>[],
-      offers: cloneContext.offers as Record<string, unknown>[],
+      digitalCloneMemoryContext: campaignIntelligence.formattedContext,
+      serviceLines: campaignIntelligence.selectedServiceLines as Record<string, unknown>[],
+      buyerSegments: campaignIntelligence.selectedBuyerSegments as Record<string, unknown>[],
+      offers: campaignIntelligence.selectedOffers as Record<string, unknown>[],
+      campaignIntelligenceBrief: campaignIntelligence.enabled
+        ? campaignIntelligence.formattedBrief
+        : null,
     });
 
     const assets = marketingAssetPackToAssets(assetPack).map((asset) => ({
@@ -135,7 +149,13 @@ export async function POST(_request: Request, context: RouteContext) {
       serviceLineCount: cloneContext.serviceLines.length,
       buyerSegmentCount: cloneContext.buyerSegments.length,
       offerCount: cloneContext.offers.length,
-      formattedContextPreview: cloneContext.formattedContext.slice(0, 2000),
+      formattedContextPreview: campaignIntelligence.formattedContext.slice(0, 2000),
+      campaignIntelligence: {
+        enabled: campaignIntelligence.enabled,
+        readinessScore: campaignIntelligence.brief.readinessScore,
+        missingElements: campaignIntelligence.brief.missingElements,
+        selectionSummary: campaignIntelligence.selectionSummary,
+      },
       generatedAt: new Date().toISOString(),
     };
 
@@ -154,7 +174,12 @@ export async function POST(_request: Request, context: RouteContext) {
             sprint: "5.7",
             oneOffBriefPriorityContract: "h1_6c9",
             contentSpecificityContract: "h1_4g1",
-            preReviewEnrichment: true,
+            preReviewEnrichment: process.env.VIP_ENABLE_PRE_REVIEW_ENRICHMENT === "1",
+            campaignIntelligenceVersion: "h1_8a",
+            campaignIntelligenceEnabled: campaignIntelligence.enabled,
+            campaignIntelligenceReadinessScore: campaignIntelligence.brief.readinessScore,
+            campaignIntelligenceMissingElements: campaignIntelligence.brief.missingElements,
+            campaignIntelligenceSelection: campaignIntelligence.selectionSummary,
             cloneMemoryUsed: true,
             cloneMemorySnapshot: memorySnapshot,
             oneOffCampaignStrategy,
@@ -221,6 +246,12 @@ export async function POST(_request: Request, context: RouteContext) {
           coreMessage: assetPack.coreMessage,
           cloneMemorySnapshot: memorySnapshot,
           oneOffCampaignStrategy,
+          campaignIntelligence: {
+            version: "h1_8a",
+            enabled: campaignIntelligence.enabled,
+            brief: campaignIntelligence.brief,
+            selectionSummary: campaignIntelligence.selectionSummary,
+          },
         }),
       })
       .eq("id", campaign.id);
@@ -247,6 +278,13 @@ export async function POST(_request: Request, context: RouteContext) {
         cloneMemoryUsed: true,
         memorySnapshot,
         oneOffCampaignStrategy,
+        campaignIntelligence: {
+          version: "h1_8a",
+          enabled: campaignIntelligence.enabled,
+          readinessScore: campaignIntelligence.brief.readinessScore,
+          missingElements: campaignIntelligence.brief.missingElements,
+          selectionSummary: campaignIntelligence.selectionSummary,
+        },
       }),
     });
 
@@ -255,6 +293,13 @@ export async function POST(_request: Request, context: RouteContext) {
       assetPack,
       assets: insertedAssetRows,
       cloneMemory: memorySnapshot,
+      campaignIntelligence: {
+        version: "h1_8a",
+        enabled: campaignIntelligence.enabled,
+        readinessScore: campaignIntelligence.brief.readinessScore,
+        missingElements: campaignIntelligence.brief.missingElements,
+        selectionSummary: campaignIntelligence.selectionSummary,
+      },
     });
   } catch (error) {
     if (error instanceof Error) {

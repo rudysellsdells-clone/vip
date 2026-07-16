@@ -99,6 +99,7 @@ export function buildMarketingAssetPackUserPrompt(input: {
   serviceLines?: PromptEntity[] | null;
   buyerSegments?: PromptEntity[] | null;
   offers?: PromptEntity[] | null;
+  campaignIntelligenceBrief?: string | null;
 }) {
   const campaign = input.campaign;
   const cloneMemory =
@@ -109,6 +110,7 @@ export function buildMarketingAssetPackUserPrompt(input: {
   const serviceLines = formatUnknownList("Service Lines", input.serviceLines);
   const buyerSegments = formatUnknownList("Buyer Segments", input.buyerSegments);
   const offers = formatUnknownList("Offers", input.offers);
+  const campaignIntelligenceSection = input.campaignIntelligenceBrief?.trim() ?? "";
 
   return `Create a complete Marketing Asset Pack for this campaign.
 
@@ -124,6 +126,8 @@ CTA: ${campaign.cta ?? "Book a call"}
 Notes: ${campaign.notes ?? "None"}
 
 ${buildOneOffCampaignPerspectiveSections(campaign)}
+
+${campaignIntelligenceSection}
 
 ## Rudy Digital Clone Memory
 ${cloneMemory}
@@ -191,11 +195,13 @@ export function buildPreReviewEnrichmentUserPrompt(input: {
   serviceLines?: PromptEntity[] | null;
   buyerSegments?: PromptEntity[] | null;
   offers?: PromptEntity[] | null;
+  campaignIntelligenceBrief?: string | null;
 }, assetPack: Record<string, string>) {
   const cloneMemory =
     input.digitalCloneMemoryContext ??
     input.cloneMemoryContext ??
     "No digital clone memory was provided.";
+  const campaignIntelligenceSection = input.campaignIntelligenceBrief?.trim() ?? "";
 
   return `Strengthen this Marketing Asset Pack before review.
 
@@ -213,6 +219,8 @@ Notes: ${input.campaign.notes ?? "None"}
 ${buildOneOffCampaignControlBriefSection(input.campaign)}
 
 ${buildOneOffCampaignExecutionContractSection(input.campaign)}
+
+${campaignIntelligenceSection}
 
 ## Rudy Digital Clone Memory
 ${cloneMemory}
