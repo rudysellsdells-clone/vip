@@ -2,9 +2,16 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import formStyles from "@/components/forms/VipForm.module.css";
 import type { BrandVoiceMonthlyOptions } from "@/lib/accounts/brand-voice-monthly-options";
+import { websiteStyles } from "@/components/website-ui/WebsitePage";
+import type { OneOffCampaignStrategy } from "@/lib/content-generation/one-off-strategy-gate";
+import {
+  countMissingOneOffStrategyFields,
+  EMPTY_ONE_OFF_STRATEGY,
+  ONE_OFF_STRATEGY_FIELDS,
+} from "@/lib/content-generation/one-off-strategy-form";
 
 type ServiceLineOption = {
   id: string;
@@ -42,6 +49,48 @@ export type CampaignKnowledgeOption = {
   sourceType: "knowledge_source" | "content_example";
 };
 
+
+type CampaignCreatePayload = {
+  name: string;
+  service_line_id: string | null;
+  offer_id: string | null;
+  idea: string;
+  buyer_segment: string;
+  audience: string;
+  goal: string;
+  platforms: string[];
+  tone: string;
+  cta: string;
+  notes: string;
+  differentiator: string;
+  proofPoints: string;
+  originalityAngle: string;
+  objections: string;
+  strategyContext: string;
+  sourceContext: string;
+};
+
+type StrategyPreview = {
+  accountId: string;
+  workflowVersion: string;
+  strategy: OneOffCampaignStrategy;
+  sourceSignature: string;
+  generator: "openai" | "fallback";
+  generatedAt: string;
+  intelligenceReadinessScore: number;
+  intelligenceMissingElements: string[];
+};
+
+async function readJsonResponse(response: Response) {
+  const text = await response.text();
+  if (!text) return {} as Record<string, any>;
+
+  try {
+    return JSON.parse(text) as Record<string, any>;
+  } catch {
+    return { error: text };
+  }
+}
 function joinParts(parts: Array<string | null | undefined>, separator = "\n") {
   return parts
     .map((part) => String(part ?? "").trim())
@@ -116,9 +165,16 @@ export function CampaignWebsiteForm({
   accountStrategyUrl?: string;
 }) {
   const router = useRouter();
-  const [saving, setSaving] = useState(false);
+  const [strategyLoading, setStrategyLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [strategyPreview, setStrategyPreview] = useState<StrategyPreview | null>(null);
+  const [strategyDraft, setStrategyDraft] = useState<OneOffCampaignStrategy>(
+    EMPTY_ONE_OFF_STRATEGY,
+  );
+  const [strategyBriefSnapshot, setStrategyBriefSnapshot] = useState<string | null>(null);
+  const [strategyEdited, setStrategyEdited] = useState(false);
 
   const [campaignName, setCampaignName] = useState("");
   const [buyerSegment, setBuyerSegment] = useState("");
@@ -289,70 +345,168 @@ export function CampaignWebsiteForm({
     addSourceContext("Knowledge source selected for one-off campaign", value);
   }
 
-  async function handleSubmit(formData: FormData) {
-    setSaving(true);
+  function buildPayload(): CampaignCreatePayload {
+    return {
+      name: campaignName.trim(),
+      service_line_id: serviceLineId || null,
+      offer_id: offerId || null,
+      idea,
+      buyer_segment: buyerSegment,
+      audience,
+      goal,
+      platforms: platforms
+        .split(",")
+        .map((platform) => platform.trim())
+        .filter(Boolean),
+      tone,
+      cta,
+      notes,
+      differentiator,
+      proofPoints,
+      originalityAngle,
+      objections,
+      strategyContext,
+      sourceContext,
+    };
+  }
+
+  function campaignBriefSnapshot(payload: CampaignCreatePayload) {
+    return JSON.stringify(payload);
+  }
+
+  async function generateStrategy() {
+    const payload = buildPayload();
+    setStrategyLoading(true);
     setMessage(null);
     setError(null);
 
     try {
-      const selectedPlatforms = platforms
-        .split(",")
-        .map((platform) => platform.trim())
-        .filter(Boolean);
-
-      const response = await fetch("/api/campaigns", {
+      const response = await fetch("/api/campaigns/strategy-preview", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: campaignName || formData.get("name"),
-          service_line_id: serviceLineId || null,
-          offer_id: offerId || null,
-          idea,
-          buyer_segment: buyerSegment,
-          audience,
-          goal,
-          platforms: selectedPlatforms,
-          tone,
-          cta,
-          notes,
-          differentiator,
-          proofPoints,
-          originalityAngle,
-          objections,
-          strategyContext,
-          sourceContext,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
-
-      const result = await response.json().catch(() => ({}));
+      const result = await readJsonResponse(response);
 
       if (!response.ok) {
-        throw new Error(result.error ?? "Unable to create campaign.");
+        throw new Error(result.error ?? "Unable to generate campaign strategy.");
       }
 
-      setMessage("Campaign created.");
-      const campaignId = result.campaign?.id;
-
-      if (campaignId) {
-        router.push(`/campaigns/${campaignId}`);
-      } else {
-        router.refresh();
-      }
+      const preview = result as StrategyPreview;
+      setStrategyPreview(preview);
+      setStrategyDraft(preview.strategy);
+      setStrategyBriefSnapshot(campaignBriefSnapshot(payload));
+      setStrategyEdited(false);
+      setMessage(
+        "Marketing Spine generated. Review and edit it before creating the campaign.",
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unexpected error.");
+      setError(
+        err instanceof Error ? err.message : "Unexpected strategy error.",
+      );
     } finally {
-      setSaving(false);
+      setStrategyLoading(false);
     }
   }
 
+  async function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await generateStrategy();
+  }
+
+  function updateStrategyField(
+    key: keyof OneOffCampaignStrategy,
+    value: string,
+  ) {
+    setStrategyDraft((current) => ({ ...current, [key]: value }));
+    setStrategyEdited(true);
+    setMessage(null);
+  }
+
+  async function createApprovedCampaign() {
+    if (!strategyPreview) return;
+
+    const payload = buildPayload();
+    const currentSnapshot = campaignBriefSnapshot(payload);
+
+    if (strategyBriefSnapshot !== currentSnapshot) {
+      setError(
+        "Campaign inputs changed after the strategy was generated. Regenerate the Marketing Spine before approval.",
+      );
+      return;
+    }
+
+    const missingCount = countMissingOneOffStrategyFields(strategyDraft);
+    if (missingCount) {
+      setError(
+        `Complete ${missingCount} required strategy section${missingCount === 1 ? "" : "s"} before creating the campaign.`,
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Approve this Marketing Spine and create the campaign? Content assets will remain locked to this approved strategy.",
+    );
+    if (!confirmed) return;
+
+    setCreating(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/campaigns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...payload,
+          approvedStrategy: strategyDraft,
+          strategyApprovalConfirmed: true,
+          strategyWorkflowVersion: strategyPreview.workflowVersion,
+          strategySourceSignature: strategyPreview.sourceSignature,
+          strategyAccountId: strategyPreview.accountId,
+          strategyGenerator: strategyPreview.generator,
+          strategyGeneratedAt: strategyPreview.generatedAt,
+          strategyEdited,
+          intelligenceReadinessScore:
+            strategyPreview.intelligenceReadinessScore,
+          intelligenceMissingElements:
+            strategyPreview.intelligenceMissingElements,
+        }),
+      });
+      const result = await readJsonResponse(response);
+
+      if (!response.ok) {
+        throw new Error(result.error ?? "Unable to create approved campaign.");
+      }
+
+      const campaignId = result.campaign?.id;
+      if (!campaignId) {
+        throw new Error("Campaign was created without a campaign identifier.");
+      }
+
+      setMessage("Strategy approved. Campaign created.");
+      router.push(`/campaigns/${campaignId}`);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Unexpected campaign error.",
+      );
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  const currentBriefSnapshot = campaignBriefSnapshot(buildPayload());
+  const strategyStale = Boolean(
+    strategyPreview && strategyBriefSnapshot !== currentBriefSnapshot,
+  );
+  const missingStrategyCount = countMissingOneOffStrategyFields(strategyDraft);
+
   return (
-    <form action={handleSubmit} className={formStyles.form}>
+    <form onSubmit={handleFormSubmit} className={formStyles.form}>
       <div className={formStyles.header}>
         <h2 className={formStyles.title}>Create a one-off campaign</h2>
         <p className={formStyles.description}>
-          Use Account Strategy, Brand Voice, and Knowledge shortcuts to build a focused campaign brief. VIP will keep this as a fast one-off campaign path while the monthly workflow uses the full Marketing Spine gate.
+          Complete the existing brief, generate the Marketing Spine, and approve the strategy before VIP creates the campaign. No campaign row or content asset is created during the strategy-preview step.
         </p>
         <div className={formStyles.actions}>
           <Link href={accountStrategyUrl} className={formStyles.secondaryButton}>
@@ -659,13 +813,124 @@ export function CampaignWebsiteForm({
         </div>
       ) : null}
 
-      <div className={formStyles.actions}>
-        <button type="submit" disabled={saving} className={formStyles.submit}>
-          {saving ? "Creating..." : "Create One-Off Campaign"}
-        </button>
-        {message ? <p className={formStyles.message}>{message}</p> : null}
-        {error ? <p className={formStyles.error}>{error}</p> : null}
+      <div className={formStyles.divider} />
+
+      <div className={formStyles.header}>
+        <div className="flex flex-wrap gap-2">
+          <span className={websiteStyles.badge}>Step 1</span>
+          <span className={websiteStyles.badge}>Strategy preview only</span>
+          <span className={websiteStyles.badge}>No campaign created yet</span>
+        </div>
+        <h3 className={formStyles.smallTitle} style={{ marginTop: 14 }}>
+          Generate the Marketing Spine
+        </h3>
+        <p className={formStyles.description}>
+          VIP will privately synthesize the brief and relevant account knowledge into a reviewable campaign strategy. The campaign is not saved until you approve this strategy.
+        </p>
       </div>
+
+      <div className={formStyles.actions}>
+        <button
+          type="submit"
+          disabled={strategyLoading || creating}
+          className={formStyles.submit}
+        >
+          {strategyLoading
+            ? "Generating Strategy..."
+            : strategyPreview
+              ? "Regenerate Campaign Strategy"
+              : "Generate Campaign Strategy"}
+        </button>
+        {strategyPreview ? (
+          <span className={formStyles.help}>
+            Regenerating replaces the current unapproved strategy draft.
+          </span>
+        ) : null}
+      </div>
+
+      {strategyPreview ? (
+        <>
+          <div className={formStyles.divider} />
+
+          <div className={formStyles.header}>
+            <div className="flex flex-wrap gap-2">
+              <span className={websiteStyles.badge}>Step 2</span>
+              <span className={websiteStyles.badge}>Review before creation</span>
+              <span className={websiteStyles.badge}>
+                {strategyPreview.intelligenceReadinessScore}/100 source readiness
+              </span>
+              <span className={websiteStyles.badge}>
+                {strategyEdited ? "Human edited" : strategyPreview.generator === "openai" ? "AI draft" : "Safe fallback draft"}
+              </span>
+            </div>
+            <h3 className={formStyles.smallTitle} style={{ marginTop: 14 }}>
+              Approve the campaign strategy
+            </h3>
+            <p className={formStyles.description}>
+              Edit any section that feels generic or misaligned. Only the approved Marketing Spine and verified facts will guide the content assets.
+            </p>
+          </div>
+
+          {strategyStale ? (
+            <p className={formStyles.error}>
+              The campaign brief changed after this strategy was generated. Regenerate the Marketing Spine before approval.
+            </p>
+          ) : (
+            <p className={formStyles.message}>
+              No campaign exists yet. Approval will create the campaign with this strategy already locked.
+            </p>
+          )}
+
+          {strategyPreview.intelligenceMissingElements.length ? (
+            <p className={formStyles.description}>
+              Review these thin-source areas carefully: {strategyPreview.intelligenceMissingElements.join(", ")}.
+            </p>
+          ) : null}
+
+          <div className={[formStyles.grid, formStyles.grid2].join(" ")}>
+            {ONE_OFF_STRATEGY_FIELDS.map((field) => (
+              <label key={field.key} className={formStyles.field}>
+                <span className={formStyles.label}>{field.label}</span>
+                <textarea
+                  value={strategyDraft[field.key]}
+                  onChange={(event) =>
+                    updateStrategyField(field.key, event.target.value)
+                  }
+                  rows={field.rows ?? 4}
+                  className={formStyles.textarea}
+                />
+                <span className={formStyles.help}>{field.helper}</span>
+              </label>
+            ))}
+          </div>
+
+          <div className={formStyles.actions}>
+            <button
+              type="button"
+              onClick={createApprovedCampaign}
+              disabled={
+                creating ||
+                strategyLoading ||
+                strategyStale ||
+                missingStrategyCount > 0
+              }
+              className={formStyles.submit}
+            >
+              {creating
+                ? "Creating Approved Campaign..."
+                : "Approve Strategy and Create Campaign"}
+            </button>
+            {missingStrategyCount ? (
+              <span className={formStyles.help}>
+                Complete {missingStrategyCount} required strategy section{missingStrategyCount === 1 ? "" : "s"} before approval.
+              </span>
+            ) : null}
+          </div>
+        </>
+      ) : null}
+
+      {message ? <p className={formStyles.message}>{message}</p> : null}
+      {error ? <p className={formStyles.error}>{error}</p> : null}
     </form>
   );
 }

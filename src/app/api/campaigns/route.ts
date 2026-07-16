@@ -1,14 +1,32 @@
 import { NextResponse } from "next/server";
 import { getUserAccountContext } from "@/lib/accounts/account-context";
+import {
+  buildOneOffCampaignNotes,
+  buildOneOffCampaignSource,
+  buildOneOffCampaignStoredStrategy,
+  normalizeOneOffCampaignRequestBody,
+} from "@/lib/content-generation/one-off-campaign-create";
+import {
+  computeOneOffStrategySourceSignature,
+  mergeOneOffStrategyGate,
+  normalizeOneOffCampaignStrategy,
+  oneOffStrategyMissingRequired,
+  ONE_OFF_STRATEGY_GATE_VERSION,
+  type OneOffStrategyGate,
+} from "@/lib/content-generation/one-off-strategy-gate";
+import { logActivity } from "@/lib/security/auditLog";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 import { createCampaignSchema } from "@/lib/validation/campaignSchemas";
-import { sanitizeCampaignStrategyContext } from "@/lib/content-generation/campaign-context-sanitizer";
-import { logActivity } from "@/lib/security/auditLog";
 import type { Json } from "@/types/database.types";
 
 function toJson(value: unknown): Json {
   return JSON.parse(JSON.stringify(value)) as Json;
+}
+
+function cleanText(value: unknown, maxLength = 5000) {
+  const text = String(value ?? "").trim();
+  return text.length > maxLength ? text.slice(0, maxLength).trim() : text;
 }
 
 async function accountRecordExists({
@@ -38,27 +56,24 @@ async function accountRecordExists({
 export async function POST(request: Request) {
   try {
     const supabase = untypedSupabase(await createClient());
-    const rawBody = await request.json();
-    const requestedServiceLineId = rawBody.serviceLineId ?? rawBody.service_line_id;
-    const requestedOfferId = rawBody.offerId ?? rawBody.offer_id;
-    const body = {
-      ...rawBody,
-      serviceLineId: requestedServiceLineId || undefined,
-      offerId: requestedOfferId || undefined,
-      buyerSegment: rawBody.buyerSegment ?? rawBody.buyer_segment,
-    };
-    const input = createCampaignSchema.parse(body);
+    const rawBody = (await request.json()) as Record<string, unknown>;
+    const input = createCampaignSchema.parse(
+      normalizeOneOffCampaignRequestBody(rawBody),
+    );
 
     const {
       data: { user },
-      error: userError
+      error: userError,
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const accountContext = await getUserAccountContext({ supabase, userId: user.id });
+    const accountContext = await getUserAccountContext({
+      supabase,
+      userId: user.id,
+    });
     const activeAccountId = accountContext.activeAccountId;
 
     if (!activeAccountId) {
@@ -68,17 +83,93 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!(await accountRecordExists({ supabase, table: "service_lines", id: input.serviceLineId, accountId: activeAccountId }))) {
+    if (
+      !(await accountRecordExists({
+        supabase,
+        table: "service_lines",
+        id: input.serviceLineId,
+        accountId: activeAccountId,
+      }))
+    ) {
       return NextResponse.json(
         { error: "Selected service line does not belong to the active account." },
         { status: 400 },
       );
     }
 
-    if (!(await accountRecordExists({ supabase, table: "offers", id: input.offerId, accountId: activeAccountId }))) {
+    if (
+      !(await accountRecordExists({
+        supabase,
+        table: "offers",
+        id: input.offerId,
+        accountId: activeAccountId,
+      }))
+    ) {
       return NextResponse.json(
         { error: "Selected offer does not belong to the active account." },
         { status: 400 },
+      );
+    }
+
+    const approvalConfirmed = rawBody.strategyApprovalConfirmed === true;
+    const strategyWorkflowVersion = cleanText(
+      rawBody.strategyWorkflowVersion,
+      50,
+    );
+    const strategyAccountId = cleanText(rawBody.strategyAccountId, 200);
+    const approvedStrategy = normalizeOneOffCampaignStrategy(
+      rawBody.approvedStrategy,
+    );
+    const missingStrategyFields =
+      oneOffStrategyMissingRequired(approvedStrategy);
+    const submittedSourceSignature = cleanText(
+      rawBody.strategySourceSignature,
+      200,
+    );
+    const sourceCampaign = buildOneOffCampaignSource(input);
+    const currentSourceSignature =
+      computeOneOffStrategySourceSignature(sourceCampaign);
+
+    if (
+      !approvalConfirmed ||
+      !submittedSourceSignature ||
+      strategyWorkflowVersion !== ONE_OFF_STRATEGY_GATE_VERSION
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Generate, review, and approve the Marketing Spine before creating the campaign.",
+        },
+        { status: 409 },
+      );
+    }
+
+    if (!strategyAccountId || strategyAccountId !== activeAccountId) {
+      return NextResponse.json(
+        {
+          error:
+            "The active workspace changed after the strategy was generated. Return to the campaign builder and regenerate the Marketing Spine in the correct workspace.",
+        },
+        { status: 409 },
+      );
+    }
+
+    if (missingStrategyFields.length) {
+      return NextResponse.json(
+        {
+          error: `Complete these strategy sections before creating the campaign: ${missingStrategyFields.join(", ")}.`,
+        },
+        { status: 400 },
+      );
+    }
+
+    if (submittedSourceSignature !== currentSourceSignature) {
+      return NextResponse.json(
+        {
+          error:
+            "Campaign inputs changed after the strategy was generated. Regenerate and approve the Marketing Spine before creating the campaign.",
+        },
+        { status: 409 },
       );
     }
 
@@ -86,41 +177,43 @@ export async function POST(request: Request) {
       id: user.id,
       email: user.email ?? null,
       full_name: "Rudy McCormick",
-      timezone: "America/Chicago"
+      timezone: "America/Chicago",
     });
 
-    const sanitizedStrategyContext = sanitizeCampaignStrategyContext(input.strategyContext);
-
-    const oneOffCampaignStrategy = {
-      source: "one_off_campaign_builder",
-      serviceLineId: input.serviceLineId ?? null,
-      offerId: input.offerId ?? null,
-      buyerSegment: input.buyerSegment,
-      audience: input.audience ?? input.buyerSegment,
-      goal: input.goal,
-      tone: input.tone ?? "Clear, practical, confident",
-      cta: input.cta,
-      differentiator: input.differentiator ?? null,
-      proofPoints: input.proofPoints ?? null,
-      originalityAngle: input.originalityAngle ?? null,
-      objections: input.objections ?? null,
-      strategyContext: sanitizedStrategyContext || null,
-      sourceContext: input.sourceContext ?? null,
-      capturedAt: new Date().toISOString(),
+    const now = new Date().toISOString();
+    const submittedGenerator = cleanText(rawBody.strategyGenerator, 30);
+    const strategyGenerator: OneOffStrategyGate["generator"] =
+      rawBody.strategyEdited === true
+        ? "manual"
+        : submittedGenerator === "openai" || submittedGenerator === "fallback"
+          ? submittedGenerator
+          : "manual";
+    const intelligenceReadinessScore = Math.max(
+      0,
+      Math.min(100, Number(rawBody.intelligenceReadinessScore) || 0),
+    );
+    const intelligenceMissingElements = Array.isArray(
+      rawBody.intelligenceMissingElements,
+    )
+      ? rawBody.intelligenceMissingElements
+          .map((item) => cleanText(item, 200))
+          .filter(Boolean)
+      : [];
+    const generatedAt = cleanText(rawBody.strategyGeneratedAt, 100) || now;
+    const gate: OneOffStrategyGate = {
+      version: ONE_OFF_STRATEGY_GATE_VERSION,
+      status: "approved",
+      sourceSignature: currentSourceSignature,
+      strategy: approvedStrategy,
+      generatedAt,
+      updatedAt: now,
+      approvedAt: now,
+      approvedBy: user.id,
+      generator: strategyGenerator,
+      intelligenceReadinessScore,
+      intelligenceMissingElements,
     };
-
-    const notesWithServiceLine = [
-      input.serviceLine ? `Service line: ${input.serviceLine}` : null,
-      input.notes || null,
-      input.differentiator ? `Differentiator:\n${input.differentiator}` : null,
-      input.proofPoints ? `Proof points:\n${input.proofPoints}` : null,
-      input.originalityAngle ? `Originality angle:\n${input.originalityAngle}` : null,
-      input.objections ? `Objections to address:\n${input.objections}` : null,
-      sanitizedStrategyContext ? `Strategy context selected from Settings / Brand Voice:\n${sanitizedStrategyContext}` : null,
-      input.sourceContext ? `Knowledge and source context:\n${input.sourceContext}` : null,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+    const oneOffCampaignStrategy = buildOneOffCampaignStoredStrategy(input);
 
     const { data: campaign, error } = await supabase
       .from("campaigns")
@@ -137,9 +230,12 @@ export async function POST(request: Request) {
         platforms: input.platforms,
         tone: input.tone ?? "Clear, practical, confident",
         cta: input.cta,
-        notes: notesWithServiceLine || null,
-        strategy: toJson(oneOffCampaignStrategy),
-        status: "draft"
+        notes: buildOneOffCampaignNotes(input) || null,
+        strategy: toJson(
+          mergeOneOffStrategyGate(oneOffCampaignStrategy, gate),
+        ),
+        // Intentionally omit campaigns.status. Supabase applies the existing
+        // allowed default (`draft`), eliminating status-constraint drift.
       })
       .select("*")
       .single();
@@ -150,13 +246,20 @@ export async function POST(request: Request) {
 
     await logActivity(supabase, {
       userId: user.id,
-      activityType: "campaign_created",
-      title: "Campaign created",
-      description: `Created campaign: ${campaign.name}`,
-      metadata: { campaignId: campaign.id, accountId: activeAccountId }
+      activityType: "campaign_created_after_strategy_approval",
+      title: "Campaign created from approved strategy",
+      description: `Created campaign after Marketing Spine approval: ${campaign.name}`,
+      metadata: toJson({
+        campaignId: campaign.id,
+        accountId: activeAccountId,
+        strategyVersion: gate.version,
+        strategyStatus: gate.status,
+        strategySourceSignature: gate.sourceSignature,
+        strategyGenerator: gate.generator,
+      }),
     });
 
-    return NextResponse.json({ campaign }, { status: 201 });
+    return NextResponse.json({ campaign, strategyGate: gate }, { status: 201 });
   } catch (error) {
     if (error instanceof Error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
@@ -164,7 +267,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       { error: "Unexpected error creating campaign." },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

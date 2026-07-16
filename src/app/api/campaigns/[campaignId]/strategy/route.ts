@@ -199,8 +199,10 @@ export async function POST(request: Request, context: RouteContext) {
     let campaignUpdate = supabase
       .from("campaigns")
       .update({
+        // Keep the existing campaigns.status lifecycle untouched. The one-off
+        // strategy approval lifecycle is persisted inside strategy.oneOffStrategyGate.
+        // This remains compatible with the legacy campaigns_status_check constraint.
         strategy: toJson(mergeOneOffStrategyGate(campaign.strategy, nextGate)),
-        status: nextGate.status === "approved" ? "strategy_approved" : "strategy_awaiting_approval",
       })
       .eq("id", campaign.id);
 

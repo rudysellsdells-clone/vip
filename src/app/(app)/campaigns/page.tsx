@@ -134,7 +134,7 @@ export default async function CampaignsPage() {
       <WebsiteHero
         eyebrow="Campaign Builder"
         title="Create revenue-focused marketing campaigns."
-        description="Build one-off campaigns using Account Strategy, Brand Voice, and Knowledge shortcuts. The monthly calendar still uses the full Marketing Spine gate."
+        description="Build the one-off Marketing Spine first, approve the strategy, and only then create the campaign and unlock content generation."
         primaryAction={{ label: setupReady ? "Review Assets" : "Manage Account Strategy", href: setupReady ? "/approvals" : accountStrategyHref }}
         secondaryAction={{ label: "Dashboard", href: "/dashboard" }}
       />
@@ -165,7 +165,7 @@ export default async function CampaignsPage() {
       <WebsiteSection
         eyebrow="Campaign Library"
         title="Recent campaigns"
-        description="Open a one-off campaign to generate assets, review outputs, and move the work into approval."
+        description="Each new one-off campaign enters the library only after its Marketing Spine has been reviewed and approved."
       >
         {campaigns.length ? (
           <div className={websiteStyles.cardGrid}>
