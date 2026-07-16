@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { AssetTitleLink } from "@/components/assets/AssetTitleLink";
 import { RemoveAssetButton } from "@/components/assets/RemoveAssetButton";
 import { DeleteCampaignButton } from "@/components/campaigns/DeleteCampaignButton";
-import { GenerateCampaignAssetsButton } from "@/components/campaigns/GenerateCampaignAssetsButton";
+import { OneOffStrategyApprovalPanel } from "@/components/campaigns/OneOffStrategyApprovalPanel";
 import { StartLumaYoutubeVideoButton } from "@/components/campaigns/StartLumaYoutubeVideoButton";
 import { SyncLumaVideoRunButton } from "@/components/campaigns/SyncLumaVideoRunButton";
 import {
@@ -15,6 +15,10 @@ import {
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
 import { getAccountAccessForUser } from "@/lib/accounts/account-context";
+import {
+  computeOneOffStrategySourceSignature,
+  extractOneOffStrategyGate,
+} from "@/lib/content-generation/one-off-strategy-gate";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -110,6 +114,12 @@ export default async function CampaignDetailPage({ params }: PageProps) {
   const approved = assets.filter((asset) => asset.status === "approved").length;
   const executed = assets.filter((asset) => ["published", "sent"].includes(asset.status)).length;
   const completedLumaRuns = lumaRuns.filter((run) => run.status === "completed").length;
+  const strategyGate = extractOneOffStrategyGate(campaign.strategy);
+  const strategyStale = Boolean(
+    strategyGate &&
+      strategyGate.sourceSignature !== computeOneOffStrategySourceSignature(campaign),
+  );
+  const strategyApproved = Boolean(strategyGate?.status === "approved" && !strategyStale);
 
   return (
     <WebsitePage>
@@ -148,11 +158,24 @@ export default async function CampaignDetailPage({ params }: PageProps) {
         />
       </section>
 
+      <WebsiteSection
+        eyebrow="Marketing Spine"
+        title="Approve the campaign strategy before generating assets"
+        description="The one-off workflow now follows the same review-before-execution principle as monthly campaigns. VIP creates the strategy first, saves it with the campaign, and blocks asset generation until you approve it."
+      >
+        <OneOffStrategyApprovalPanel
+          campaignId={campaign.id}
+          initialGate={strategyGate}
+          initialStale={strategyStale}
+          hasAssets={assets.length > 0}
+        />
+      </WebsiteSection>
+
       <section className={websiteStyles.twoColumn}>
         <WebsiteSection
           eyebrow="One-Off Campaign Brief"
           title="Campaign strategy inputs"
-          description="The fast campaign path is still active. These inputs, plus any Brand Voice, Knowledge, and Settings context saved with the campaign, inform the one-off asset pack."
+          description="These original inputs inform the private strategy draft. After approval, public assets are generated from the approved Marketing Spine and verified facts rather than the raw settings fields."
         >
           <div className={websiteStyles.cardGrid}>
             <article className={websiteStyles.card}>
@@ -176,15 +199,12 @@ export default async function CampaignDetailPage({ params }: PageProps) {
             </article>
           </div>
 
-          <div className={websiteStyles.actionRow}>
-            <GenerateCampaignAssetsButton campaignId={campaign.id} />
-          </div>
         </WebsiteSection>
 
         <WebsiteSection
           eyebrow="Status"
           title="One-off campaign controls"
-          description="Generate the one-off asset pack, create a Luma YouTube video, or delete this campaign if it was created by mistake."
+          description="The approved Marketing Spine unlocks asset and video generation. You can also remove the campaign if it was created by mistake."
         >
           <article className={websiteStyles.card}>
             <WebsiteBadge status={campaign.status} />
@@ -195,7 +215,13 @@ export default async function CampaignDetailPage({ params }: PageProps) {
           </article>
 
           <div className={websiteStyles.actionRow}>
-            <StartLumaYoutubeVideoButton campaignId={campaign.id} />
+            {strategyApproved ? (
+              <StartLumaYoutubeVideoButton campaignId={campaign.id} />
+            ) : (
+              <p className={websiteStyles.cardMeta}>
+                Approve the Marketing Spine before creating campaign video outputs.
+              </p>
+            )}
             <DeleteCampaignButton
               campaignId={campaign.id}
               campaignName={campaign.name}

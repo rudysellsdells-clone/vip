@@ -231,7 +231,143 @@ function createFirstMarketingHireAssetPack(
   };
 }
 
+function firstSentence(value: string, fallback: string) {
+  const cleaned = cleanText(value);
+  if (!cleaned) return fallback;
+  const [sentence] = cleaned.split(/(?<=[.!?])\s+/);
+  return cleanText(sentence || cleaned);
+}
+
+function createApprovedStrategyFallbackAssetPack(
+  input: GenerateMarketingAssetPackInput,
+): MarketingAssetPack | null {
+  const strategy = input.approvedCampaignStrategy;
+  if (!strategy) return null;
+
+  const campaign = input.campaign;
+  const audience = cleanText(strategy.targetAudience) || "the intended audience";
+  const situation = cleanText(strategy.buyerSituation);
+  const problem = cleanText(strategy.coreProblem);
+  const consequence = cleanText(strategy.businessConsequence);
+  const pointOfView = cleanText(strategy.campaignPointOfView);
+  const offer = cleanText(strategy.offerExplanation);
+  const deliverables = cleanText(strategy.offerDeliverables);
+  const proof = cleanText(strategy.proofAndSupport);
+  const objection = cleanText(strategy.objectionsAndResponse);
+  const cta = cleanText(strategy.primaryCta) || "Take the next step";
+  const subjectProblem = firstSentence(problem, campaign.name).replace(/[.!?]+$/, "");
+
+  return {
+    campaignStrategy: [
+      strategy.campaignObjective,
+      pointOfView,
+      offer,
+      strategy.messageProgression,
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+    audienceAngle: [audience, situation, problem].filter(Boolean).join("\n\n"),
+    coreMessage: [pointOfView, offer, cta].filter(Boolean).join("\n\n"),
+    emailDraft: `Subject: ${subjectProblem}
+Preview: ${firstSentence(consequence, `A practical look at why this matters to ${audience}.`)}
+
+Hi,
+
+${situation}
+
+${problem}
+
+${consequence}
+
+${pointOfView}
+
+${offer}
+
+${deliverables}
+
+${proof}
+
+${objection}
+
+${cta}.
+
+Best,
+Rudy`,
+    linkedinPost: `${situation}
+
+${problem}
+
+${consequence}
+
+Here is the point too many businesses miss:
+
+${pointOfView}
+
+${offer}
+
+${deliverables}
+
+${proof}
+
+${objection}
+
+${cta}.`,
+    facebookPost: `${situation}
+
+${problem}
+
+That matters because ${consequence.charAt(0).toLowerCase()}${consequence.slice(1)}
+
+${pointOfView}
+
+${offer}
+
+${deliverables}
+
+${objection}
+
+${cta}.`,
+    youtubeTitle: `${campaign.name}: ${subjectProblem}`,
+    youtubeDescription: `${situation}
+
+This video explains ${problem.charAt(0).toLowerCase()}${problem.slice(1)} and why it can lead to ${consequence.charAt(0).toLowerCase()}${consequence.slice(1)}
+
+The central idea is simple: ${pointOfView}
+
+${offer}
+
+What the buyer receives:
+${deliverables}
+
+Next step: ${cta}.`,
+    shortVideoScript: `Hook: ${firstSentence(problem, subjectProblem)}
+
+Scene 1: Show a realistic moment that reflects this buyer situation: ${situation}
+Voiceover: ${consequence}
+
+Scene 2: Show the existing approach creating friction or missed opportunity.
+Voiceover: ${pointOfView}
+
+Scene 3: Show the offer in action without fake interfaces or unsupported results.
+Voiceover: ${offer} ${deliverables}
+
+Close: ${cta}.`,
+    galaxyAiCreativePrompt: `Create a polished 20-second campaign video for ${campaign.name}. Audience: ${audience}. Open with a realistic visual representation of this buyer situation: ${situation}. Show the problem and consequence: ${problem} ${consequence}. Transition to the approved point of view and offer mechanism: ${pointOfView} ${offer}. Show the deliverables through believable business actions rather than fake dashboards or text-heavy graphics: ${deliverables}. End with a clear visual next step connected to: ${cta}. Use cinematic natural lighting, purposeful camera movement, realistic people and environments, and minimal readable text. Avoid generic marketing imagery, fake statistics, fabricated testimonials, distorted logos, and unsupported outcomes.`,
+    approvalChecklist: `Confirm that every asset:
+- Follows the approved campaign point of view.
+- Speaks to ${audience} in a recognizable situation.
+- Explains the problem, consequence, offer, and deliverables clearly.
+- Uses only approved proof.
+- Addresses the selected objection honestly.
+- Ends with the approved CTA: ${cta}.
+- Does not reintroduce raw settings, field labels, or generic brand language.`,
+  };
+}
+
 function createFallbackAssetPack(input: GenerateMarketingAssetPackInput): MarketingAssetPack {
+  const approvedFallback = createApprovedStrategyFallbackAssetPack(input);
+  if (approvedFallback) return approvedFallback;
+
   const campaign = input.campaign;
   const audience = campaign.audience ?? campaign.buyer_segment ?? "business owners";
   const perspective = resolveAudiencePerspective(audience);
@@ -319,7 +455,7 @@ async function callOpenAiForAssetPack(input: GenerateMarketingAssetPackInput) {
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+      model: process.env.OPENAI_ASSET_PACK_MODEL ?? process.env.OPENAI_MODEL ?? "gpt-4.1-mini",
       response_format: { type: "json_object" },
       messages: [
         {
@@ -388,7 +524,7 @@ async function enrichAssetPackBeforeReview(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+        model: process.env.OPENAI_ASSET_PACK_MODEL ?? process.env.OPENAI_MODEL ?? "gpt-4.1-mini",
         response_format: { type: "json_object" },
         messages: [
           {

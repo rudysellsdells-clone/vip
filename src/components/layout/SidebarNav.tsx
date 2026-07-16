@@ -277,12 +277,13 @@ function groupIsActive(pathname: string, group: NavGroup) {
 
 function Logo() {
   return (
-    <Link href="/dashboard" className={styles.logoLink}>
-      <span className={styles.logoMark}>VIP</span>
-      <span className={styles.logoText}>
-        <span className={styles.logoTitle}>{productConfig.appName}</span>
-        <span className={styles.logoSub}>{productConfig.brandName}</span>
-      </span>
+    <Link href="/dashboard" className={styles.logoLink} aria-label="Marketing VIP dashboard">
+      <img
+        src="/marketing-vip-logo.png"
+        alt="Marketing VIP"
+        className={styles.marketingVipLogo}
+      />
+      <span className={styles.logoSub}>{productConfig.brandName}</span>
     </Link>
   );
 }

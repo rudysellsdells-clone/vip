@@ -3,6 +3,7 @@ import { getAssetAccessForUser, scopeAssetQueryForAccess, scopeRelatedAssetQuery
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 import { generateAssetRevision } from "@/lib/ai/revision-generator";
+import { sanitizeCampaignNotesForPrompt } from "@/lib/content-generation/campaign-context-sanitizer";
 import { logActivity } from "@/lib/security/auditLog";
 import type { Json } from "@/types/database.types";
 
@@ -104,7 +105,7 @@ export async function POST(request: Request, context: RouteContext) {
             goal: campaign.goal,
             tone: campaign.tone,
             cta: campaign.cta,
-            notes: campaign.notes,
+            notes: sanitizeCampaignNotesForPrompt(campaign.notes) || null,
           }
         : null,
       instructions,

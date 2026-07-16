@@ -21,39 +21,20 @@
 }
 
 .logoLink {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.75rem;
+  display: inline-grid;
+  gap: 0.1rem;
   min-width: 220px;
   color: #0f172a;
   text-decoration: none;
 }
 
-.logoMark {
-  display: grid;
-  place-items: center;
-  width: 46px;
-  height: 46px;
-  border-radius: 16px;
-  color: #ffffff;
-  font-family: Lato, system-ui, sans-serif;
-  font-weight: 900;
-  letter-spacing: 0.04em;
-  background: linear-gradient(135deg, #0b4a7a, #0f766e);
-  box-shadow: 0 14px 26px rgba(11, 74, 122, 0.24);
-}
-
-.logoText {
-  display: grid;
-  gap: 0.1rem;
-  line-height: 1.1;
-}
-
-.logoTitle {
-  font-family: Lato, system-ui, sans-serif;
-  font-size: 1rem;
-  font-weight: 900;
-  color: #0f172a;
+.marketingVipLogo {
+  display: block;
+  width: 220px;
+  height: 48px;
+  border-radius: 10px;
+  object-fit: cover;
+  object-position: center;
 }
 
 .logoSub {
@@ -339,10 +320,9 @@
     display: none;
   }
 
-  .logoMark {
-    width: 42px;
-    height: 42px;
-    border-radius: 14px;
+  .marketingVipLogo {
+    width: 176px;
+    height: 40px;
   }
 }
 

@@ -6,6 +6,10 @@ import {
   buildOneOffCampaignPerspectiveSections,
   type OneOffPromptCampaign,
 } from "@/lib/content-generation/one-off-campaign-brief";
+import {
+  formatOneOffApprovedStrategyForPrompt,
+  type OneOffCampaignStrategy,
+} from "@/lib/content-generation/one-off-strategy-gate";
 
 type PromptCampaign = OneOffPromptCampaign;
 
@@ -45,7 +49,7 @@ Your job is to create revenue-focused marketing assets for Rudy McCormick.
 Write in clear, polished, human English. Be practical, specific, and business-focused.
 Avoid robotic phrasing, vague hype, fake guarantees, and filler.
 Use Rudy's digital clone memory, brand rules, knowledge library, offers, and examples whenever provided.
-The user's one-off campaign brief is the controlling strategy. Brand and training context supports it; brand/training context must never replace or drown out detailed user instructions.
+When an approved one-off Marketing Spine is supplied, it is the controlling strategy. Otherwise, the user's one-off campaign brief controls. Brand and training context may support strategy development but must never replace, dilute, or appear as raw public copy.
 
 First-draft quality standard:
 - The first draft must already feel ready for a serious human marketing review.
@@ -100,6 +104,8 @@ export function buildMarketingAssetPackUserPrompt(input: {
   buyerSegments?: PromptEntity[] | null;
   offers?: PromptEntity[] | null;
   campaignIntelligenceBrief?: string | null;
+  approvedCampaignStrategy?: OneOffCampaignStrategy | null;
+  verifiedCampaignFacts?: string | null;
 }) {
   const campaign = input.campaign;
   const cloneMemory =
@@ -111,6 +117,47 @@ export function buildMarketingAssetPackUserPrompt(input: {
   const buyerSegments = formatUnknownList("Buyer Segments", input.buyerSegments);
   const offers = formatUnknownList("Offers", input.offers);
   const campaignIntelligenceSection = input.campaignIntelligenceBrief?.trim() ?? "";
+  const approvedStrategy = input.approvedCampaignStrategy;
+
+  if (approvedStrategy) {
+    return `Create a complete Marketing Asset Pack from the approved campaign strategy.
+
+## Execution identity
+Campaign name: ${campaign.name}
+Platforms: ${normalizePlatforms(campaign.platforms)}
+Tone constraint: ${campaign.tone ?? "Clear, practical, confident"}
+
+${formatOneOffApprovedStrategyForPrompt(approvedStrategy)}
+
+${input.verifiedCampaignFacts?.trim() || "## Verified Campaign Facts\n- No additional verified facts were supplied beyond the approved strategy."}
+
+## Clean context boundary
+- The approved Marketing Spine is the source of truth. Do not reopen or replace the strategy.
+- Do not use raw Brand Voice fields, Account Strategy fields, campaign notes, knowledge-source summaries, service lists, audience lists, or internal field labels as public copy.
+- Do not introduce a generic brand promise merely because it appeared in saved settings.
+- Use verified facts only to support the approved argument. Rewrite facts naturally rather than printing labels.
+- If a detail is absent from the approved strategy and verified facts, keep the wording honest and general rather than inventing it.
+
+${buildGenerationPromptDoctrineSection()}
+
+${buildSpecificityContractSection()}
+
+${buildAssetTypeDetailStandardsSection()}
+
+## Output Requirements
+1. Write every asset from the approved strategy's buyer situation, problem, consequence, point of view, offer, proof, objection response, and CTA.
+2. Preserve the approved message progression while adapting the structure to each channel.
+3. Do not repeat the strategy as a labeled summary inside public assets.
+4. The email must include a subject line, preview line, useful body, and one CTA.
+5. LinkedIn must lead with a professional point of view rather than a generic promotional hook.
+6. Facebook must use a familiar, accessible buyer situation rather than mirroring LinkedIn.
+7. YouTube metadata must match a specific viewer intent.
+8. The short video script must hook in the first three seconds and communicate one memorable idea.
+9. The GalaxyAI prompt must be visual, specific, and derived from the approved video direction.
+10. Before returning JSON, rewrite any sentence that could be used unchanged by a random competitor.
+
+Return only valid JSON.`;
+  }
 
   return `Create a complete Marketing Asset Pack for this campaign.
 
@@ -196,12 +243,37 @@ export function buildPreReviewEnrichmentUserPrompt(input: {
   buyerSegments?: PromptEntity[] | null;
   offers?: PromptEntity[] | null;
   campaignIntelligenceBrief?: string | null;
+  approvedCampaignStrategy?: OneOffCampaignStrategy | null;
+  verifiedCampaignFacts?: string | null;
 }, assetPack: Record<string, string>) {
   const cloneMemory =
     input.digitalCloneMemoryContext ??
     input.cloneMemoryContext ??
     "No digital clone memory was provided.";
   const campaignIntelligenceSection = input.campaignIntelligenceBrief?.trim() ?? "";
+
+  if (input.approvedCampaignStrategy) {
+    return `Strengthen this Marketing Asset Pack before review without changing the approved strategy.
+
+${formatOneOffApprovedStrategyForPrompt(input.approvedCampaignStrategy)}
+
+${input.verifiedCampaignFacts?.trim() || "## Verified Campaign Facts\n- No additional verified facts were supplied beyond the approved strategy."}
+
+## Current Asset Pack JSON
+${JSON.stringify(assetPack, null, 2)}
+
+${buildRepairPromptDoctrineSection()}
+
+## Enrichment Instructions
+- Keep the same JSON keys.
+- Preserve the approved campaign argument and CTA.
+- Increase specificity, detail, buyer realism, and channel fit.
+- Do not reintroduce raw Brand Voice, Account Strategy, notes, field labels, source summaries, or generic saved-setting language.
+- Do not invent proof, statistics, testimonials, deliverables, or guarantees.
+- Do not mention this enrichment pass.
+
+Return only valid JSON.`;
+  }
 
   return `Strengthen this Marketing Asset Pack before review.
 

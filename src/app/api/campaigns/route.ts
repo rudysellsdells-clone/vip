@@ -3,6 +3,7 @@ import { getUserAccountContext } from "@/lib/accounts/account-context";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 import { createCampaignSchema } from "@/lib/validation/campaignSchemas";
+import { sanitizeCampaignStrategyContext } from "@/lib/content-generation/campaign-context-sanitizer";
 import { logActivity } from "@/lib/security/auditLog";
 import type { Json } from "@/types/database.types";
 
@@ -88,6 +89,8 @@ export async function POST(request: Request) {
       timezone: "America/Chicago"
     });
 
+    const sanitizedStrategyContext = sanitizeCampaignStrategyContext(input.strategyContext);
+
     const oneOffCampaignStrategy = {
       source: "one_off_campaign_builder",
       serviceLineId: input.serviceLineId ?? null,
@@ -101,7 +104,7 @@ export async function POST(request: Request) {
       proofPoints: input.proofPoints ?? null,
       originalityAngle: input.originalityAngle ?? null,
       objections: input.objections ?? null,
-      strategyContext: input.strategyContext ?? null,
+      strategyContext: sanitizedStrategyContext || null,
       sourceContext: input.sourceContext ?? null,
       capturedAt: new Date().toISOString(),
     };
@@ -113,7 +116,7 @@ export async function POST(request: Request) {
       input.proofPoints ? `Proof points:\n${input.proofPoints}` : null,
       input.originalityAngle ? `Originality angle:\n${input.originalityAngle}` : null,
       input.objections ? `Objections to address:\n${input.objections}` : null,
-      input.strategyContext ? `Strategy context selected from Settings / Brand Voice:\n${input.strategyContext}` : null,
+      sanitizedStrategyContext ? `Strategy context selected from Settings / Brand Voice:\n${sanitizedStrategyContext}` : null,
       input.sourceContext ? `Knowledge and source context:\n${input.sourceContext}` : null,
     ]
       .filter(Boolean)

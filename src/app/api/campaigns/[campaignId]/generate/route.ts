@@ -8,6 +8,14 @@ import { generateMarketingAssetPackWithCloneMemory } from "@/lib/ai/asset-pack-g
 import { marketingAssetPackToAssets } from "@/lib/ai/asset-pack-types";
 import { preparePublicAssetContent } from "@/lib/content/public-content-cleaner";
 import { buildCampaignIntelligenceContext } from "@/lib/content-generation/campaign-intelligence";
+import {
+  approvedStrategySummary,
+  computeOneOffStrategySourceSignature,
+  extractOneOffStrategyGate,
+  formatVerifiedCampaignFacts,
+  mergeOneOffStrategyGate,
+  normalizeOneOffCampaignForPrompt,
+} from "@/lib/content-generation/one-off-strategy-gate";
 import type { Json } from "@/types/database.types";
 
 type RouteContext = {
@@ -26,46 +34,6 @@ type InsertedGeneratedAsset = {
   asset_type: string;
   metadata: Json | null;
 };
-
-function normalizeCampaignForPrompt(campaign: {
-  name: string;
-  idea: string;
-  buyer_segment: string | null;
-  audience: string | null;
-  goal: string | null;
-  platforms: string[] | null;
-  tone: string | null;
-  cta: string | null;
-  notes: string | null;
-  strategy?: unknown;
-}) {
-  const storedStrategy =
-    campaign.strategy &&
-    typeof campaign.strategy === "object" &&
-    !Array.isArray(campaign.strategy)
-      ? (campaign.strategy as Record<string, unknown>)
-      : null;
-  const originalOneOffStrategy =
-    storedStrategy?.oneOffCampaignStrategy &&
-    typeof storedStrategy.oneOffCampaignStrategy === "object" &&
-    !Array.isArray(storedStrategy.oneOffCampaignStrategy)
-      ? (storedStrategy.oneOffCampaignStrategy as Record<string, unknown>)
-      : null;
-  const strategy = originalOneOffStrategy ?? storedStrategy;
-
-  return {
-    name: campaign.name,
-    idea: campaign.idea,
-    buyer_segment: campaign.buyer_segment,
-    audience: campaign.audience,
-    goal: campaign.goal,
-    platforms: campaign.platforms ?? [],
-    tone: campaign.tone,
-    cta: campaign.cta,
-    notes: campaign.notes,
-    strategy,
-  };
-}
 
 export async function POST(_request: Request, context: RouteContext) {
   try {
@@ -108,8 +76,31 @@ export async function POST(_request: Request, context: RouteContext) {
       );
     }
 
+    const strategyGate = extractOneOffStrategyGate(campaign.strategy);
+    const currentSourceSignature = computeOneOffStrategySourceSignature(campaign);
+
+    if (!strategyGate || strategyGate.status !== "approved") {
+      return NextResponse.json(
+        {
+          error:
+            "Generate, review, and approve the campaign strategy before creating content assets.",
+        },
+        { status: 409 },
+      );
+    }
+
+    if (strategyGate.sourceSignature !== currentSourceSignature) {
+      return NextResponse.json(
+        {
+          error:
+            "Campaign inputs changed after strategy approval. Rebuild and approve the Marketing Spine before generating assets.",
+        },
+        { status: 409 },
+      );
+    }
+
     const cloneContext = await loadDigitalCloneContext(user.id, accountId);
-    const normalizedCampaign = normalizeCampaignForPrompt(campaign);
+    const normalizedCampaign = normalizeOneOffCampaignForPrompt(campaign);
     const campaignIntelligence = buildCampaignIntelligenceContext({
       campaign: normalizedCampaign,
       cloneContext,
@@ -117,30 +108,55 @@ export async function POST(_request: Request, context: RouteContext) {
     });
 
     const oneOffCampaignStrategy = normalizedCampaign.strategy;
+    const approvedCampaignStrategy = strategyGate.strategy;
+    const approvedExecutionCampaign = {
+      ...normalizedCampaign,
+      idea: approvedCampaignStrategy.campaignPointOfView,
+      buyer_segment: approvedCampaignStrategy.targetAudience,
+      audience: approvedCampaignStrategy.targetAudience,
+      goal: approvedCampaignStrategy.campaignObjective,
+      cta: approvedCampaignStrategy.primaryCta,
+      notes: null,
+      strategy: {
+        approvedCampaignStrategy,
+      },
+    };
+    const verifiedCampaignFacts = formatVerifiedCampaignFacts(
+      campaignIntelligence.brief,
+    );
 
-    const assetPack = await generateMarketingAssetPackWithCloneMemory({
-      campaign: normalizedCampaign,
-      digitalCloneProfile:
-        cloneContext.profile && typeof cloneContext.profile === "object"
-          ? (cloneContext.profile as Record<string, unknown>)
-          : null,
-      digitalCloneMemoryContext: campaignIntelligence.formattedContext,
-      serviceLines: campaignIntelligence.selectedServiceLines as Record<string, unknown>[],
-      buyerSegments: campaignIntelligence.selectedBuyerSegments as Record<string, unknown>[],
-      offers: campaignIntelligence.selectedOffers as Record<string, unknown>[],
-      campaignIntelligenceBrief: campaignIntelligence.enabled
-        ? campaignIntelligence.formattedBrief
-        : null,
+    const generatedAssetPack = await generateMarketingAssetPackWithCloneMemory({
+      campaign: approvedExecutionCampaign,
+      digitalCloneProfile: null,
+      digitalCloneMemoryContext: null,
+      serviceLines: [],
+      buyerSegments: [],
+      offers: [],
+      campaignIntelligenceBrief: null,
+      approvedCampaignStrategy,
+      verifiedCampaignFacts,
     });
+    const approvedSummary = approvedStrategySummary(approvedCampaignStrategy);
+    const assetPack = {
+      ...generatedAssetPack,
+      ...approvedSummary,
+    };
 
-    const assets = marketingAssetPackToAssets(assetPack).map((asset) => ({
-      ...asset,
-      content: preparePublicAssetContent({
-        content: asset.content,
-        assetType: asset.assetType,
-        title: asset.title,
-      }),
-    }));
+    const internalStrategyAssetTypes = new Set([
+      "campaign_strategy",
+      "audience_angle",
+      "core_message",
+    ]);
+    const assets = marketingAssetPackToAssets(assetPack)
+      .filter((asset) => !internalStrategyAssetTypes.has(asset.assetType))
+      .map((asset) => ({
+        ...asset,
+        content: preparePublicAssetContent({
+          content: asset.content,
+          assetType: asset.assetType,
+          title: asset.title,
+        }),
+      }));
     const memorySnapshot = {
       profileLoaded: Boolean(cloneContext.profile),
       brandRuleCount: cloneContext.brandRules.length,
@@ -149,7 +165,9 @@ export async function POST(_request: Request, context: RouteContext) {
       serviceLineCount: cloneContext.serviceLines.length,
       buyerSegmentCount: cloneContext.buyerSegments.length,
       offerCount: cloneContext.offers.length,
-      formattedContextPreview: campaignIntelligence.formattedContext.slice(0, 2000),
+      formattedContextPreview: "Excluded from asset prompt after H1.8B strategy approval.",
+      approvedStrategyVersion: strategyGate.version,
+      approvedStrategySourceSignature: strategyGate.sourceSignature,
       campaignIntelligence: {
         enabled: campaignIntelligence.enabled,
         readinessScore: campaignIntelligence.brief.readinessScore,
@@ -180,6 +198,12 @@ export async function POST(_request: Request, context: RouteContext) {
             campaignIntelligenceReadinessScore: campaignIntelligence.brief.readinessScore,
             campaignIntelligenceMissingElements: campaignIntelligence.brief.missingElements,
             campaignIntelligenceSelection: campaignIntelligence.selectionSummary,
+            oneOffStrategyApprovalVersion: strategyGate.version,
+            oneOffStrategyApprovalStatus: strategyGate.status,
+            oneOffStrategyApprovedAt: strategyGate.approvedAt,
+            oneOffStrategySourceSignature: strategyGate.sourceSignature,
+            approvedCampaignStrategy,
+            rawSettingsExcludedFromAssetPrompt: true,
             cloneMemoryUsed: true,
             cloneMemorySnapshot: memorySnapshot,
             oneOffCampaignStrategy,
@@ -241,6 +265,7 @@ export async function POST(_request: Request, context: RouteContext) {
       .update({
         status: "asset_pack_generated",
         strategy: toJson({
+          ...mergeOneOffStrategyGate(campaign.strategy, strategyGate),
           campaignStrategy: assetPack.campaignStrategy,
           audienceAngle: assetPack.audienceAngle,
           coreMessage: assetPack.coreMessage,
@@ -251,6 +276,12 @@ export async function POST(_request: Request, context: RouteContext) {
             enabled: campaignIntelligence.enabled,
             brief: campaignIntelligence.brief,
             selectionSummary: campaignIntelligence.selectionSummary,
+          },
+          h18bExecution: {
+            strategyVersion: strategyGate.version,
+            strategyApprovedAt: strategyGate.approvedAt,
+            strategySourceSignature: strategyGate.sourceSignature,
+            rawSettingsExcludedFromAssetPrompt: true,
           },
         }),
       })
@@ -278,6 +309,14 @@ export async function POST(_request: Request, context: RouteContext) {
         cloneMemoryUsed: true,
         memorySnapshot,
         oneOffCampaignStrategy,
+        approvedCampaignStrategy,
+        strategyApproval: {
+          version: strategyGate.version,
+          status: strategyGate.status,
+          approvedAt: strategyGate.approvedAt,
+          sourceSignature: strategyGate.sourceSignature,
+          rawSettingsExcludedFromAssetPrompt: true,
+        },
         campaignIntelligence: {
           version: "h1_8a",
           enabled: campaignIntelligence.enabled,
@@ -293,6 +332,12 @@ export async function POST(_request: Request, context: RouteContext) {
       assetPack,
       assets: insertedAssetRows,
       cloneMemory: memorySnapshot,
+      strategyApproval: {
+        version: strategyGate.version,
+        status: strategyGate.status,
+        approvedAt: strategyGate.approvedAt,
+        sourceSignature: strategyGate.sourceSignature,
+      },
       campaignIntelligence: {
         version: "h1_8a",
         enabled: campaignIntelligence.enabled,

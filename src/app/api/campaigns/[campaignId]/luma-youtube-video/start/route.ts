@@ -6,6 +6,10 @@ import {
   getLumaStatusForScene,
   summarizeScenePlan,
 } from "@/lib/luma/youtube-video-plan";
+import {
+  computeOneOffStrategySourceSignature,
+  extractOneOffStrategyGate,
+} from "@/lib/content-generation/one-off-strategy-gate";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -51,6 +55,23 @@ export async function POST(_request: Request, context: RouteContext) {
 
   if (campaignError || !campaign) {
     return NextResponse.json({ error: "Campaign not found." }, { status: 404 });
+  }
+
+  const strategyGate = extractOneOffStrategyGate(campaign.strategy);
+  const strategyIsCurrent = Boolean(
+    strategyGate &&
+      strategyGate.sourceSignature ===
+        computeOneOffStrategySourceSignature(campaign),
+  );
+
+  if (!strategyGate || strategyGate.status !== "approved" || !strategyIsCurrent) {
+    return NextResponse.json(
+      {
+        error:
+          "Approve the current one-off Marketing Spine before creating Luma campaign video outputs.",
+      },
+      { status: 409 },
+    );
   }
 
   const model = readEnv("LUMA_MODEL", "ray-2");

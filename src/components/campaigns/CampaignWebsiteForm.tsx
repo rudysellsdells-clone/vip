@@ -258,8 +258,6 @@ export function CampaignWebsiteForm({
     } else {
       setAudience((current) => appendContext(current, value));
     }
-
-    addStrategyContext("Audience from Brand Voice", value);
   }
 
   function pickBrandOffer(value: string) {
@@ -268,28 +266,22 @@ export function CampaignWebsiteForm({
     } else {
       setIdea((current) => appendContext(current, value));
     }
-
-    addStrategyContext("Offer from Brand Voice", value);
   }
 
   function pickBrandTone(value: string) {
     setTone(value);
-    addStrategyContext("Tone from Brand Voice", value);
   }
 
   function pickBrandCta(value: string) {
     setCta(value);
-    addStrategyContext("CTA from Brand Voice", value);
   }
 
   function pickDifferentiator(value: string) {
     setDifferentiator(value);
-    addStrategyContext("Differentiator from Brand Voice", value);
   }
 
   function pickProofPoint(value: string) {
     setProofPoints((current) => appendContext(current, value));
-    addStrategyContext("Proof point from Brand Voice", value);
   }
 
   function pickKnowledge(value: string) {
@@ -602,10 +594,7 @@ export function CampaignWebsiteForm({
           <span className={formStyles.label}>Originality Angle</span>
           <textarea
             value={originalityAngle}
-            onChange={(event) => {
-              setOriginalityAngle(event.target.value);
-              addStrategyContext("Originality angle", event.target.value);
-            }}
+            onChange={(event) => setOriginalityAngle(event.target.value)}
             className={formStyles.textarea}
             placeholder="What makes this campaign sharper than a generic marketing campaign?"
           />
@@ -615,10 +604,7 @@ export function CampaignWebsiteForm({
           <span className={formStyles.label}>Objections to Address</span>
           <textarea
             value={objections}
-            onChange={(event) => {
-              setObjections(event.target.value);
-              addStrategyContext("Objections to address", event.target.value);
-            }}
+            onChange={(event) => setObjections(event.target.value)}
             className={formStyles.textarea}
             placeholder="Cost, timing, complexity, trust, urgency..."
           />
@@ -630,10 +616,7 @@ export function CampaignWebsiteForm({
           <span className={formStyles.label}>Differentiator</span>
           <textarea
             value={differentiator}
-            onChange={(event) => {
-              setDifferentiator(event.target.value);
-              addStrategyContext("Differentiator", event.target.value);
-            }}
+            onChange={(event) => setDifferentiator(event.target.value)}
             className={formStyles.textarea}
           />
         </label>
@@ -642,10 +625,7 @@ export function CampaignWebsiteForm({
           <span className={formStyles.label}>Proof Points</span>
           <textarea
             value={proofPoints}
-            onChange={(event) => {
-              setProofPoints(event.target.value);
-              addStrategyContext("Proof points", event.target.value);
-            }}
+            onChange={(event) => setProofPoints(event.target.value)}
             className={formStyles.textarea}
           />
         </label>

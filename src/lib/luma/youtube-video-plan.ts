@@ -13,20 +13,65 @@ function campaignValue(campaign: Record<string, unknown>, key: string, fallback 
   return readString(campaign[key], fallback);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function approvedStrategy(campaign: Record<string, unknown>) {
+  if (!isRecord(campaign.strategy)) return null;
+  if (!isRecord(campaign.strategy.oneOffStrategyGate)) return null;
+  if (campaign.strategy.oneOffStrategyGate.status !== "approved") return null;
+  if (!isRecord(campaign.strategy.oneOffStrategyGate.strategy)) return null;
+
+  return campaign.strategy.oneOffStrategyGate.strategy;
+}
+
 function getBusinessContext(campaign: Record<string, unknown>) {
+  const strategy = approvedStrategy(campaign);
   const name = campaignValue(campaign, "name", "Campaign");
-  const idea = campaignValue(campaign, "idea", "Help the business get found and convert more customers.");
   const buyerSegment = campaignValue(campaign, "buyer_segment", "business owners");
-  const audience = campaignValue(campaign, "audience", buyerSegment);
-  const goal = campaignValue(campaign, "goal", "increase visibility, trust, and qualified leads");
-  const cta = campaignValue(campaign, "cta", "Schedule a strategy call");
+  const audience = readString(
+    strategy?.targetAudience,
+    campaignValue(campaign, "audience", buyerSegment),
+  );
+  const buyerSituation = readString(
+    strategy?.buyerSituation,
+    `Show ${audience} encountering the campaign problem in a realistic business setting.`,
+  );
+  const coreProblem = readString(
+    strategy?.coreProblem,
+    campaignValue(campaign, "idea", "The current approach is not producing a dependable result."),
+  );
+  const businessConsequence = readString(
+    strategy?.businessConsequence,
+    campaignValue(campaign, "goal", "The problem creates delay, friction, or missed opportunity."),
+  );
+  const pointOfView = readString(
+    strategy?.campaignPointOfView,
+    "Show the better way to understand and address the problem.",
+  );
+  const offerExplanation = readString(
+    strategy?.offerExplanation,
+    "Show the approved offer as a practical response to the problem.",
+  );
+  const offerDeliverables = readString(
+    strategy?.offerDeliverables,
+    "Show what the buyer receives through believable actions and outcomes.",
+  );
+  const cta = readString(
+    strategy?.primaryCta,
+    campaignValue(campaign, "cta", "Take the next step"),
+  );
 
   return {
     name,
-    idea,
-    buyerSegment,
     audience,
-    goal,
+    buyerSituation,
+    coreProblem,
+    businessConsequence,
+    pointOfView,
+    offerExplanation,
+    offerDeliverables,
     cta,
   };
 }
@@ -34,10 +79,10 @@ function getBusinessContext(campaign: Record<string, unknown>) {
 function baseStylePrompt() {
   return [
     "Create a polished cinematic marketing video for YouTube.",
-    "Style: modern digital marketing, premium agency, clean motion, professional lighting, smooth camera movement.",
-    "No readable text overlays, no logos, no distorted words, no fake UI text.",
-    "Use visual metaphor, business owners, search visibility, AI discovery, content systems, automation, and growth.",
-    "Aspect ratio 16:9. Keep continuity with the previous scene when extending.",
+    "Style: realistic business storytelling, premium production, natural lighting, purposeful camera movement, and believable environments.",
+    "No readable text overlays, no distorted words, no fake dashboards, no fabricated statistics, and no unsupported before-and-after claims.",
+    "Use visual storytelling that reflects the approved campaign strategy rather than generic marketing imagery.",
+    "Aspect ratio 16:9. Keep visual continuity with the previous scene when extending.",
   ].join(" ");
 }
 
@@ -53,8 +98,8 @@ export function buildLumaYoutubeScenePlan(campaign: Record<string, unknown>) {
       prompt: [
         style,
         `Scene 1 of 4, hook. Campaign: ${context.name}.`,
-        `Show the audience ${context.audience} facing the challenge behind this idea: ${context.idea}.`,
-        "Visual mood: attention-grabbing, cinematic, high energy, clear business stakes.",
+        `Audience: ${context.audience}. Show this recognizable buyer situation: ${context.buyerSituation}`,
+        `Make the business stakes immediately understandable without on-screen explanatory text.`,
       ].join(" "),
     },
     {
@@ -64,19 +109,20 @@ export function buildLumaYoutubeScenePlan(campaign: Record<string, unknown>) {
       prompt: [
         style,
         "Scene 2 of 4, problem. Continue from the prior scene.",
-        `Show how the audience misses opportunities when visibility, AI search presence, content, and follow-up are not working together.`,
-        `The implied business goal is to ${context.goal}.`,
+        `Visualize the specific problem: ${context.coreProblem}`,
+        `Show the practical consequence through realistic business activity: ${context.businessConsequence}`,
       ].join(" "),
     },
     {
       sceneIndex: 2,
-      label: "Solution",
+      label: "Better Approach",
       durationSeconds: 5,
       prompt: [
         style,
-        "Scene 3 of 4, solution. Continue from the prior scene.",
-        "Show an integrated digital marketing system coming together: SEO, AIO, content creation, automation, and social publishing working as one engine.",
-        "Visual mood: confident, organized, transformative, premium agency execution.",
+        "Scene 3 of 4, better approach. Continue from the prior scene.",
+        `Express this campaign point of view visually: ${context.pointOfView}`,
+        `Show the approved offer mechanism through believable actions: ${context.offerExplanation}`,
+        `Represent the deliverables without fake software or unsupported results: ${context.offerDeliverables}`,
       ].join(" "),
     },
     {
@@ -86,8 +132,8 @@ export function buildLumaYoutubeScenePlan(campaign: Record<string, unknown>) {
       prompt: [
         style,
         "Scene 4 of 4, CTA and payoff. Continue from the prior scene.",
-        `Show the business moving from invisible to discoverable, trusted, and ready for more qualified leads.`,
-        `End with a clear visual sense of action connected to this CTA: ${context.cta}.`,
+        "Show the buyer reaching a clearer decision or next step rather than an exaggerated success outcome.",
+        `End with a clean visual action connected to this approved CTA: ${context.cta}.`,
       ].join(" "),
     },
   ];
