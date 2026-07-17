@@ -5,7 +5,10 @@ import {
   blockingBriefConflicts,
   resolveCampaignBrief,
 } from "../src/lib/content-generation/strategy-engine-v2/campaign-brief-resolver.ts";
-import { StrategyQualityGateError } from "../src/lib/content-generation/strategy-engine-v2/errors.ts";
+import {
+  StrategyQualityGateError,
+  strategyQualityGateMessage,
+} from "../src/lib/content-generation/strategy-engine-v2/errors.ts";
 import { STRATEGY_FIELD_CONTRACTS } from "../src/lib/content-generation/strategy-engine-v2/field-contracts.ts";
 import {
   normalizeStrategySemanticPlan,
@@ -336,6 +339,33 @@ test("narrative fallback generation is disabled", () => {
       error instanceof StrategyQualityGateError &&
       error.code === "STRATEGY_QUALITY_GATE",
   );
+});
+
+test("quality-gate errors preserve safe failure diagnostics", () => {
+  const error = new StrategyQualityGateError({
+    stage: "final_validation",
+    message: strategyQualityGateMessage("final_validation"),
+    diagnostic: {
+      requestStatus: "completed",
+      completedStages: ["planning", "strategy", "quality_review"],
+      blockingIssues: ["buyerSituation: The sentence is malformed."],
+      advisoryIssues: ["campaignObjective: The field is slightly long."],
+      reviewApproved: true,
+      reviewIssues: ["Tighten one sentence."],
+    },
+  });
+
+  assert.equal(error.code, "STRATEGY_QUALITY_GATE");
+  assert.equal(error.diagnostic.stage, "final_validation");
+  assert.equal(error.diagnostic.requestStatus, "completed");
+  assert.equal(error.diagnostic.reviewApproved, true);
+  assert.deepEqual(error.diagnostic.completedStages, [
+    "planning",
+    "strategy",
+    "quality_review",
+  ]);
+  assert.equal(error.diagnostic.blockingIssues.length, 1);
+  assert.equal(error.diagnostic.advisoryIssues.length, 1);
 });
 
 test("all thirteen field contracts remain present", () => {

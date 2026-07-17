@@ -7,7 +7,11 @@ import formStyles from "@/components/forms/VipForm.module.css";
 import type { BrandVoiceMonthlyOptions } from "@/lib/accounts/brand-voice-monthly-options";
 import { websiteStyles } from "@/components/website-ui/WebsitePage";
 import type { OneOffCampaignStrategy } from "@/lib/content-generation/one-off-strategy-gate";
-import type { StrategyEngineDiagnostics } from "@/lib/content-generation/strategy-engine-v2/types";
+import type {
+  StrategyEngineDiagnostics,
+  StrategyQualityGateDiagnostic,
+  StrategyQualityGateStage,
+} from "@/lib/content-generation/strategy-engine-v2/types";
 import {
   countMissingOneOffStrategyFields,
   EMPTY_ONE_OFF_STRATEGY,
@@ -114,6 +118,25 @@ function optionLabel(value: string) {
   return value.length > 84 ? `${value.slice(0, 81)}...` : value;
 }
 
+function diagnosticStageLabel(stage: StrategyQualityGateStage) {
+  const labels: Record<StrategyQualityGateStage, string> = {
+    configuration: "AI configuration",
+    planning: "Semantic planning",
+    planning_repair: "Semantic planning repair",
+    strategy: "Strategy writing",
+    quality_review: "Editorial quality review",
+    final_validation: "Final deterministic validation",
+  };
+
+  return labels[stage];
+}
+
+function diagnosticStatusLabel(
+  status: StrategyQualityGateDiagnostic["requestStatus"],
+) {
+  return status.replaceAll("_", " ");
+}
+
 function ShortcutSelect({
   label,
   helper,
@@ -172,6 +195,8 @@ export function CampaignWebsiteForm({
   const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [strategyFailureDiagnostic, setStrategyFailureDiagnostic] =
+    useState<StrategyQualityGateDiagnostic | null>(null);
   const [strategyPreview, setStrategyPreview] = useState<StrategyPreview | null>(null);
   const [strategyDraft, setStrategyDraft] = useState<OneOffCampaignStrategy>(
     EMPTY_ONE_OFF_STRATEGY,
@@ -389,6 +414,7 @@ export function CampaignWebsiteForm({
     setStrategyLoading(true);
     setMessage(null);
     setError(null);
+    setStrategyFailureDiagnostic(null);
 
     try {
       const response = await fetch("/api/campaigns/strategy-preview", {
@@ -399,7 +425,16 @@ export function CampaignWebsiteForm({
       const result = await readJsonResponse(response);
 
       if (!response.ok) {
-        throw new Error(result.error ?? "Unable to generate campaign strategy.");
+        setStrategyPreview(null);
+        setStrategyDraft(EMPTY_ONE_OFF_STRATEGY);
+        setStrategyBriefSnapshot(null);
+        setStrategyEdited(false);
+        setStrategyFailureDiagnostic(
+          (result.strategyDiagnostic as StrategyQualityGateDiagnostic | undefined) ??
+            null,
+        );
+        setError(result.error ?? "Unable to generate campaign strategy.");
+        return;
       }
 
       const preview = result as StrategyPreview;
@@ -407,10 +442,27 @@ export function CampaignWebsiteForm({
       setStrategyDraft(preview.strategy);
       setStrategyBriefSnapshot(campaignBriefSnapshot(payload));
       setStrategyEdited(false);
+      setStrategyFailureDiagnostic(null);
       setMessage(
         "Marketing Spine generated. Review and edit it before creating the campaign.",
       );
     } catch (err) {
+      setStrategyPreview(null);
+      setStrategyDraft(EMPTY_ONE_OFF_STRATEGY);
+      setStrategyBriefSnapshot(null);
+      setStrategyEdited(false);
+      setStrategyFailureDiagnostic({
+        stage: "strategy",
+        requestStatus: "api_error",
+        completedStages: [],
+        blockingIssues: [
+          "The browser could not complete the strategy-preview request, so no server-side quality evaluation was returned.",
+        ],
+        advisoryIssues: [],
+        reviewApproved: null,
+        reviewIssues: [],
+        retryable: true,
+      });
       setError(
         err instanceof Error ? err.message : "Unexpected strategy error.",
       );
@@ -875,6 +927,70 @@ export function CampaignWebsiteForm({
           </span>
         ) : null}
       </div>
+
+      {strategyFailureDiagnostic ? (
+        <div className={formStyles.row}>
+          <div className={formStyles.field}>
+            <span className={formStyles.label}>Strategy generation diagnostic</span>
+            <p className={formStyles.description}>
+              Stage: <strong>{diagnosticStageLabel(strategyFailureDiagnostic.stage)}</strong>
+              {" · "}Request status: {diagnosticStatusLabel(strategyFailureDiagnostic.requestStatus)}
+              {" · "}Retryable: {strategyFailureDiagnostic.retryable ? "yes" : "no"}
+            </p>
+
+            <p className={formStyles.description}>
+              Completed stages: {strategyFailureDiagnostic.completedStages.length
+                ? strategyFailureDiagnostic.completedStages
+                    .map(diagnosticStageLabel)
+                    .join(" → ")
+                : "No AI stage completed"}
+            </p>
+
+            {strategyFailureDiagnostic.reviewApproved !== null ? (
+              <p className={formStyles.description}>
+                Editorial decision: {strategyFailureDiagnostic.reviewApproved ? "approved" : "not approved"}
+              </p>
+            ) : (
+              <p className={formStyles.description}>
+                Editorial decision: not reached
+              </p>
+            )}
+
+            {strategyFailureDiagnostic.blockingIssues.length ? (
+              <div>
+                <span className={formStyles.label}>Blocking findings</span>
+                <ul className={formStyles.description}>
+                  {strategyFailureDiagnostic.blockingIssues.map((issue, index) => (
+                    <li key={`blocking-${index}`}>{issue}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {strategyFailureDiagnostic.reviewIssues.length ? (
+              <div>
+                <span className={formStyles.label}>Editorial findings</span>
+                <ul className={formStyles.description}>
+                  {strategyFailureDiagnostic.reviewIssues.map((issue, index) => (
+                    <li key={`review-${index}`}>{issue}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {strategyFailureDiagnostic.advisoryIssues.length ? (
+              <div>
+                <span className={formStyles.label}>Advisory findings</span>
+                <ul className={formStyles.description}>
+                  {strategyFailureDiagnostic.advisoryIssues.map((issue, index) => (
+                    <li key={`advisory-${index}`}>{issue}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {strategyPreview ? (
         <>

@@ -142,6 +142,7 @@ export async function POST(request: Request) {
           code: error.code,
           retryable: error.retryable,
           stage: error.stage,
+          strategyDiagnostic: error.diagnostic,
         },
         { status: error.stage === "configuration" ? 503 : 422 },
       );

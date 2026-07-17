@@ -1,6 +1,6 @@
 import type { OneOffCampaignStrategy } from "../one-off-strategy-gate.ts";
 
-export const STRATEGY_ENGINE_V2_VERSION = "h1.9a" as const;
+export const STRATEGY_ENGINE_V2_VERSION = "h1.9a1" as const;
 
 export type OfferCategory =
   | "demo"
@@ -109,6 +109,32 @@ export type StrategyQualityReview = {
   approved: boolean;
   issues: string[];
   strategy: OneOffCampaignStrategy;
+};
+
+export type StrategyQualityGateStage =
+  | "configuration"
+  | "planning"
+  | "planning_repair"
+  | "strategy"
+  | "quality_review"
+  | "final_validation";
+
+export type StrategyQualityGateRequestStatus =
+  | "not_started"
+  | "completed"
+  | "timeout"
+  | "api_error"
+  | "invalid_response";
+
+export type StrategyQualityGateDiagnostic = {
+  stage: StrategyQualityGateStage;
+  requestStatus: StrategyQualityGateRequestStatus;
+  completedStages: StrategyQualityGateStage[];
+  blockingIssues: string[];
+  advisoryIssues: string[];
+  reviewApproved: boolean | null;
+  reviewIssues: string[];
+  retryable: boolean;
 };
 
 export type StrategyFieldKey = keyof OneOffCampaignStrategy;

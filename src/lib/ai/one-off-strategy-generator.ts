@@ -27,8 +27,11 @@ import { validateStrategy } from "@/lib/content-generation/strategy-engine-v2/st
 import type {
   ResolvedCampaignBrief,
   StrategyEngineDiagnostics,
+  StrategyQualityGateDiagnostic,
+  StrategyQualityGateRequestStatus,
   StrategyQualityReview,
   StrategySemanticPlan,
+  StrategyValidationIssue,
 } from "@/lib/content-generation/strategy-engine-v2/types";
 import {
   normalizeOneOffCampaignStrategy,
@@ -38,6 +41,16 @@ import {
 
 type OpenAiMessage = { role: "system" | "user"; content: string };
 type OpenAiStage = "planning" | "planning_repair" | "strategy" | "strategy_repair" | "quality_review";
+
+class StrategyStageRequestError extends Error {
+  readonly requestStatus: StrategyQualityGateRequestStatus;
+
+  constructor(message: string, requestStatus: StrategyQualityGateRequestStatus) {
+    super(message);
+    this.name = "StrategyStageRequestError";
+    this.requestStatus = requestStatus;
+  }
+}
 
 function safeJsonParse(value: string) {
   try {
@@ -114,38 +127,57 @@ async function requestJson({
   temperature: number;
   stage: OpenAiStage;
 }) {
-  const response = await fetchWithTimeout(
-    "https://api.openai.com/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
+  let response: Response;
+
+  try {
+    response = await fetchWithTimeout(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          temperature,
+          response_format: { type: "json_object" },
+          messages,
+        }),
       },
-      body: JSON.stringify({
-        model,
-        temperature,
-        response_format: { type: "json_object" },
-        messages,
-      }),
-    },
-  );
+    );
+  } catch (error) {
+    const timedOut = error instanceof Error && error.name === "AbortError";
+    throw new StrategyStageRequestError(
+      timedOut
+        ? `OpenAI ${stage} request timed out.`
+        : `OpenAI ${stage} request could not be completed.`,
+      timedOut ? "timeout" : "api_error",
+    );
+  }
 
   const text = await response.text();
   if (!response.ok) {
-    throw new Error(
-      `OpenAI ${stage} request failed: ${response.status} ${response.statusText} — ${text}`,
+    throw new StrategyStageRequestError(
+      `OpenAI ${stage} request failed with status ${response.status}.`,
+      "api_error",
     );
   }
 
   const payload = safeJsonParse(text);
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    throw new Error(`OpenAI returned an unexpected ${stage} response.`);
+    throw new StrategyStageRequestError(
+      `OpenAI returned an unexpected ${stage} response.`,
+      "invalid_response",
+    );
   }
 
   const choices = (payload as Record<string, unknown>).choices;
   if (!Array.isArray(choices)) {
-    throw new Error(`OpenAI ${stage} response did not include choices.`);
+    throw new StrategyStageRequestError(
+      `OpenAI ${stage} response did not include choices.`,
+      "invalid_response",
+    );
   }
 
   const message = (choices[0] as Record<string, unknown> | undefined)?.message;
@@ -155,12 +187,18 @@ async function requestJson({
       : null;
 
   if (typeof content !== "string") {
-    throw new Error(`OpenAI ${stage} response did not include message content.`);
+    throw new StrategyStageRequestError(
+      `OpenAI ${stage} response did not include message content.`,
+      "invalid_response",
+    );
   }
 
   const parsed = extractJson(content);
   if (!parsed) {
-    throw new Error(`OpenAI ${stage} response did not contain valid JSON.`);
+    throw new StrategyStageRequestError(
+      `OpenAI ${stage} response did not contain valid JSON.`,
+      "invalid_response",
+    );
   }
 
   return parsed;
@@ -197,11 +235,43 @@ function normalizeQualityReview(value: unknown): StrategyQualityReview {
   };
 }
 
-function publicQualityError(stage: StrategyQualityGateStage) {
+function safeMessages(values: string[], limit = 12) {
+  return values
+    .map((value) => String(value ?? "").replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .map((value) => (value.length > 280 ? `${value.slice(0, 277).trim()}...` : value))
+    .slice(0, limit);
+}
+
+function requestStatusFromError(error: unknown): StrategyQualityGateRequestStatus {
+  if (error instanceof StrategyStageRequestError) return error.requestStatus;
+  return "invalid_response";
+}
+
+function splitValidationIssues(issues: StrategyValidationIssue[]) {
+  return {
+    blockingIssues: safeMessages(
+      issues
+        .filter((issue) => issue.severity === "critical")
+        .map((issue) => `${issue.field}: ${issue.message}`),
+    ),
+    advisoryIssues: safeMessages(
+      issues
+        .filter((issue) => issue.severity === "warning")
+        .map((issue) => `${issue.field}: ${issue.message}`),
+    ),
+  };
+}
+
+function publicQualityError(
+  stage: StrategyQualityGateStage,
+  diagnostic: Partial<StrategyQualityGateDiagnostic> = {},
+) {
   return new StrategyQualityGateError({
     stage,
     message: strategyQualityGateMessage(stage),
     retryable: stage !== "configuration",
+    diagnostic,
   });
 }
 
@@ -257,7 +327,15 @@ async function generateSemanticPlan({
     );
   } catch (error) {
     console.error("H1.9A semantic planning request failed.", error);
-    throw publicQualityError("planning");
+    throw publicQualityError("planning", {
+      requestStatus: requestStatusFromError(error),
+      completedStages: [],
+      blockingIssues: [
+        requestStatusFromError(error) === "timeout"
+          ? "The private semantic-planning request timed out before quality evaluation began."
+          : "The private semantic-planning request did not return a usable response.",
+      ],
+    });
   }
 
   let issues = validateStrategySemanticPlan({ plan, brief });
@@ -283,7 +361,11 @@ async function generateSemanticPlan({
       );
     } catch (error) {
       console.error("H1.9A semantic planning repair failed.", error);
-      throw publicQualityError("planning");
+      throw publicQualityError("planning_repair", {
+        requestStatus: requestStatusFromError(error),
+        completedStages: ["planning"],
+        blockingIssues: safeMessages(issues.map((issue) => `${issue.field}: ${issue.message}`)),
+      });
     }
 
     issues = validateStrategySemanticPlan({ plan, brief });
@@ -291,7 +373,11 @@ async function generateSemanticPlan({
 
   if (issues.length) {
     console.error("H1.9A semantic plan failed quality validation.", issues);
-    throw publicQualityError("planning");
+    throw publicQualityError(repairUsed ? "planning_repair" : "planning", {
+      requestStatus: "completed",
+      completedStages: repairUsed ? ["planning", "planning_repair"] : ["planning"],
+      blockingIssues: safeMessages(issues.map((issue) => `${issue.field}: ${issue.message}`)),
+    });
   }
 
   return { plan, repairUsed };
@@ -321,7 +407,15 @@ async function generateDraftStrategy({
     );
   } catch (error) {
     console.error("H1.9A strategy writing request failed.", error);
-    throw publicQualityError("strategy");
+    throw publicQualityError("strategy", {
+      requestStatus: requestStatusFromError(error),
+      completedStages: ["planning"],
+      blockingIssues: [
+        requestStatusFromError(error) === "timeout"
+          ? "The strategy-writing request timed out after the semantic plan passed."
+          : "The strategy-writing request did not return a complete thirteen-field strategy.",
+      ],
+    });
   }
 }
 
@@ -356,7 +450,14 @@ async function runFinalQualityReview({
     );
   } catch (error) {
     console.error("H1.9A final strategy quality review failed.", error);
-    throw publicQualityError("quality_review");
+    const split = splitValidationIssues(issues);
+    throw publicQualityError("quality_review", {
+      requestStatus: requestStatusFromError(error),
+      completedStages: ["planning", "strategy"],
+      blockingIssues: split.blockingIssues,
+      advisoryIssues: split.advisoryIssues,
+      reviewApproved: null,
+    });
   }
 }
 
@@ -404,12 +505,29 @@ export async function generateOneOffCampaignStrategy({
   const finalIssues = validateStrategy({ strategy, brief });
 
   if (!review.approved || review.issues.length || finalIssues.length) {
+    const split = splitValidationIssues(finalIssues);
+    const editorialBlocking = !review.approved
+      ? ["The independent editorial reviewer did not approve the rewritten strategy."]
+      : [];
     console.error("H1.9A blocked a low-quality strategy preview.", {
       reviewApproved: review.approved,
       reviewIssues: review.issues,
       deterministicIssues: finalIssues,
     });
-    throw publicQualityError("quality_review");
+    throw publicQualityError(
+      finalIssues.length ? "final_validation" : "quality_review",
+      {
+        requestStatus: "completed",
+        completedStages: ["planning", "strategy", "quality_review"],
+        blockingIssues: safeMessages([
+          ...editorialBlocking,
+          ...split.blockingIssues,
+        ]),
+        advisoryIssues: split.advisoryIssues,
+        reviewApproved: review.approved,
+        reviewIssues: safeMessages(review.issues),
+      },
+    );
   }
 
   return {
