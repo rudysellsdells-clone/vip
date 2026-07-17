@@ -1,6 +1,6 @@
 import type { OneOffCampaignStrategy } from "../one-off-strategy-gate.ts";
 
-export const STRATEGY_ENGINE_V2_VERSION = "h1.9" as const;
+export const STRATEGY_ENGINE_V2_VERSION = "h1.9a" as const;
 
 export type OfferCategory =
   | "demo"
@@ -85,6 +85,32 @@ export type ResolvedCampaignBrief = {
   resolutionWarnings: string[];
 };
 
+export type StrategySemanticPlan = {
+  buyerTrigger: string;
+  currentWorkaround: string;
+  rootCause: string;
+  businessConsequence: string;
+  campaignBelief: string;
+  offerMechanism: string;
+  desiredDecision: string;
+  primaryObjection: string;
+  objectionResponse: string;
+};
+
+export type StrategySemanticPlanKey = keyof StrategySemanticPlan;
+
+export type StrategySemanticPlanIssue = {
+  field: StrategySemanticPlanKey | "crossSection" | "offerAuthority";
+  code: string;
+  message: string;
+};
+
+export type StrategyQualityReview = {
+  approved: boolean;
+  issues: string[];
+  strategy: OneOffCampaignStrategy;
+};
+
 export type StrategyFieldKey = keyof OneOffCampaignStrategy;
 
 export type StrategyFieldContract = {
@@ -115,5 +141,8 @@ export type StrategyEngineDiagnostics = {
   conflicts: StrategySourceConflict[];
   validationIssueCount: number;
   repairPassUsed: boolean;
-  deterministicSafeguardsUsed: boolean;
+  deterministicSafeguardsUsed: false;
+  semanticPlanGenerated: boolean;
+  semanticPlanRepairUsed: boolean;
+  qualityReviewPassed: boolean;
 };

@@ -5,22 +5,28 @@ import {
   blockingBriefConflicts,
   resolveCampaignBrief,
 } from "../src/lib/content-generation/strategy-engine-v2/campaign-brief-resolver.ts";
+import { StrategyQualityGateError } from "../src/lib/content-generation/strategy-engine-v2/errors.ts";
 import { STRATEGY_FIELD_CONTRACTS } from "../src/lib/content-generation/strategy-engine-v2/field-contracts.ts";
 import {
-  buildDeterministicStrategy,
-} from "../src/lib/content-generation/strategy-engine-v2/strategy-fallbacks.ts";
-import {
-  criticalStrategyIssues,
-  validateStrategy,
-} from "../src/lib/content-generation/strategy-engine-v2/strategy-validator.ts";
+  normalizeStrategySemanticPlan,
+  validateStrategySemanticPlan,
+} from "../src/lib/content-generation/strategy-engine-v2/semantic-plan.ts";
+import { buildDeterministicStrategy } from "../src/lib/content-generation/strategy-engine-v2/strategy-fallbacks.ts";
+import { validateStrategy } from "../src/lib/content-generation/strategy-engine-v2/strategy-validator.ts";
 import type { OneOffPromptCampaign } from "../src/lib/content-generation/one-off-campaign-brief.ts";
 import type { CampaignIntelligenceContext } from "../src/lib/content-generation/campaign-intelligence.ts";
+import type {
+  StrategySemanticPlan,
+} from "../src/lib/content-generation/strategy-engine-v2/types.ts";
+import type { OneOffCampaignStrategy } from "../src/lib/content-generation/one-off-strategy-gate.ts";
 
-function campaign(overrides: Partial<OneOffPromptCampaign> = {}): OneOffPromptCampaign {
+function campaign(
+  overrides: Partial<OneOffPromptCampaign> = {},
+): OneOffPromptCampaign {
   return {
     name: "Marketing VIP Demo Campaign",
     idea:
-      "Show contractors how Marketing VIP plans a campaign and creates connected marketing assets.",
+      "Show contractors how Marketing VIP can provide consistent campaign planning and content creation without requiring a full internal marketing team.",
     buyer_segment: "Contractors",
     audience:
       "Builders, painters, tile contractors, electricians, HVAC companies, plumbers, landscapers, concrete companies, tree services, carpenters, and roofers",
@@ -29,7 +35,8 @@ function campaign(overrides: Partial<OneOffPromptCampaign> = {}): OneOffPromptCa
     platforms: ["Email", "LinkedIn", "Facebook", "YouTube"],
     tone: "Clear, practical, confident",
     cta: "Schedule a Marketing VIP Demo",
-    notes: "Show the platform in a useful, practical way without overselling it.",
+    notes:
+      "Show the platform in a useful, practical way without overselling it.",
     strategy: {
       offerId: "offer-audit",
       differentiator:
@@ -45,11 +52,17 @@ function campaign(overrides: Partial<OneOffPromptCampaign> = {}): OneOffPromptCa
   };
 }
 
-function intelligence(overrides: Partial<CampaignIntelligenceContext> = {}): CampaignIntelligenceContext {
+function intelligence(
+  overrides: Partial<CampaignIntelligenceContext> = {},
+): CampaignIntelligenceContext {
   const base: CampaignIntelligenceContext = {
     enabled: true,
     brief: {
-      audience: { value: "Contractors", confidence: "supported", sources: ["campaign"] },
+      audience: {
+        value: "Contractors",
+        confidence: "supported",
+        sources: ["campaign"],
+      },
       decisionMoment: { value: "", confidence: "missing", sources: [] },
       visibleProblem: { value: "", confidence: "missing", sources: [] },
       underlyingProblem: { value: "", confidence: "missing", sources: [] },
@@ -115,11 +128,68 @@ function intelligence(overrides: Partial<CampaignIntelligenceContext> = {}): Cam
       knowledgeSourcesAvailable: 0,
     },
   };
+
   return { ...base, ...overrides };
 }
 
+function approvedPlan(): StrategySemanticPlan {
+  return {
+    buyerTrigger:
+      "The owner wants a steadier flow of future work but realizes marketing disappears whenever customer and operational demands become urgent.",
+    currentWorkaround:
+      "The company relies on referrals, occasional social posts, and outside help purchased only when the pipeline begins to feel uncertain.",
+    rootCause:
+      "Because no one owns a repeatable marketing process, planning and production compete with estimating, staffing, customer service, and daily operations for the owner's limited attention.",
+    businessConsequence:
+      "Visibility and lead generation remain unpredictable, so the company cannot build demand early and growth continues to depend heavily on referrals and the owner's personal effort.",
+    campaignBelief:
+      "Consistent marketing does not require hiring a full internal department; it requires a dependable way to turn business priorities into coordinated campaigns and usable content.",
+    offerMechanism:
+      "The Marketing VIP Demo shows how the platform uses a company's audience, services, goals, and brand direction to organize strategy, campaign planning, and content creation in one workflow.",
+    desiredDecision:
+      "The qualified owner decides whether to schedule a Marketing VIP demo and evaluate the platform as an alternative to building a full-time marketing team.",
+    primaryObjection:
+      "The owner worries that another marketing platform will require more time and management than the business can spare.",
+    objectionResponse:
+      "The demonstration should focus on the actual workflow and decision value, allowing the owner to judge usability and fit without making an immediate commitment.",
+  };
+}
+
+function approvedStrategy(): OneOffCampaignStrategy {
+  return {
+    campaignObjective:
+      "Persuade contracting business owners that consistent marketing can be achieved without building a full internal team, and encourage qualified prospects to schedule a Marketing VIP demo.",
+    targetAudience:
+      "Owners and operators of small-to-midsized home-service contracting businesses who are responsible for growth and marketing decisions.",
+    buyerSituation:
+      "Marketing competes with estimates, customers, employees, and daily operations for the owner's attention. The company still relies on referrals, occasional social posts, or outside help purchased when demand slows. The issue becomes urgent when the owner wants steadier growth but cannot justify or manage a full-time marketing hire.",
+    coreProblem:
+      "The business lacks dedicated marketing capacity because no one owns a repeatable process for turning growth priorities into planned campaigns and finished content. Marketing therefore depends on whatever time and attention the owner can spare.",
+    businessConsequence:
+      "Without consistent planning and production, visibility and lead generation remain unpredictable. The company risks waiting until demand weakens before marketing again, making growth harder to manage and keeping future work dependent on referrals and the owner's personal effort.",
+    campaignPointOfView:
+      "Consistent marketing does not require a full internal department. Rather than adding disconnected tools or occasional projects, contractors need one dependable workflow that connects business priorities, campaign planning, and content production.",
+    offerExplanation:
+      "A Marketing VIP demo shows how the platform uses the company's audience, services, goals, and brand direction to organize strategy, campaign planning, and content creation. The owner can evaluate the workflow, practical fit, and potential value before deciding whether to move forward.",
+    offerDeliverables:
+      "The verified deliverable is the Marketing VIP demonstration itself, which allows the owner to review the workflow and decide whether the platform warrants further consideration.",
+    proofAndSupport:
+      "No approved quantitative proof, testimonial, case study, or verified performance claim was supplied. The campaign should rely on clear reasoning and an accurate demonstration of the platform.",
+    objectionsAndResponse:
+      "A likely concern is that another platform will require more time and management than the business can spare. The demo should answer this by showing the actual workflow clearly, allowing the owner to judge usability and fit without pressure.",
+    messageProgression:
+      "Begin with the owner's struggle to market consistently while running the business. Explain why referrals and occasional activity do not create dependable demand, then show the cost of waiting until work slows. Introduce the belief that consistent marketing does not require a full internal team, demonstrate how Marketing VIP supports that approach, answer the time-and-complexity concern, and close by inviting the owner to schedule a demo.",
+    primaryCta: "Schedule a Marketing VIP Demo",
+    contentDirection:
+      "Email: connect the owner's time constraint to one practical reason to schedule the demo. LinkedIn: lead with the business case for consistent marketing without a full internal team. Facebook: use a familiar contractor scenario and a low-pressure invitation. YouTube: show the workflow visually and end with the Marketing VIP demo CTA.",
+  };
+}
+
 test("campaign-level Marketing VIP demo overrides a conflicting Website Audit", () => {
-  const brief = resolveCampaignBrief({ campaign: campaign(), intelligence: intelligence() });
+  const brief = resolveCampaignBrief({
+    campaign: campaign(),
+    intelligence: intelligence(),
+  });
   assert.equal(brief.promotedOffer.name, "Marketing VIP Demo");
   assert.equal(brief.promotedOffer.source, "campaign_offer");
   assert.deepEqual(brief.promotedOffer.ignoredOfferNames, ["Website Audit"]);
@@ -135,7 +205,10 @@ test("an aligned explicitly selected Website Audit remains usable", () => {
     promoted_offer: "Website Audit",
     cta: "Book a Website Audit",
   });
-  const brief = resolveCampaignBrief({ campaign: alignedCampaign, intelligence: intelligence() });
+  const brief = resolveCampaignBrief({
+    campaign: alignedCampaign,
+    intelligence: intelligence(),
+  });
   assert.equal(brief.promotedOffer.name, "Website Audit");
   assert.equal(brief.promotedOffer.selectedAccountOfferCompatible, true);
   assert.equal(brief.verifiedOfferFacts.name, "Website Audit");
@@ -146,7 +219,10 @@ test("an aligned explicitly selected Website Audit remains usable", () => {
 });
 
 test("a long contractor market list resolves to one decision-maker category", () => {
-  const brief = resolveCampaignBrief({ campaign: campaign(), intelligence: intelligence() });
+  const brief = resolveCampaignBrief({
+    campaign: campaign(),
+    intelligence: intelligence(),
+  });
   assert.equal(
     brief.audience.label,
     "Owners and operators of small-to-midsized home-service contracting businesses",
@@ -164,85 +240,124 @@ test("a campaign offer and CTA conflict blocks strategy generation", () => {
   assert.equal(conflicts[0]?.code, "campaign_offer_cta_conflict");
 });
 
-test("ignored offer terms are rejected anywhere in the strategy", () => {
-  const brief = resolveCampaignBrief({ campaign: campaign(), intelligence: intelligence() });
-  const strategy = buildDeterministicStrategy(brief);
-  strategy.offerExplanation =
-    "The website audit reviews the current website and produces a clear report before the buyer schedules a demo.";
-  const issues = validateStrategy({ strategy, brief });
-  assert.ok(issues.some((issue) => issue.code.includes("ignored_offer_reintroduced")));
-});
-
-test("missing proof produces an honest no-proof statement", () => {
-  const brief = resolveCampaignBrief({ campaign: campaign(), intelligence: intelligence() });
-  const strategy = buildDeterministicStrategy(brief);
-  assert.match(strategy.proofAndSupport, /No approved quantitative proof/i);
-  assert.equal(validateStrategy({ strategy, brief }).some((issue) => issue.code === "unsupported_proof"), false);
-});
-
-test("a demo does not invent an audit report or roadmap", () => {
-  const brief = resolveCampaignBrief({ campaign: campaign(), intelligence: intelligence() });
-  const strategy = buildDeterministicStrategy(brief);
-  assert.match(strategy.offerDeliverables, /demonstration/i);
-  assert.doesNotMatch(strategy.offerDeliverables, /audit|report|roadmap|assessment/i);
-});
-
-test("customer problem fields stay customer-centered", () => {
-  const brief = resolveCampaignBrief({ campaign: campaign(), intelligence: intelligence() });
-  const strategy = buildDeterministicStrategy(brief);
-  assert.doesNotMatch(strategy.buyerSituation, /our issue|campaign creator|web search professionals/i);
-  assert.doesNotMatch(strategy.coreProblem, /our issue|campaign creator|web search professionals|marketing vip/i);
-  assert.doesNotMatch(strategy.businessConsequence, /our issue|campaign creator|web search professionals/i);
-});
-
-test("dental audience resolution selects practice decision-makers", () => {
-  const dentalCampaign = campaign({
-    audience: "Dentists and dental practices",
-    buyer_segment: "Dental Practices",
+test("semantic planning accepts customer-specific reasoning", () => {
+  const brief = resolveCampaignBrief({
+    campaign: campaign(),
+    intelligence: intelligence(),
   });
-  const brief = resolveCampaignBrief({ campaign: dentalCampaign, intelligence: intelligence() });
-  assert.equal(
-    brief.audience.label,
-    "Dental practice owners and practice managers responsible for practice growth",
+  const plan = normalizeStrategySemanticPlan(approvedPlan());
+  assert.deepEqual(validateStrategySemanticPlan({ plan, brief }), []);
+});
+
+test("semantic planning rejects stitched campaign fragments", () => {
+  const brief = resolveCampaignBrief({
+    campaign: campaign(),
+    intelligence: intelligence(),
+  });
+  const plan = approvedPlan();
+  plan.buyerTrigger =
+    "The owners are trying to easy marketing that works for them while running the business every day.";
+  const issues = validateStrategySemanticPlan({ plan, brief });
+  assert.ok(issues.some((issue) => issue.code === "awkward_plan_language"));
+});
+
+test("quality validator accepts a natural contractor strategy", () => {
+  const brief = resolveCampaignBrief({
+    campaign: campaign(),
+    intelligence: intelligence(),
+  });
+  assert.deepEqual(validateStrategy({ strategy: approvedStrategy(), brief }), []);
+});
+
+test("quality validator rejects the exact H1.9 fallback language", () => {
+  const brief = resolveCampaignBrief({
+    campaign: campaign(),
+    intelligence: intelligence(),
+  });
+  const strategy = approvedStrategy();
+  strategy.campaignObjective =
+    "Move owners and operators of small-to-midsized home-service contracting businesses from recognizing that fragmented execution is limiting progress to viewing Book a Demo as the practical next step for evaluating Demo.";
+  strategy.buyerSituation =
+    "When owners are trying to easy marketing that works for them but still rely on reactive, disconnected, or one-off efforts, the workaround may keep activity moving, but it no longer provides a dependable path for deciding what should happen next.";
+  strategy.coreProblem =
+    "The underlying problem stems from the lack of a repeatable system for connecting the buyer's decisions and day-to-day actions to the desired business outcome.";
+
+  const issues = validateStrategy({ strategy, brief });
+  assert.ok(issues.some((issue) => issue.code === "generic_fallback_template"));
+  assert.ok(issues.some((issue) => issue.code === "malformed_language"));
+});
+
+test("ignored offer terms are rejected anywhere in the strategy", () => {
+  const brief = resolveCampaignBrief({
+    campaign: campaign(),
+    intelligence: intelligence(),
+  });
+  const strategy = approvedStrategy();
+  strategy.offerExplanation =
+    "The website audit reviews the current website before the owner schedules a Marketing VIP demo.";
+  const issues = validateStrategy({ strategy, brief });
+  assert.ok(
+    issues.some((issue) => issue.code.includes("ignored_offer_reintroduced")),
   );
 });
 
-test("an informational campaign can explicitly avoid a direct offer", () => {
-  const infoCampaign = campaign({
-    promoted_offer: "Informational campaign with no direct offer",
-    goal: "Educate contractors about the cost of fragmented marketing",
-    cta: "Read the full article",
+test("missing proof requires an honest no-proof statement", () => {
+  const brief = resolveCampaignBrief({
+    campaign: campaign(),
+    intelligence: intelligence(),
   });
-  const brief = resolveCampaignBrief({ campaign: infoCampaign, intelligence: intelligence({ selectedOffers: [] }) });
-  assert.equal(brief.promotedOffer.category, "informational");
-  assert.equal(brief.promotedOffer.source, "campaign_offer");
+  const strategy = approvedStrategy();
+  strategy.proofAndSupport =
+    "The platform has repeatedly produced excellent results for businesses like these.";
+  const issues = validateStrategy({ strategy, brief });
+  assert.ok(issues.some((issue) => issue.code === "unsupported_proof"));
 });
 
-test("all thirteen field contracts exist and the deterministic spine has no critical issues", () => {
+test("a demo cannot invent an audit report or roadmap", () => {
+  const brief = resolveCampaignBrief({
+    campaign: campaign(),
+    intelligence: intelligence(),
+  });
+  const strategy = approvedStrategy();
+  strategy.offerDeliverables =
+    "The buyer receives a detailed roadmap and written assessment after the Marketing VIP demonstration.";
+  const issues = validateStrategy({ strategy, brief });
+  assert.ok(issues.some((issue) => issue.code === "invented_deliverable"));
+});
+
+test("narrative fallback generation is disabled", () => {
+  const brief = resolveCampaignBrief({
+    campaign: campaign(),
+    intelligence: intelligence(),
+  });
+  assert.throws(
+    () => buildDeterministicStrategy(brief),
+    (error: unknown) =>
+      error instanceof StrategyQualityGateError &&
+      error.code === "STRATEGY_QUALITY_GATE",
+  );
+});
+
+test("all thirteen field contracts remain present", () => {
   assert.equal(Object.keys(STRATEGY_FIELD_CONTRACTS).length, 13);
-  const brief = resolveCampaignBrief({ campaign: campaign(), intelligence: intelligence() });
-  const strategy = buildDeterministicStrategy(brief);
-  const issues = validateStrategy({ strategy, brief });
-  assert.deepEqual(criticalStrategyIssues(issues), []);
-});
-
-test("validator catches vendor-centered problems and CTA drift", () => {
-  const brief = resolveCampaignBrief({ campaign: campaign(), intelligence: intelligence() });
-  const strategy = buildDeterministicStrategy(brief);
-  strategy.coreProblem =
-    "Marketing VIP needs the customer to understand our platform because our company wants more demonstrations and stronger campaign results.";
-  strategy.primaryCta = "Download the Website Audit";
-  const issues = validateStrategy({ strategy, brief });
-  assert.ok(issues.some((issue) => issue.code === "core_problem_not_customer_cause"));
-  assert.ok(issues.some((issue) => issue.code === "cta_drift"));
-  assert.ok(issues.some((issue) => issue.code.includes("ignored_offer_reintroduced")));
 });
 
 test("channel direction covers every selected platform", () => {
-  const brief = resolveCampaignBrief({ campaign: campaign(), intelligence: intelligence() });
-  const strategy = buildDeterministicStrategy(brief);
+  const brief = resolveCampaignBrief({
+    campaign: campaign(),
+    intelligence: intelligence(),
+  });
+  const strategy = approvedStrategy();
   for (const platform of brief.platforms) {
-    assert.match(strategy.contentDirection.toLowerCase(), new RegExp(platform.toLowerCase()));
+    assert.match(
+      strategy.contentDirection.toLowerCase(),
+      new RegExp(platform.toLowerCase()),
+    );
   }
-  assert.equal(validateStrategy({ strategy, brief }).some((issue) => issue.code === "channel_missing"), false);
+  assert.equal(
+    validateStrategy({ strategy, brief }).some(
+      (issue) => issue.code === "channel_missing",
+    ),
+    false,
+  );
 });

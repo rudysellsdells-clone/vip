@@ -1,0 +1,16 @@
+Marketing VIP H1.9A — Strategy Quality Gate and Semantic Planning
+
+Apply by unzipping directly into the local vip repository root and choosing Replace.
+
+No Supabase migration is required.
+
+This patch requires H1.9 Strategy Engine V2 to already be installed.
+It disables visible narrative fallback strategies and adds:
+- private semantic planning
+- semantic plan validation and repair
+- independent full editorial review
+- strict low-quality preview blocking
+- exact regression coverage for the reported contractor output
+- precise conflicting-offer terminology
+
+See README_H1_9A_STRATEGY_QUALITY_GATE_AND_SEMANTIC_PLANNING.md.

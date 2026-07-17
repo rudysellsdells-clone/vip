@@ -1,0 +1,16 @@
+bb6d067692dc5c672696b1d76d28bb65b73c679ae9ff2fe8b926819b4c2b87a3  ./.env.example
+2a59efbfc72bdcbec0b1fc58aad6da3ce8170dfcc610b9766f9d9eeecaef114f  ./.env.sprint4.example
+6cb30e15425762cf6fad27ca606cf98e8ee28f1db788a153fa3157cef71d24e2  ./FILE_SHA256SUMS_H1_9A.txt
+cbf9b1210866a808367879506bb5aa6a927f3428b4ee0298b2756ff50fc41488  ./PATCH_MANIFEST_H1_9A_STRATEGY_QUALITY_GATE.txt
+90a3d16500804b1e6f4430f6f4f7418a1857bf96b4a9c950769973cc7beb9e82  ./README_H1_9A_STRATEGY_QUALITY_GATE_AND_SEMANTIC_PLANNING.md
+1ef3e149469d605c7bbb04b022e3edd4437295afb8dc8d3622ed893a3bbbc1ac  ./src/app/api/campaigns/strategy-preview/route.ts
+aecf71462abf3ee61a095bbff374a5808230f8666a6930ae1932b45c9758abe5  ./src/components/campaigns/CampaignWebsiteForm.tsx
+2bbfcda57b43d6e73aae5431be768f669dd99f85a746bb7366eb2f2bc8ec9759  ./src/lib/ai/one-off-strategy-generator.ts
+fa9b1cbafafd69827eec73d3b2280397d77d848b8763df18f68fdbc2c3dd0c04  ./src/lib/content-generation/strategy-engine-v2/errors.ts
+1559f848a428a9e919c2c27f41082ad3d10f4ee5dff249a3bdabd4e7e835d638  ./src/lib/content-generation/strategy-engine-v2/prompts.ts
+60438daa5c08d097343a8fccfec631ebe4f393559a9b5989a45e69c9c86d7d9b  ./src/lib/content-generation/strategy-engine-v2/semantic-plan.ts
+36d1da413b42f2e5c1fbd28e44d4144184c1d0a5c6d51e734c6e4df2105f1bbb  ./src/lib/content-generation/strategy-engine-v2/source-authority.ts
+ee670ccf8f0495fdba226e7a2879dc46cce30eddb40a3da085bd34ffeffd0ccf  ./src/lib/content-generation/strategy-engine-v2/strategy-fallbacks.ts
+6047f64fbb292c60ddf7483ccdb87596b4d44cde2ac3c8cc6e60052b9e1041ef  ./src/lib/content-generation/strategy-engine-v2/strategy-validator.ts
+f371671088eeecc5b4873aba6e271a3d864450884b97f6447151191998ebf1f6  ./src/lib/content-generation/strategy-engine-v2/types.ts
+b51ca79455da39b207aca040e35908c39414c126adddb8b9e84bb58de7497e7c  ./tests/strategy-engine-v2.test.ts

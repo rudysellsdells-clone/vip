@@ -7,6 +7,7 @@ import {
   normalizeOneOffCampaignRequestBody,
 } from "@/lib/content-generation/one-off-campaign-create";
 import { buildCampaignIntelligenceContext } from "@/lib/content-generation/campaign-intelligence";
+import { StrategyQualityGateError } from "@/lib/content-generation/strategy-engine-v2/errors";
 import {
   computeOneOffStrategySourceSignature,
   normalizeOneOffCampaignForPrompt,
@@ -134,6 +135,18 @@ export async function POST(request: Request) {
       strategyEngine: generated.diagnostics,
     });
   } catch (error) {
+    if (error instanceof StrategyQualityGateError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+          code: error.code,
+          retryable: error.retryable,
+          stage: error.stage,
+        },
+        { status: error.stage === "configuration" ? 503 : 422 },
+      );
+    }
+
     if (error instanceof Error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }

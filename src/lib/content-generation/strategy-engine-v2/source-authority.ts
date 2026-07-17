@@ -41,6 +41,23 @@ const CATEGORY_TERMS: Record<OfferCategory, string[]> = {
   unknown: [],
 };
 
+// Category detection can use broad language, but conflict blocking must use only
+// terms that clearly identify the rejected offer. Generic words such as
+// “review,” “report,” “session,” or “training” can appear naturally in unrelated
+// strategy sentences and must not create false offer-authority failures.
+const CATEGORY_CONFLICT_TERMS: Record<OfferCategory, string[]> = {
+  demo: ["demo", "demonstration", "walkthrough"],
+  audit: ["audit", "assessment", "diagnostic", "findings"],
+  consultation: ["consultation", "strategy call", "discovery call", "advisory"],
+  webinar: ["webinar", "workshop", "seminar"],
+  guide: ["guide", "checklist", "playbook", "ebook", "template"],
+  trial: ["trial", "pilot", "test drive", "proof of concept"],
+  product: [],
+  service: [],
+  informational: [],
+  unknown: [],
+};
+
 function clean(value: unknown, maxLength = 1200) {
   const text = String(value ?? "")
     .replace(/\r\n/g, "\n")
@@ -166,7 +183,7 @@ function forbiddenTermsForConflict(
   const normalizedName = normalizeName(ignoredName).toLowerCase();
   if (normalizedName.length >= 4) terms.add(normalizedName);
   if (categoryConflict(winnerCategory, ignoredCategory)) {
-    for (const term of CATEGORY_TERMS[ignoredCategory]) {
+    for (const term of CATEGORY_CONFLICT_TERMS[ignoredCategory]) {
       if (term.length >= 4) terms.add(term);
     }
   }

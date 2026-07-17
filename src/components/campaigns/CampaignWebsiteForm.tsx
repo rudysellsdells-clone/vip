@@ -77,7 +77,7 @@ type StrategyPreview = {
   workflowVersion: string;
   strategy: OneOffCampaignStrategy;
   sourceSignature: string;
-  generator: "openai" | "fallback";
+  generator: "openai";
   generatedAt: string;
   intelligenceReadinessScore: number;
   intelligenceMissingElements: string[];
@@ -888,7 +888,7 @@ export function CampaignWebsiteForm({
                 {strategyPreview.intelligenceReadinessScore}/100 source readiness
               </span>
               <span className={websiteStyles.badge}>
-                {strategyEdited ? "Human edited" : strategyPreview.generator === "openai" ? "AI draft" : "Safe fallback draft"}
+                {strategyEdited ? "Human edited" : "Quality-approved AI draft"}
               </span>
             </div>
             <h3 className={formStyles.smallTitle} style={{ marginTop: 14 }}>
@@ -901,11 +901,16 @@ export function CampaignWebsiteForm({
 
           <div className={formStyles.row}>
             <div className={formStyles.field}>
-              <span className={formStyles.label}>H1.9 strategy source resolution</span>
+              <span className={formStyles.label}>Strategy source resolution</span>
               <p className={formStyles.description}>
                 Promoted offer: <strong>{strategyPreview.strategyEngine.promotedOffer}</strong>
                 {" · "}Source: {strategyPreview.strategyEngine.offerSource.replaceAll("_", " ")}
                 {" · "}Engine: {strategyPreview.strategyEngine.version}
+              </p>
+              <p className={formStyles.description}>
+                Semantic plan: {strategyPreview.strategyEngine.semanticPlanGenerated ? "passed" : "not run"}
+                {" · "}Planning repair: {strategyPreview.strategyEngine.semanticPlanRepairUsed ? "used" : "not needed"}
+                {" · "}Editorial quality review: {strategyPreview.strategyEngine.qualityReviewPassed ? "passed" : "blocked"}
               </p>
               {strategyPreview.strategyEngine.ignoredOffers.length ? (
                 <p className={formStyles.message}>
