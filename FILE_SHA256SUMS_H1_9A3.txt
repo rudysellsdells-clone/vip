@@ -1,0 +1,8 @@
+defb2836a17cd55faa9d9ce14e4fb7e2f5388c77be1729fc7b9f6ee4459ff23f  ./PATCH_MANIFEST_H1_9A3_OFFER_MECHANISM.txt
+3323deeac90ab5ba96d8ff1ec11725f85c9bfe75ae1e2131d1f8eeb232728810  ./README_H1_9A3_OFFER_MECHANISM_VALIDATION.md
+a44a142408f55b474b3800b0f36d41e7a404c72d82c191675077eb5b7ca38084  ./src/lib/content-generation/strategy-engine-v2/offer-mechanism.ts
+59614a09cbe0cda20dbabf295ccd268a4b470246d33aec2148f2c4600126459c  ./src/lib/content-generation/strategy-engine-v2/prompts.ts
+12c289bccc1c5bca1cdf5be6e43afac51a08813664ea6e27c86b345a7cd9081c  ./src/lib/content-generation/strategy-engine-v2/semantic-plan.ts
+4b207c09c9a11efb3b132cb419f88e008d331b267698f8922e04e1b2b7dca33a  ./src/lib/content-generation/strategy-engine-v2/strategy-validator.ts
+a2e21636ddb4c1a26370cf912f702f760235a4b89c95d4f8878850bb8d1417cc  ./src/lib/content-generation/strategy-engine-v2/types.ts
+f9a790ab177bc43c628a4f9a064a9fb3b39b4a1c7e5047fda8f4f9993829e683  ./tests/strategy-engine-v2.test.ts

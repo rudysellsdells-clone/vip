@@ -455,3 +455,89 @@ test("Brand Voice Free Consultation is available as both an offer and usable CTA
     ),
   );
 });
+
+test("Free Consultation semantic planning accepts natural conversation mechanics", () => {
+  const brief = resolveCampaignBrief({
+    campaign: campaign({
+      name: "Free Consultation Campaign",
+      idea:
+        "Invite contracting business owners to discuss their current marketing challenges and determine a practical next step.",
+      goal: "Generate qualified free consultation requests",
+      promoted_offer: "Free Consultation",
+      cta: "Schedule a Free Consultation",
+    }),
+    intelligence: intelligence(),
+  });
+  const plan = approvedPlan();
+  plan.offerMechanism =
+    "The Free Consultation gives the owner a focused conversation to discuss the current marketing situation, ask questions, clarify priorities, and determine whether a practical next step fits the business.";
+  plan.desiredDecision =
+    "The qualified owner schedules a Free Consultation to clarify priorities and decide whether further marketing support is appropriate.";
+
+  assert.equal(brief.promotedOffer.category, "consultation");
+  assert.equal(
+    validateStrategySemanticPlan({ plan, brief }).some(
+      (issue) => issue.code === "plan_offer_mechanism_missing",
+    ),
+    false,
+  );
+});
+
+test("Free Consultation final strategy accepts natural mechanism language", () => {
+  const brief = resolveCampaignBrief({
+    campaign: campaign({
+      name: "Free Consultation Campaign",
+      idea:
+        "Invite contracting business owners to discuss their current marketing challenges and determine a practical next step.",
+      goal: "Generate qualified free consultation requests",
+      promoted_offer: "Free Consultation",
+      cta: "Schedule a Free Consultation",
+    }),
+    intelligence: intelligence(),
+  });
+  const strategy = approvedStrategy();
+  strategy.campaignObjective =
+    "Encourage qualified contracting business owners to schedule a Free Consultation so they can clarify their marketing priorities and determine whether additional support is appropriate.";
+  strategy.offerExplanation =
+    "A Free Consultation gives the owner a focused conversation to discuss the current marketing situation, ask questions, clarify priorities, and evaluate whether a practical next step fits the business. It is an opportunity to make a better-informed decision without committing to a larger engagement.";
+  strategy.offerDeliverables =
+    "The verified deliverable is the Free Consultation itself. No report, implementation plan, or additional written package is established by the campaign brief.";
+  strategy.proofAndSupport =
+    "No approved quantitative proof, testimonial, case study, or verified performance claim was supplied. The campaign should rely on clear reasoning and an accurate explanation of the consultation.";
+  strategy.objectionsAndResponse =
+    "A likely concern is that the conversation may become a high-pressure sales call. Address it by explaining that the consultation is a focused opportunity to discuss the situation, ask questions, and judge whether a next step makes sense.";
+  strategy.messageProgression =
+    "Begin with the owner's difficulty maintaining consistent marketing while running the business. Explain the underlying capacity problem and the cost of waiting until demand slows. Present a focused conversation as a practical way to clarify priorities, address the sales-pressure concern, and close by inviting the owner to schedule a Free Consultation.";
+  strategy.primaryCta = "Schedule a Free Consultation";
+  strategy.contentDirection =
+    "Email: connect one recognizable owner challenge to the value of a focused consultation. LinkedIn: lead with the business case for clarifying marketing priorities before adding more activity. Facebook: use a familiar contractor scenario and a low-pressure invitation to talk. YouTube: explain what the consultation covers and end with the Free Consultation CTA.";
+
+  const issues = validateStrategy({ strategy, brief });
+  assert.equal(
+    issues.some((issue) => issue.code === "offer_explanation_lacks_mechanism"),
+    false,
+  );
+  assert.equal(
+    issues.some((issue) => issue.code === "offer_explanation_not_resolved_offer"),
+    false,
+  );
+});
+
+test("vague consultation language still fails mechanism validation", () => {
+  const brief = resolveCampaignBrief({
+    campaign: campaign({
+      promoted_offer: "Free Consultation",
+      cta: "Schedule a Free Consultation",
+      goal: "Generate qualified free consultation requests",
+    }),
+    intelligence: intelligence(),
+  });
+  const plan = approvedPlan();
+  plan.offerMechanism =
+    "The Free Consultation is available to interested owners who want more information about the next step for their business.";
+
+  const issues = validateStrategySemanticPlan({ plan, brief });
+  assert.ok(
+    issues.some((issue) => issue.code === "plan_offer_mechanism_missing"),
+  );
+});

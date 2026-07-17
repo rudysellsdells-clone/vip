@@ -1,3 +1,7 @@
+import {
+  offerMechanismExplainsBuyerAction,
+  offerMechanismReferencesResolvedOffer,
+} from "./offer-mechanism.ts";
 import type {
   ResolvedCampaignBrief,
   StrategySemanticPlan,
@@ -26,7 +30,6 @@ const AWKWARD_GRAMMAR = /\btrying to\s+(easy|simple|better|effective|consistent|
 const ROOT_CAUSE_MARKERS = /\b(because|without|lacks?|lack of|depends on|rely|relies|relying|fragmented|inconsistent|reactive|no repeatable|absence of|disconnect)\b/i;
 const CONSEQUENCE_MARKERS = /\b(cost|costs|lose|loses|miss|misses|risk|risks|delay|delays|prevent|prevents|limits|unpredictable|inconsistent|dependence|wasted|slower|harder|erodes|leaves|results in|leads to|remains)\b/i;
 const CONTRAST_MARKERS = /\b(not just|not simply|rather than|instead|works when|before|first|better approach|should|does not require|is not solved by|isn\'t solved by)\b/i;
-const MECHANISM_MARKERS = /\b(shows|demonstrates|walks through|reviews|analyzes|assesses|identifies|maps|organizes|connects|turns|compares|prioritizes|builds|creates|automates|coordinates|combines|examines)\b/i;
 
 const MIN_WORDS: Record<StrategySemanticPlanKey, number> = {
   buyerTrigger: 8,
@@ -91,12 +94,6 @@ function similarity(left: string, right: string) {
   }
 
   return overlap / Math.min(leftTokens.size, rightTokens.size);
-}
-
-function offerMentioned(value: string, brief: ResolvedCampaignBrief) {
-  const valueTokens = tokens(value);
-  const offerTokens = Array.from(tokens(brief.promotedOffer.name));
-  return !offerTokens.length || offerTokens.some((token) => valueTokens.has(token));
 }
 
 function hasForbiddenOfferTerm(value: string, brief: ResolvedCampaignBrief) {
@@ -262,7 +259,7 @@ export function validateStrategySemanticPlan({
     );
   }
 
-  if (!MECHANISM_MARKERS.test(plan.offerMechanism)) {
+  if (!offerMechanismExplainsBuyerAction(plan.offerMechanism, brief)) {
     addIssue(
       issues,
       "offerMechanism",
@@ -271,7 +268,7 @@ export function validateStrategySemanticPlan({
     );
   }
 
-  if (!offerMentioned(plan.offerMechanism, brief)) {
+  if (!offerMechanismReferencesResolvedOffer(plan.offerMechanism, brief)) {
     addIssue(
       issues,
       "offerMechanism",
@@ -283,7 +280,7 @@ export function validateStrategySemanticPlan({
   if (
     brief.primaryCta &&
     similarity(plan.desiredDecision, brief.primaryCta) < 0.3 &&
-    !offerMentioned(plan.desiredDecision, brief)
+    !offerMechanismReferencesResolvedOffer(plan.desiredDecision, brief)
   ) {
     addIssue(
       issues,

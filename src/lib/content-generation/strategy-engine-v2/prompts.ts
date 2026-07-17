@@ -1,5 +1,6 @@
 import type { OneOffCampaignStrategy } from "../one-off-strategy-gate.ts";
 import { formatResolvedCampaignBrief } from "./campaign-brief-resolver.ts";
+import { offerMechanismGuidance } from "./offer-mechanism.ts";
 import { formatStrategyFieldContracts } from "./field-contracts.ts";
 import {
   formatStrategySemanticPlan,
@@ -89,6 +90,9 @@ export function buildSemanticPlanUserPrompt(brief: ResolvedCampaignBrief) {
 
 ${formatResolvedCampaignBrief(brief)}
 
+## Resolved offer mechanism standard
+${offerMechanismGuidance(brief)}
+
 Before returning JSON:
 1. Rewrite every fragment into a complete, logical marketing thought.
 2. Keep the buyer trigger, workaround, root cause, and consequence causally distinct.
@@ -128,6 +132,9 @@ export function buildSemanticPlanRepairUserPrompt({
 
 ## Canonical brief
 ${formatResolvedCampaignBrief(brief)}
+
+## Resolved offer mechanism standard
+${offerMechanismGuidance(brief)}
 
 ## Planning diagnostic
 ${formatStrategySemanticPlanIssues(issues)}
@@ -181,6 +188,9 @@ export function buildStrategyUserPrompt({
 
 ${formatResolvedCampaignBrief(brief)}
 
+## Resolved offer mechanism standard
+${offerMechanismGuidance(brief)}
+
 ${formatStrategySemanticPlan(plan)}
 
 Final checks before returning JSON:
@@ -232,6 +242,9 @@ export function buildRepairUserPrompt({
 
 ## Canonical brief
 ${formatResolvedCampaignBrief(brief)}
+
+## Resolved offer mechanism standard
+${offerMechanismGuidance(brief)}
 
 ## Approved semantic plan
 ${formatStrategySemanticPlan(plan)}
@@ -294,6 +307,9 @@ export function buildQualityReviewUserPrompt({
 
 ## Canonical brief
 ${formatResolvedCampaignBrief(brief)}
+
+## Resolved offer mechanism standard
+${offerMechanismGuidance(brief)}
 
 ## Approved semantic plan
 ${formatStrategySemanticPlan(plan)}

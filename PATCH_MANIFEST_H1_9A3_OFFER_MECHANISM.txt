@@ -1,0 +1,14 @@
+Marketing VIP H1.9A3 Offer Mechanism Validation
+
+INSTALL OVER: H1.9A2
+DATABASE MIGRATION: None
+ENVIRONMENT CHANGES: None
+
+CHANGED FILES:
+src/lib/content-generation/strategy-engine-v2/offer-mechanism.ts
+src/lib/content-generation/strategy-engine-v2/semantic-plan.ts
+src/lib/content-generation/strategy-engine-v2/strategy-validator.ts
+src/lib/content-generation/strategy-engine-v2/prompts.ts
+src/lib/content-generation/strategy-engine-v2/types.ts
+tests/strategy-engine-v2.test.ts
+README_H1_9A3_OFFER_MECHANISM_VALIDATION.md

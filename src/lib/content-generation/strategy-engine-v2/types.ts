@@ -1,6 +1,6 @@
 import type { OneOffCampaignStrategy } from "../one-off-strategy-gate.ts";
 
-export const STRATEGY_ENGINE_V2_VERSION = "h1.9a2" as const;
+export const STRATEGY_ENGINE_V2_VERSION = "h1.9a3" as const;
 
 export type OfferCategory =
   | "demo"

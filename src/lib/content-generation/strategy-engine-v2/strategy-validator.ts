@@ -1,5 +1,9 @@
 import type { OneOffCampaignStrategy } from "../one-off-strategy-gate.ts";
 import { STRATEGY_FIELD_CONTRACTS } from "./field-contracts.ts";
+import {
+  offerMechanismExplainsBuyerAction,
+  offerMechanismReferencesResolvedOffer,
+} from "./offer-mechanism.ts";
 import type {
   ResolvedCampaignBrief,
   StrategyFieldKey,
@@ -56,7 +60,6 @@ const CURRENT_BEHAVIOR_MARKERS = /\b(currently|today|still|rely|relies|relying|h
 const CAUSAL_MARKERS = /\b(because|caused by|comes from|stems from|underlying|root|without|fragmented|inconsistent|reactive|depends on|absence of|lack of|disconnect between|no repeatable|limited capacity|competes with)\b/i;
 const CONSEQUENCE_MARKERS = /\b(cost|costs|lose|loses|miss|misses|risk|risks|delay|delays|prevent|prevents|limits|unpredictable|inconsistent|dependence|dependent|wasted|slower|harder|erodes|leaves|results in|leads to|remains|cannot|can't)\b/i;
 const CONTRAST_MARKERS = /\b(not simply|not just|instead|rather than|works when|only works when|more than|before|first|better approach|should|does not require|isn't solved by|is not solved by)\b/i;
-const MECHANISM_MARKERS = /\b(by|through|starts with|begins with|reviews|analyzes|assesses|identifies|maps|organizes|connects|turns|compares|prioritizes|builds|creates|automates|coordinates|combines|shows|examines|demonstrates|walks through|uses)\b/i;
 const ROLE_MARKERS = /\b(owner|owners|operator|operators|manager|managers|director|directors|leader|leaders|decision-maker|decision-makers|executive|executives|administrator|administrators|founder|founders|principal|principals)\b/i;
 const VENDOR_MARKERS = /\b(marketing vip|web search professionals|our company|our agency|our platform|we need|we want|our issue|the user|form field|brand area|campaign creator)\b/i;
 const META_LANGUAGE = /\b(build a realistic moment|not explicitly established|not explicitly supplied|explain the operational|explain exactly|the audience should understand|the buyer needs to understand|use practical explanation|without inventing|selected buyer|campaign idea|account strategy|brand voice|source context|strategy context|field label)\b/i;
@@ -144,12 +147,6 @@ function hasForbiddenOfferTerm(value: string, brief: ResolvedCampaignBrief) {
   );
 }
 
-function offerMentioned(value: string, brief: ResolvedCampaignBrief) {
-  const valueTokens = tokens(value);
-  const offerTokens = Array.from(tokens(brief.promotedOffer.name));
-  return !offerTokens.length || offerTokens.some((token) => valueTokens.has(token));
-}
-
 function selectedChannelMissing(value: string, channels: string[]) {
   const normalized = value.toLowerCase();
   return channels.find((channel) => !normalized.includes(channel.toLowerCase()));
@@ -159,7 +156,7 @@ function objectiveUsesNaturalOfferReference(
   value: string,
   brief: ResolvedCampaignBrief,
 ) {
-  if (!offerMentioned(value, brief)) return false;
+  if (!offerMechanismReferencesResolvedOffer(value, brief)) return false;
   if (/\bfor evaluating\b/i.test(value)) return false;
   return true;
 }
@@ -344,7 +341,7 @@ export function validateStrategy({
     );
   }
 
-  if (!MECHANISM_MARKERS.test(strategy.offerExplanation)) {
+  if (!offerMechanismExplainsBuyerAction(strategy.offerExplanation, brief)) {
     addIssue(
       issues,
       "offerExplanation",
@@ -354,7 +351,7 @@ export function validateStrategy({
     );
   }
 
-  if (!offerMentioned(strategy.offerExplanation, brief)) {
+  if (!offerMechanismReferencesResolvedOffer(strategy.offerExplanation, brief)) {
     addIssue(
       issues,
       "offerExplanation",
