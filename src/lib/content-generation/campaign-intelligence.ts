@@ -174,6 +174,15 @@ function joinUnique(values: Array<string | null | undefined>, separator = " ") {
   return output.join(separator);
 }
 
+function firstUsable(...values: unknown[]) {
+  for (const value of values) {
+    const text = clean(value);
+    if (text) return text;
+  }
+
+  return "";
+}
+
 function recordText(value: unknown, depth = 0): string {
   if (depth > 3 || value === null || value === undefined) return "";
 
@@ -419,7 +428,7 @@ export function buildCampaignIntelligenceContext({
   enabled?: boolean;
 }): CampaignIntelligenceContext {
   const selectedBuyerSegments = enabled
-    ? selectRelevant(cloneContext.buyerSegments, campaign, 2)
+    ? selectRelevant(cloneContext.buyerSegments, campaign, 1)
     : cloneContext.buyerSegments;
   const selectedOffers = enabled
     ? selectRelevant(
@@ -464,13 +473,19 @@ export function buildCampaignIntelligenceContext({
     5,
   );
 
-  const explicitAudience = joinUnique([
+  // Audience is a prioritization decision, not a collection exercise. The old
+  // behavior concatenated campaign, buyer-memory, Brand Voice, and profile
+  // audiences into one pipe-delimited source. That encouraged the strategist to
+  // repeat the entire saved market list. Keep only the strongest available
+  // audience source and let the strategy precision layer turn it into one
+  // primary decision-maker.
+  const explicitAudience = firstUsable(
     campaign.audience,
     campaign.buyer_segment,
-    ...buyerDetails,
+    buyerDetails[0],
     profileString(cloneContext.accountBrandProfile, "target_audience"),
     profileString(cloneContext.profile, "audience_summary"),
-  ], " | ");
+  );
 
   const visibleProblem = joinUnique([
     campaign.idea,
@@ -526,10 +541,19 @@ export function buildCampaignIntelligenceContext({
     strategyText(campaign, "sourceContext"),
   ], " | ");
 
-  const decisionMomentValue = campaign.notes
+  const decisionMomentSource = firstUsable(buyerPains[0], campaign.idea);
+  const notesDescribeMoment = Boolean(
+    campaign.notes &&
+      /\b(when|after|before|once|during|currently|right now|recently|at the point|at the moment)\b/i.test(
+        campaign.notes,
+      ),
+  );
+  const decisionMomentValue = notesDescribeMoment
     ? clean(campaign.notes)
-    : campaign.idea
-      ? `Use a realistic moment when ${clean(campaign.idea, 700).replace(/[.!?]+$/, "").toLowerCase()} becomes important to the selected audience. Keep the scenario general unless account memory supplies a specific fact.`
+    : decisionMomentSource
+      ? `Build a realistic moment when ${clean(decisionMomentSource, 700)
+          .replace(/[.!?]+$/, "")
+          .toLowerCase()} becomes difficult to ignore. Show what the primary decision-maker is doing now, what is no longer working, and why evaluating a different approach is reasonable at that moment.`
       : "";
 
   const fieldsForReadiness: Array<[string, CampaignIntelligenceField]> = [
@@ -548,8 +572,8 @@ export function buildCampaignIntelligenceContext({
     audience: fieldsForReadiness[0][1],
     decisionMoment: field(
       decisionMomentValue,
-      campaign.notes ? ["campaign notes"] : ["campaign idea"],
-      campaign.notes ? "supported" : decisionMomentValue ? "inferred" : "missing",
+      notesDescribeMoment ? ["campaign notes"] : ["selected buyer pain", "campaign idea"],
+      notesDescribeMoment ? "supported" : decisionMomentValue ? "inferred" : "missing",
     ),
     visibleProblem: fieldsForReadiness[1][1],
     underlyingProblem: field(underlyingProblem, ["campaign strategy", "selected service memory"]),

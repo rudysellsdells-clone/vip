@@ -16,6 +16,8 @@ import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 import { createCampaignSchema } from "@/lib/validation/campaignSchemas";
 
+export const maxDuration = 60;
+
 async function accountRecordExists({
   supabase,
   table,
