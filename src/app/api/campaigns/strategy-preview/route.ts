@@ -131,6 +131,7 @@ export async function POST(request: Request) {
       generatedAt,
       intelligenceReadinessScore: intelligence.brief.readinessScore,
       intelligenceMissingElements: intelligence.brief.missingElements,
+      strategyEngine: generated.diagnostics,
     });
   } catch (error) {
     if (error instanceof Error) {

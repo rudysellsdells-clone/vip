@@ -9,6 +9,7 @@ export const createCampaignSchema = z.object({
   idea: z.string().min(10, "Campaign idea needs more detail."),
   audience: z.string().optional(),
   goal: z.string().min(3, "Campaign goal is required."),
+  promotedOffer: z.string().min(3, "Campaign Offer / Desired Conversion is required."),
   platforms: z.array(z.string()).default([]),
   tone: z.string().optional(),
   cta: z.string().min(3, "CTA is required."),

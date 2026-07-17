@@ -1,0 +1,23 @@
+Marketing VIP H1.9 Strategy Engine V2
+
+Install this patch instead of H1.8B5. H1.8B5 offer-authority behavior is incorporated here.
+
+Scope:
+- Canonical campaign brief resolver
+- Explicit Campaign Offer / Desired Conversion field
+- Source-authority and conflict rules
+- Formal contracts for all 13 Marketing Spine fields
+- Whole-spine validation and one repair pass
+- Deterministic safety layer
+- Source-resolution UI panel
+- Asset-generation authority protection
+- Legacy H1.8B approved-gate compatibility
+- 13 regression tests
+
+Database migration: none
+Supabase action: none
+
+Validation completed before packaging:
+- npm run test:strategy: 13 passed, 0 failed
+- npm run typecheck: passed
+- npm run build: passed with Next.js 16.2.10

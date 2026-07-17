@@ -430,23 +430,19 @@ export function buildCampaignIntelligenceContext({
   const selectedBuyerSegments = enabled
     ? selectRelevant(cloneContext.buyerSegments, campaign, 1)
     : cloneContext.buyerSegments;
+  const explicitOfferId = strategyId(campaign, "offerId");
+  const explicitServiceLineId = strategyId(campaign, "serviceLineId");
+  // H1.9 authority rule: account offers and service lines are evidence only
+  // when explicitly selected. Semantic similarity must not choose the offer.
   const selectedOffers = enabled
-    ? selectRelevant(
-        cloneContext.offers,
-        campaign,
-        3,
-        true,
-        [strategyId(campaign, "offerId")].filter(Boolean),
-      )
+    ? explicitOfferId
+      ? selectRelevant(cloneContext.offers, campaign, 1, false, [explicitOfferId])
+      : []
     : cloneContext.offers;
   const selectedServiceLines = enabled
-    ? selectRelevant(
-        cloneContext.serviceLines,
-        campaign,
-        3,
-        true,
-        [strategyId(campaign, "serviceLineId")].filter(Boolean),
-      )
+    ? explicitServiceLineId
+      ? selectRelevant(cloneContext.serviceLines, campaign, 1, false, [explicitServiceLineId])
+      : []
     : cloneContext.serviceLines;
   const selectedContentExamples = enabled
     ? selectRelevant(cloneContext.contentExamples, campaign, 3, false, [], 2)

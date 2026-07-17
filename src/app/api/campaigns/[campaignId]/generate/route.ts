@@ -12,10 +12,13 @@ import {
   approvedStrategySummary,
   computeOneOffStrategySourceSignature,
   extractOneOffStrategyGate,
-  formatVerifiedCampaignFacts,
   mergeOneOffStrategyGate,
   normalizeOneOffCampaignForPrompt,
 } from "@/lib/content-generation/one-off-strategy-gate";
+import {
+  formatResolvedCampaignFactsForAssets,
+  resolveCampaignBrief,
+} from "@/lib/content-generation/strategy-engine-v2/campaign-brief-resolver";
 import type { Json } from "@/types/database.types";
 
 type RouteContext = {
@@ -107,6 +110,10 @@ export async function POST(_request: Request, context: RouteContext) {
       enabled: process.env.VIP_DISABLE_CAMPAIGN_INTELLIGENCE !== "1",
     });
 
+    const resolvedCampaignBrief = resolveCampaignBrief({
+      campaign: normalizedCampaign,
+      intelligence: campaignIntelligence,
+    });
     const oneOffCampaignStrategy = normalizedCampaign.strategy;
     const approvedCampaignStrategy = strategyGate.strategy;
     const approvedExecutionCampaign = {
@@ -121,8 +128,8 @@ export async function POST(_request: Request, context: RouteContext) {
         approvedCampaignStrategy,
       },
     };
-    const verifiedCampaignFacts = formatVerifiedCampaignFacts(
-      campaignIntelligence.brief,
+    const verifiedCampaignFacts = formatResolvedCampaignFactsForAssets(
+      resolvedCampaignBrief,
     );
 
     const generatedAssetPack = await generateMarketingAssetPackWithCloneMemory({
@@ -173,6 +180,12 @@ export async function POST(_request: Request, context: RouteContext) {
         readinessScore: campaignIntelligence.brief.readinessScore,
         missingElements: campaignIntelligence.brief.missingElements,
         selectionSummary: campaignIntelligence.selectionSummary,
+      },
+      strategyEngineV2: {
+        version: resolvedCampaignBrief.version,
+        promotedOffer: resolvedCampaignBrief.promotedOffer.name,
+        offerSource: resolvedCampaignBrief.promotedOffer.source,
+        ignoredOffers: resolvedCampaignBrief.promotedOffer.ignoredOfferNames,
       },
       generatedAt: new Date().toISOString(),
     };

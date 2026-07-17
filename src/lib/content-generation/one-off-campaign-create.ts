@@ -9,6 +9,8 @@ export function normalizeOneOffCampaignRequestBody(rawBody: Record<string, unkno
     offerId: rawBody.offerId ?? rawBody.offer_id ?? undefined,
     buyerSegment:
       rawBody.buyerSegment ?? rawBody.buyer_segment ?? undefined,
+    promotedOffer:
+      rawBody.promotedOffer ?? rawBody.promoted_offer ?? undefined,
   };
 }
 
@@ -19,12 +21,13 @@ export function buildOneOffCampaignStoredStrategy(input: CreateCampaignInput) {
 
   return {
     source: "one_off_campaign_builder",
-    workflowVersion: "h1.8b2",
+    workflowVersion: "h1.9",
     serviceLineId: input.serviceLineId ?? null,
     offerId: input.offerId ?? null,
     buyerSegment: input.buyerSegment,
     audience: input.audience ?? input.buyerSegment,
     goal: input.goal,
+    promotedOffer: input.promotedOffer,
     tone: input.tone ?? "Clear, practical, confident",
     cta: input.cta,
     differentiator: input.differentiator ?? null,
@@ -44,6 +47,7 @@ export function buildOneOffCampaignNotes(input: CreateCampaignInput) {
 
   return [
     input.serviceLine ? `Service line: ${input.serviceLine}` : null,
+    `Campaign offer / desired conversion: ${input.promotedOffer}`,
     input.notes || null,
     input.differentiator
       ? `Differentiator:\n${input.differentiator}`
@@ -73,6 +77,7 @@ export function buildOneOffCampaignSource(input: CreateCampaignInput) {
     buyer_segment: input.buyerSegment,
     audience: input.audience ?? input.buyerSegment,
     goal: input.goal,
+    promoted_offer: input.promotedOffer,
     platforms: input.platforms,
     tone: input.tone ?? "Clear, practical, confident",
     cta: input.cta,

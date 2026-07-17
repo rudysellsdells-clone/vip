@@ -10,6 +10,7 @@ export type OneOffPromptCampaign = {
   platforms: string[] | null;
   tone: string | null;
   cta: string | null;
+  promoted_offer: string | null;
   notes: string | null;
   strategy?: Record<string, unknown> | null;
 };
@@ -121,12 +122,12 @@ export function buildOneOffCampaignPerspectiveSections(campaign: OneOffPromptCam
     buildAudiencePerspectivePrompt({
       audience,
       topic: campaign.idea,
-      offer: campaign.cta,
+      offer: campaign.promoted_offer || campaign.cta,
     }),
     buildCampaignDetailPromptSection({
       audience,
       topic: campaign.idea,
-      offer: campaign.cta,
+      offer: campaign.promoted_offer || campaign.cta,
       objective: campaign.goal,
       businessContext: campaign.notes,
       differentiator: campaign.strategy?.differentiator,

@@ -9,7 +9,11 @@ import {
 } from "@/lib/content-generation/campaign-context-sanitizer";
 import type { OneOffPromptCampaign } from "@/lib/content-generation/one-off-campaign-brief";
 
-export const ONE_OFF_STRATEGY_GATE_VERSION = "h1.8b" as const;
+export const ONE_OFF_STRATEGY_GATE_VERSION = "h1.9" as const;
+export const LEGACY_ONE_OFF_STRATEGY_GATE_VERSIONS = ["h1.8b"] as const;
+export type OneOffStrategyGateVersion =
+  | typeof ONE_OFF_STRATEGY_GATE_VERSION
+  | (typeof LEGACY_ONE_OFF_STRATEGY_GATE_VERSIONS)[number];
 
 export type OneOffStrategyStatus = "draft" | "approved";
 
@@ -30,7 +34,7 @@ export type OneOffCampaignStrategy = {
 };
 
 export type OneOffStrategyGate = {
-  version: typeof ONE_OFF_STRATEGY_GATE_VERSION;
+  version: OneOffStrategyGateVersion;
   status: OneOffStrategyStatus;
   sourceSignature: string;
   strategy: OneOffCampaignStrategy;
@@ -52,6 +56,7 @@ type CampaignRowLike = {
   platforms: string[] | null;
   tone: string | null;
   cta: string | null;
+  promoted_offer?: string | null;
   notes: string | null;
   strategy?: unknown;
   service_line_id?: string | null;
@@ -127,6 +132,7 @@ export function normalizeOneOffCampaignForPrompt(
     platforms: campaign.platforms ?? [],
     tone: campaign.tone,
     cta: campaign.cta,
+    promoted_offer: clean(campaign.promoted_offer ?? storedStrategy.promotedOffer) || null,
     notes: sanitizeCampaignNotesForPrompt(campaign.notes) || null,
     strategy,
   };
@@ -151,7 +157,11 @@ export function extractOneOffStrategyGate(value: unknown): OneOffStrategyGate | 
     ? root.oneOffStrategyGate
     : null;
 
-  if (!candidate || candidate.version !== ONE_OFF_STRATEGY_GATE_VERSION) {
+  const supportedVersions = new Set<string>([
+    ONE_OFF_STRATEGY_GATE_VERSION,
+    ...LEGACY_ONE_OFF_STRATEGY_GATE_VERSIONS,
+  ]);
+  if (!candidate || !supportedVersions.has(clean(candidate.version, 50))) {
     return null;
   }
 
@@ -159,7 +169,7 @@ export function extractOneOffStrategyGate(value: unknown): OneOffStrategyGate | 
   const strategy = normalizeOneOffCampaignStrategy(candidate.strategy);
 
   return {
-    version: ONE_OFF_STRATEGY_GATE_VERSION,
+    version: clean(candidate.version, 50) as OneOffStrategyGateVersion,
     status,
     sourceSignature: clean(candidate.sourceSignature, 200),
     strategy,
@@ -197,7 +207,14 @@ export function mergeOneOffStrategyGate(
 export function computeOneOffStrategySourceSignature(campaign: CampaignRowLike) {
   const normalized = normalizeOneOffCampaignForPrompt(campaign);
   const strategy = normalized.strategy ?? {};
-  const payload = {
+  const storedRoot = storedStrategyRecord(campaign.strategy);
+  const storedGate = isRecord(storedRoot.oneOffStrategyGate)
+    ? storedRoot.oneOffStrategyGate
+    : null;
+  const legacySignature =
+    storedGate?.version === "h1.8b" ||
+    clean(strategy.workflowVersion, 50).startsWith("h1.8");
+  const payload: Record<string, unknown> = {
     name: normalized.name,
     idea: normalized.idea,
     buyerSegment: normalized.buyer_segment,
@@ -216,7 +233,7 @@ export function computeOneOffStrategySourceSignature(campaign: CampaignRowLike) 
     strategyContext: strategy.strategyContext ?? null,
     sourceContext: strategy.sourceContext ?? null,
   };
-
+  if (!legacySignature) payload.promotedOffer = normalized.promoted_offer;
   return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
 }
 

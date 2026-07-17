@@ -29,6 +29,37 @@ function cleanText(value: unknown, maxLength = 5000) {
   return text.length > maxLength ? text.slice(0, maxLength).trim() : text;
 }
 
+function strategyEngineResolution(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  return {
+    version: cleanText(record.version, 50),
+    promotedOffer: cleanText(record.promotedOffer, 500),
+    offerSource: cleanText(record.offerSource, 100),
+    offerCategory: cleanText(record.offerCategory, 100),
+    selectedAccountOffer: cleanText(record.selectedAccountOffer, 500) || null,
+    ignoredOffers: Array.isArray(record.ignoredOffers) ? record.ignoredOffers.map((item) => cleanText(item, 500)).filter(Boolean) : [],
+    conflicts: Array.isArray(record.conflicts)
+      ? record.conflicts
+          .filter((item) => item && typeof item === "object" && !Array.isArray(item))
+          .map((item) => {
+            const conflict = item as Record<string, unknown>;
+            return {
+              code: cleanText(conflict.code, 120),
+              severity: conflict.severity === "blocking" ? "blocking" : "warning",
+              message: cleanText(conflict.message, 1000),
+              winningSource: cleanText(conflict.winningSource, 120),
+              ignoredSource: cleanText(conflict.ignoredSource, 120) || null,
+            };
+          })
+          .filter((item) => item.code && item.message)
+      : [],
+    validationIssueCount: Math.max(0, Number(record.validationIssueCount) || 0),
+    repairPassUsed: record.repairPassUsed === true,
+    deterministicSafeguardsUsed: record.deterministicSafeguardsUsed === true,
+  };
+}
+
 async function accountRecordExists({
   supabase,
   table,
@@ -213,7 +244,11 @@ export async function POST(request: Request) {
       intelligenceReadinessScore,
       intelligenceMissingElements,
     };
-    const oneOffCampaignStrategy = buildOneOffCampaignStoredStrategy(input);
+    const submittedStrategyEngine = strategyEngineResolution(rawBody.strategyEngine);
+    const oneOffCampaignStrategy = {
+      ...buildOneOffCampaignStoredStrategy(input),
+      strategyEngine: submittedStrategyEngine,
+    };
 
     const { data: campaign, error } = await supabase
       .from("campaigns")
@@ -256,6 +291,7 @@ export async function POST(request: Request) {
         strategyStatus: gate.status,
         strategySourceSignature: gate.sourceSignature,
         strategyGenerator: gate.generator,
+        strategyEngine: submittedStrategyEngine,
       }),
     });
 

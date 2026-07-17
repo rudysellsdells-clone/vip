@@ -7,6 +7,7 @@ import formStyles from "@/components/forms/VipForm.module.css";
 import type { BrandVoiceMonthlyOptions } from "@/lib/accounts/brand-voice-monthly-options";
 import { websiteStyles } from "@/components/website-ui/WebsitePage";
 import type { OneOffCampaignStrategy } from "@/lib/content-generation/one-off-strategy-gate";
+import type { StrategyEngineDiagnostics } from "@/lib/content-generation/strategy-engine-v2/types";
 import {
   countMissingOneOffStrategyFields,
   EMPTY_ONE_OFF_STRATEGY,
@@ -58,6 +59,7 @@ type CampaignCreatePayload = {
   buyer_segment: string;
   audience: string;
   goal: string;
+  promoted_offer: string;
   platforms: string[];
   tone: string;
   cta: string;
@@ -79,6 +81,7 @@ type StrategyPreview = {
   generatedAt: string;
   intelligenceReadinessScore: number;
   intelligenceMissingElements: string[];
+  strategyEngine: StrategyEngineDiagnostics;
 };
 
 async function readJsonResponse(response: Response) {
@@ -182,6 +185,7 @@ export function CampaignWebsiteForm({
   const [serviceLineId, setServiceLineId] = useState("");
   const [offerId, setOfferId] = useState("");
   const [goal, setGoal] = useState("");
+  const [promotedOffer, setPromotedOffer] = useState("");
   const [cta, setCta] = useState("");
   const [tone, setTone] = useState("");
   const [audience, setAudience] = useState("");
@@ -269,6 +273,7 @@ export function CampaignWebsiteForm({
   }
 
   function handleOffer(value: string) {
+    const previousSelected = offers.find((item) => item.id === offerId) ?? null;
     setOfferId(value);
     const selected = offers.find((item) => item.id === value);
 
@@ -290,6 +295,13 @@ export function CampaignWebsiteForm({
 
     if (!goal.trim()) {
       setGoal(selected.outcome || `Promote ${selected.name}`);
+    }
+
+    if (
+      !promotedOffer.trim() ||
+      promotedOffer.trim().toLowerCase() === previousSelected?.name.toLowerCase()
+    ) {
+      setPromotedOffer(selected.name);
     }
 
     if (!cta.trim() && selected.primaryCta) {
@@ -317,11 +329,8 @@ export function CampaignWebsiteForm({
   }
 
   function pickBrandOffer(value: string) {
-    if (!idea.trim()) {
-      setIdea(value);
-    } else {
-      setIdea((current) => appendContext(current, value));
-    }
+    setPromotedOffer(value);
+    if (!idea.trim()) setIdea(`Promote ${value}.`);
   }
 
   function pickBrandTone(value: string) {
@@ -354,6 +363,7 @@ export function CampaignWebsiteForm({
       buyer_segment: buyerSegment,
       audience,
       goal,
+      promoted_offer: promotedOffer,
       platforms: platforms
         .split(",")
         .map((platform) => platform.trim())
@@ -467,6 +477,7 @@ export function CampaignWebsiteForm({
           strategyGenerator: strategyPreview.generator,
           strategyGeneratedAt: strategyPreview.generatedAt,
           strategyEdited,
+          strategyEngine: strategyPreview.strategyEngine,
           intelligenceReadinessScore:
             strategyPreview.intelligenceReadinessScore,
           intelligenceMissingElements:
@@ -620,6 +631,23 @@ export function CampaignWebsiteForm({
         </label>
       </div>
 
+      <div className={formStyles.row}>
+        <label className={formStyles.field}>
+          <span className={formStyles.label}>Campaign Offer / Desired Conversion</span>
+          <input
+            name="promoted_offer"
+            value={promotedOffer}
+            onChange={(event) => setPromotedOffer(event.target.value)}
+            className={formStyles.input}
+            placeholder="Marketing VIP Demo"
+            required
+          />
+          <span className={formStyles.help}>
+            This is the authoritative offer for this campaign. It may match the selected Account Strategy offer or override it for a custom campaign.
+          </span>
+        </label>
+      </div>
+
       <div className={formStyles.divider} />
 
       <div className={formStyles.header}>
@@ -688,7 +716,7 @@ export function CampaignWebsiteForm({
             value={goal}
             onChange={(event) => setGoal(event.target.value)}
             className={formStyles.input}
-            placeholder="Book audit calls"
+            placeholder="Generate qualified demo requests"
             required
           />
         </label>
@@ -869,6 +897,27 @@ export function CampaignWebsiteForm({
             <p className={formStyles.description}>
               Edit any section that feels generic or misaligned. Only the approved Marketing Spine and verified facts will guide the content assets.
             </p>
+          </div>
+
+          <div className={formStyles.row}>
+            <div className={formStyles.field}>
+              <span className={formStyles.label}>H1.9 strategy source resolution</span>
+              <p className={formStyles.description}>
+                Promoted offer: <strong>{strategyPreview.strategyEngine.promotedOffer}</strong>
+                {" · "}Source: {strategyPreview.strategyEngine.offerSource.replaceAll("_", " ")}
+                {" · "}Engine: {strategyPreview.strategyEngine.version}
+              </p>
+              {strategyPreview.strategyEngine.ignoredOffers.length ? (
+                <p className={formStyles.message}>
+                  Excluded conflicting account offer{strategyPreview.strategyEngine.ignoredOffers.length === 1 ? "" : "s"}: {strategyPreview.strategyEngine.ignoredOffers.join(", ")}.
+                </p>
+              ) : null}
+              {strategyPreview.strategyEngine.conflicts.map((conflict) => (
+                <p key={conflict.code} className={conflict.severity === "blocking" ? formStyles.error : formStyles.description}>
+                  {conflict.message}
+                </p>
+              ))}
+            </div>
           </div>
 
           {strategyStale ? (
