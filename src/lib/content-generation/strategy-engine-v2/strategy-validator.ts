@@ -112,7 +112,7 @@ function looksMalformed(value: string) {
   return (
     /\b(\w+)\s+\1\b/i.test(text) ||
     /\s[,:;]\s*[.!?]?$/.test(text) ||
-    /^(and|but|because|which|that)\b/i.test(text) ||
+    /^(which|that)\b/i.test(text) ||
     AWKWARD_STITCHING.test(text)
   );
 }

@@ -30,6 +30,11 @@ import {
   validateStrategySemanticPlan,
 } from "@/lib/content-generation/strategy-engine-v2/semantic-plan";
 import { validateStrategy } from "@/lib/content-generation/strategy-engine-v2/strategy-validator";
+import {
+  finalReleaseAdvisoryIssues,
+  finalReleaseBlockingIssues,
+  normalizeStrategyForFinalRelease,
+} from "@/lib/content-generation/strategy-engine-v2/strategy-release";
 import type {
   ResolvedCampaignBrief,
   StrategyEngineDiagnostics,
@@ -604,29 +609,41 @@ export async function generateOneOffCampaignStrategy({
     strategy,
     issues,
   });
-  strategy = review.strategy;
+  strategy = normalizeStrategyForFinalRelease({
+    strategy: review.strategy,
+    brief,
+  });
   const finalIssues = validateStrategy({ strategy, brief });
+  const releaseBlockingIssues = finalReleaseBlockingIssues(finalIssues);
+  const releaseAdvisoryIssues = finalReleaseAdvisoryIssues(finalIssues);
 
-  if (!review.approved || review.issues.length || finalIssues.length) {
-    const split = splitValidationIssues(finalIssues);
+  if (!review.approved || releaseBlockingIssues.length) {
     const editorialBlocking = !review.approved
       ? ["The independent editorial reviewer did not approve the rewritten strategy."]
       : [];
     console.error("H1.9A blocked a low-quality strategy preview.", {
       reviewApproved: review.approved,
       reviewIssues: review.issues,
-      deterministicIssues: finalIssues,
+      deterministicBlockingIssues: releaseBlockingIssues,
+      deterministicAdvisoryIssues: releaseAdvisoryIssues,
     });
     throw publicQualityError(
-      finalIssues.length ? "final_validation" : "quality_review",
+      releaseBlockingIssues.length ? "final_validation" : "quality_review",
       {
         requestStatus: "completed",
         completedStages: ["planning", "strategy", "quality_review"],
         blockingIssues: safeMessages([
           ...editorialBlocking,
-          ...split.blockingIssues,
+          ...releaseBlockingIssues.map(
+            (issue) => `${issue.field}: ${issue.message}`,
+          ),
         ]),
-        advisoryIssues: split.advisoryIssues,
+        advisoryIssues: safeMessages([
+          ...releaseAdvisoryIssues.map(
+            (issue) => `${issue.field}: ${issue.message}`,
+          ),
+          ...(review.approved ? review.issues : []),
+        ]),
         reviewApproved: review.approved,
         reviewIssues: safeMessages(review.issues),
       },
@@ -638,7 +655,7 @@ export async function generateOneOffCampaignStrategy({
     generator: "openai",
     diagnostics: diagnostics({
       brief,
-      validationIssueCount: 0,
+      validationIssueCount: releaseAdvisoryIssues.length,
       repairPassUsed,
       semanticPlanRepairUsed,
     }),

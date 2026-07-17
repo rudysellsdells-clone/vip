@@ -1,0 +1,12 @@
+Marketing VIP H1.9A4 — Editorial Release Authority
+
+Direct-unzip patch. Extract into the repository root and choose Replace.
+
+Files:
+src/lib/ai/one-off-strategy-generator.ts
+src/lib/content-generation/strategy-engine-v2/strategy-release.ts
+src/lib/content-generation/strategy-engine-v2/strategy-validator.ts
+tests/strategy-engine-v2.test.ts
+README_H1_9A4_EDITORIAL_RELEASE_AUTHORITY.md
+PATCH_MANIFEST_H1_9A4.txt
+FILE_SHA256SUMS_H1_9A4.txt

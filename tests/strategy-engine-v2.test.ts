@@ -23,6 +23,12 @@ import {
 } from "../src/lib/content-generation/strategy-engine-v2/semantic-plan.ts";
 import { buildDeterministicStrategy } from "../src/lib/content-generation/strategy-engine-v2/strategy-fallbacks.ts";
 import { validateStrategy } from "../src/lib/content-generation/strategy-engine-v2/strategy-validator.ts";
+import {
+  finalReleaseAdvisoryIssues,
+  finalReleaseBlockingIssues,
+  normalizeStrategyForFinalRelease,
+  SAFE_NO_PROOF_STATEMENT,
+} from "../src/lib/content-generation/strategy-engine-v2/strategy-release.ts";
 import type { OneOffPromptCampaign } from "../src/lib/content-generation/one-off-campaign-brief.ts";
 import type { CampaignIntelligenceContext } from "../src/lib/content-generation/campaign-intelligence.ts";
 import type {
@@ -540,4 +546,83 @@ test("vague consultation language still fails mechanism validation", () => {
   assert.ok(
     issues.some((issue) => issue.code === "plan_offer_mechanism_missing"),
   );
+});
+
+
+test("a complete Core Problem may begin with Because without being marked malformed", () => {
+  const brief = resolveCampaignBrief({ campaign: campaign(), intelligence: intelligence() });
+  const strategy = approvedStrategy();
+  strategy.coreProblem =
+    "Because no one owns a repeatable marketing process, campaign planning and content production compete with estimating, staffing, customer service, and daily operations for the owner's limited attention. Marketing therefore depends on whatever time remains.";
+
+  const issues = validateStrategy({ strategy, brief });
+  assert.equal(
+    issues.some(
+      (issue) =>
+        issue.field === "coreProblem" && issue.code === "malformed_language",
+    ),
+    false,
+  );
+});
+
+test("final release normalizes an unverified Proof and Support field safely", () => {
+  const brief = resolveCampaignBrief({ campaign: campaign(), intelligence: intelligence() });
+  const strategy = approvedStrategy();
+  strategy.proofAndSupport =
+    "Marketing VIP is proven to create stronger growth and better marketing results for contractors.";
+
+  const normalized = normalizeStrategyForFinalRelease({ strategy, brief });
+  assert.equal(normalized.proofAndSupport, SAFE_NO_PROOF_STATEMENT);
+
+  const issues = validateStrategy({ strategy: normalized, brief });
+  assert.equal(
+    issues.some((issue) => issue.code === "unsupported_proof"),
+    false,
+  );
+});
+
+test("editorially approved semantic marker findings are advisory at release", () => {
+  const issues = [
+    {
+      field: "coreProblem" as const,
+      code: "core_problem_not_customer_cause",
+      severity: "critical" as const,
+      message: "Core Problem must explain the customer-side cause.",
+    },
+    {
+      field: "contentDirection" as const,
+      code: "channel_missing",
+      severity: "warning" as const,
+      message: "A selected channel is missing.",
+    },
+  ];
+
+  assert.equal(finalReleaseBlockingIssues(issues).length, 0);
+  assert.equal(finalReleaseAdvisoryIssues(issues).length, 2);
+});
+
+test("objective integrity failures remain blocking after editorial approval", () => {
+  const issues = [
+    {
+      field: "coreProblem" as const,
+      code: "malformed_language",
+      severity: "critical" as const,
+      message: "Core Problem contains objectively malformed language.",
+    },
+    {
+      field: "proofAndSupport" as const,
+      code: "unsupported_proof",
+      severity: "critical" as const,
+      message: "Proof is unsupported.",
+    },
+    {
+      field: "offerAuthority" as const,
+      code: "ignored_offer_reintroduced_offerExplanation",
+      severity: "critical" as const,
+      message: "An excluded offer returned.",
+    },
+  ];
+
+  assert.equal(finalReleaseBlockingIssues(issues).length, 3);
+  assert.equal(finalReleaseAdvisoryIssues(issues).length, 0);
 });
