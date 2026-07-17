@@ -1,0 +1,15 @@
+Marketing VIP H1.9A2 Strategy API Recovery + Brand Voice Actions
+
+Replace/add these files:
+.env.example
+src/lib/ai/one-off-strategy-generator.ts
+src/lib/content-generation/strategy-engine-v2/types.ts
+src/lib/content-generation/strategy-engine-v2/errors.ts
+src/lib/content-generation/strategy-engine-v2/openai-stage-config.ts
+src/lib/accounts/brand-voice-monthly-options.ts
+src/components/campaigns/CampaignWebsiteForm.tsx
+tests/strategy-engine-v2.test.ts
+README_H1_9A2_STRATEGY_API_RECOVERY_AND_BRAND_VOICE_ACTIONS.md
+
+No database migration.
+Install over H1.9A1.

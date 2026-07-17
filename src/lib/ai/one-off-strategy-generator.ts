@@ -10,6 +10,12 @@ import {
   type StrategyQualityGateStage,
 } from "@/lib/content-generation/strategy-engine-v2/errors";
 import {
+  parseSafeOpenAiError,
+  shouldTryNextStrategyModel,
+  strategyModelCandidates,
+  type StrategyOpenAiStage,
+} from "@/lib/content-generation/strategy-engine-v2/openai-stage-config";
+import {
   buildQualityReviewSystemPrompt,
   buildQualityReviewUserPrompt,
   buildSemanticPlanRepairSystemPrompt,
@@ -40,15 +46,36 @@ import {
 } from "@/lib/content-generation/one-off-strategy-gate";
 
 type OpenAiMessage = { role: "system" | "user"; content: string };
-type OpenAiStage = "planning" | "planning_repair" | "strategy" | "strategy_repair" | "quality_review";
 
 class StrategyStageRequestError extends Error {
   readonly requestStatus: StrategyQualityGateRequestStatus;
+  readonly httpStatus: number | null;
+  readonly apiErrorCode: string | null;
+  readonly requestId: string | null;
+  readonly attemptedModels: string[];
 
-  constructor(message: string, requestStatus: StrategyQualityGateRequestStatus) {
+  constructor({
+    message,
+    requestStatus,
+    httpStatus = null,
+    apiErrorCode = null,
+    requestId = null,
+    attemptedModels = [],
+  }: {
+    message: string;
+    requestStatus: StrategyQualityGateRequestStatus;
+    httpStatus?: number | null;
+    apiErrorCode?: string | null;
+    requestId?: string | null;
+    attemptedModels?: string[];
+  }) {
     super(message);
     this.name = "StrategyStageRequestError";
     this.requestStatus = requestStatus;
+    this.httpStatus = httpStatus;
+    this.apiErrorCode = apiErrorCode;
+    this.requestId = requestId;
+    this.attemptedModels = attemptedModels;
   }
 }
 
@@ -76,33 +103,6 @@ function timeoutMs() {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 14000;
 }
 
-function planningModel() {
-  return (
-    process.env.OPENAI_STRATEGY_PLANNING_MODEL ??
-    process.env.OPENAI_STRATEGY_QUALITY_MODEL ??
-    process.env.OPENAI_STRATEGY_MODEL ??
-    process.env.OPENAI_MODEL ??
-    "gpt-4.1"
-  );
-}
-
-function strategyModel() {
-  return (
-    process.env.OPENAI_STRATEGY_MODEL ??
-    process.env.OPENAI_MODEL ??
-    "gpt-4.1"
-  );
-}
-
-function qualityModel() {
-  return (
-    process.env.OPENAI_STRATEGY_QUALITY_MODEL ??
-    process.env.OPENAI_STRATEGY_MODEL ??
-    process.env.OPENAI_MODEL ??
-    "gpt-4.1"
-  );
-}
-
 async function fetchWithTimeout(url: string, init: RequestInit) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs());
@@ -117,91 +117,137 @@ async function fetchWithTimeout(url: string, init: RequestInit) {
 async function requestJson({
   apiKey,
   messages,
-  model,
   temperature,
   stage,
 }: {
   apiKey: string;
   messages: OpenAiMessage[];
-  model: string;
   temperature: number;
-  stage: OpenAiStage;
+  stage: StrategyOpenAiStage;
 }) {
-  let response: Response;
+  const models = strategyModelCandidates(stage);
+  const attemptedModels: string[] = [];
 
-  try {
-    response = await fetchWithTimeout(
-      "https://api.openai.com/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
+  for (let index = 0; index < models.length; index += 1) {
+    const model = models[index]!;
+    attemptedModels.push(model);
+    const clientRequestId = crypto.randomUUID();
+    let response: Response;
+
+    try {
+      response = await fetchWithTimeout(
+        "https://api.openai.com/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+            "X-Client-Request-Id": clientRequestId,
+          },
+          body: JSON.stringify({
+            model,
+            temperature,
+            response_format: { type: "json_object" },
+            messages,
+          }),
         },
-        body: JSON.stringify({
+      );
+    } catch (error) {
+      const timedOut = error instanceof Error && error.name === "AbortError";
+      throw new StrategyStageRequestError({
+        message: timedOut
+          ? `OpenAI ${stage} request timed out.`
+          : `OpenAI ${stage} request could not be completed.`,
+        requestStatus: timedOut ? "timeout" : "api_error",
+        attemptedModels,
+        requestId: clientRequestId,
+      });
+    }
+
+    const text = await response.text();
+    const requestId = response.headers.get("x-request-id") || clientRequestId;
+
+    if (!response.ok) {
+      const details = parseSafeOpenAiError(text);
+      const hasNextModel = index < models.length - 1;
+
+      if (
+        hasNextModel &&
+        shouldTryNextStrategyModel({ status: response.status, details })
+      ) {
+        console.warn("Strategy model was unavailable; retrying with a compatible fallback.", {
+          stage,
           model,
-          temperature,
-          response_format: { type: "json_object" },
-          messages,
-        }),
-      },
-    );
-  } catch (error) {
-    const timedOut = error instanceof Error && error.name === "AbortError";
-    throw new StrategyStageRequestError(
-      timedOut
-        ? `OpenAI ${stage} request timed out.`
-        : `OpenAI ${stage} request could not be completed.`,
-      timedOut ? "timeout" : "api_error",
-    );
+          status: response.status,
+          code: details.code || details.type || "unknown",
+          requestId,
+        });
+        continue;
+      }
+
+      throw new StrategyStageRequestError({
+        message: `OpenAI ${stage} request failed with status ${response.status}.`,
+        requestStatus: "api_error",
+        httpStatus: response.status,
+        apiErrorCode: details.code || details.type || null,
+        requestId,
+        attemptedModels,
+      });
+    }
+
+    const payload = safeJsonParse(text);
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      throw new StrategyStageRequestError({
+        message: `OpenAI returned an unexpected ${stage} response.`,
+        requestStatus: "invalid_response",
+        requestId,
+        attemptedModels,
+      });
+    }
+
+    const choices = (payload as Record<string, unknown>).choices;
+    if (!Array.isArray(choices)) {
+      throw new StrategyStageRequestError({
+        message: `OpenAI ${stage} response did not include choices.`,
+        requestStatus: "invalid_response",
+        requestId,
+        attemptedModels,
+      });
+    }
+
+    const message = (choices[0] as Record<string, unknown> | undefined)?.message;
+    const content =
+      message && typeof message === "object" && !Array.isArray(message)
+        ? (message as Record<string, unknown>).content
+        : null;
+
+    if (typeof content !== "string") {
+      throw new StrategyStageRequestError({
+        message: `OpenAI ${stage} response did not include message content.`,
+        requestStatus: "invalid_response",
+        requestId,
+        attemptedModels,
+      });
+    }
+
+    const parsed = extractJson(content);
+    if (!parsed) {
+      throw new StrategyStageRequestError({
+        message: `OpenAI ${stage} response did not contain valid JSON.`,
+        requestStatus: "invalid_response",
+        requestId,
+        attemptedModels,
+      });
+    }
+
+    return parsed;
   }
 
-  const text = await response.text();
-  if (!response.ok) {
-    throw new StrategyStageRequestError(
-      `OpenAI ${stage} request failed with status ${response.status}.`,
-      "api_error",
-    );
-  }
-
-  const payload = safeJsonParse(text);
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    throw new StrategyStageRequestError(
-      `OpenAI returned an unexpected ${stage} response.`,
-      "invalid_response",
-    );
-  }
-
-  const choices = (payload as Record<string, unknown>).choices;
-  if (!Array.isArray(choices)) {
-    throw new StrategyStageRequestError(
-      `OpenAI ${stage} response did not include choices.`,
-      "invalid_response",
-    );
-  }
-
-  const message = (choices[0] as Record<string, unknown> | undefined)?.message;
-  const content =
-    message && typeof message === "object" && !Array.isArray(message)
-      ? (message as Record<string, unknown>).content
-      : null;
-
-  if (typeof content !== "string") {
-    throw new StrategyStageRequestError(
-      `OpenAI ${stage} response did not include message content.`,
-      "invalid_response",
-    );
-  }
-
-  const parsed = extractJson(content);
-  if (!parsed) {
-    throw new StrategyStageRequestError(
-      `OpenAI ${stage} response did not contain valid JSON.`,
-      "invalid_response",
-    );
-  }
-
-  return parsed;
+  throw new StrategyStageRequestError({
+    message: `OpenAI ${stage} request did not find a compatible strategy model.`,
+    requestStatus: "api_error",
+    attemptedModels,
+  });
 }
 
 function normalizeStrategy(value: unknown) {
@@ -246,6 +292,57 @@ function safeMessages(values: string[], limit = 12) {
 function requestStatusFromError(error: unknown): StrategyQualityGateRequestStatus {
   if (error instanceof StrategyStageRequestError) return error.requestStatus;
   return "invalid_response";
+}
+
+function requestDiagnosticFromError(
+  error: unknown,
+): Pick<
+  StrategyQualityGateDiagnostic,
+  | "httpStatus"
+  | "apiErrorCode"
+  | "requestId"
+  | "attemptedModels"
+  | "fallbackModelUsed"
+> {
+  if (!(error instanceof StrategyStageRequestError)) {
+    return {
+      httpStatus: null,
+      apiErrorCode: null,
+      requestId: null,
+      attemptedModels: [],
+      fallbackModelUsed: false,
+    };
+  }
+
+  return {
+    httpStatus: error.httpStatus,
+    apiErrorCode: error.apiErrorCode,
+    requestId: error.requestId,
+    attemptedModels: error.attemptedModels,
+    fallbackModelUsed: error.attemptedModels.length > 1,
+  };
+}
+
+
+function requestFailureMessage(error: unknown, fallback: string) {
+  if (!(error instanceof StrategyStageRequestError)) return fallback;
+
+  if (error.httpStatus === 401) {
+    return "OpenAI rejected the configured API key. Confirm the production OPENAI_API_KEY is active and belongs to a funded project.";
+  }
+  if (error.httpStatus === 403) {
+    return "OpenAI received the request but the project does not have access to the requested strategy model.";
+  }
+  if (error.httpStatus === 404) {
+    return "The configured strategy model was unavailable. Marketing VIP attempted its compatible fallback models before stopping.";
+  }
+  if (error.httpStatus === 429) {
+    return "OpenAI rejected the request because of a rate, quota, or billing limit. The strategy was not evaluated.";
+  }
+  if (error.httpStatus && error.httpStatus >= 500) {
+    return "OpenAI returned a temporary server error before strategy quality evaluation began.";
+  }
+  return fallback;
 }
 
 function splitValidationIssues(issues: StrategyValidationIssue[]) {
@@ -316,7 +413,6 @@ async function generateSemanticPlan({
     plan = normalizeStrategySemanticPlan(
       await requestJson({
         apiKey,
-        model: planningModel(),
         temperature: 0.2,
         stage: "planning",
         messages: [
@@ -329,11 +425,15 @@ async function generateSemanticPlan({
     console.error("H1.9A semantic planning request failed.", error);
     throw publicQualityError("planning", {
       requestStatus: requestStatusFromError(error),
+      ...requestDiagnosticFromError(error),
       completedStages: [],
       blockingIssues: [
         requestStatusFromError(error) === "timeout"
           ? "The private semantic-planning request timed out before quality evaluation began."
-          : "The private semantic-planning request did not return a usable response.",
+          : requestFailureMessage(
+              error,
+              "The private semantic-planning request did not return a usable response.",
+            ),
       ],
     });
   }
@@ -347,7 +447,6 @@ async function generateSemanticPlan({
       plan = normalizeStrategySemanticPlan(
         await requestJson({
           apiKey,
-          model: planningModel(),
           temperature: 0.1,
           stage: "planning_repair",
           messages: [
@@ -363,6 +462,7 @@ async function generateSemanticPlan({
       console.error("H1.9A semantic planning repair failed.", error);
       throw publicQualityError("planning_repair", {
         requestStatus: requestStatusFromError(error),
+        ...requestDiagnosticFromError(error),
         completedStages: ["planning"],
         blockingIssues: safeMessages(issues.map((issue) => `${issue.field}: ${issue.message}`)),
       });
@@ -396,7 +496,6 @@ async function generateDraftStrategy({
     return normalizeStrategy(
       await requestJson({
         apiKey,
-        model: strategyModel(),
         temperature: 0.3,
         stage: "strategy",
         messages: [
@@ -409,11 +508,15 @@ async function generateDraftStrategy({
     console.error("H1.9A strategy writing request failed.", error);
     throw publicQualityError("strategy", {
       requestStatus: requestStatusFromError(error),
+      ...requestDiagnosticFromError(error),
       completedStages: ["planning"],
       blockingIssues: [
         requestStatusFromError(error) === "timeout"
           ? "The strategy-writing request timed out after the semantic plan passed."
-          : "The strategy-writing request did not return a complete thirteen-field strategy.",
+          : requestFailureMessage(
+              error,
+              "The strategy-writing request did not return a complete thirteen-field strategy.",
+            ),
       ],
     });
   }
@@ -436,7 +539,6 @@ async function runFinalQualityReview({
     return normalizeQualityReview(
       await requestJson({
         apiKey,
-        model: qualityModel(),
         temperature: 0.1,
         stage: "quality_review",
         messages: [
@@ -453,6 +555,7 @@ async function runFinalQualityReview({
     const split = splitValidationIssues(issues);
     throw publicQualityError("quality_review", {
       requestStatus: requestStatusFromError(error),
+      ...requestDiagnosticFromError(error),
       completedStages: ["planning", "strategy"],
       blockingIssues: split.blockingIssues,
       advisoryIssues: split.advisoryIssues,

@@ -1,0 +1,10 @@
+1886f17652cbd2b888ed892808a9eb35655a5baf366ab781475f8b817d79ba52  ./.env.example
+43d24a0b0d0d91b4727b626d60b2d6758af6d73b7108fd1df48d369887131f79  ./PATCH_MANIFEST_H1_9A2_STRATEGY_API_RECOVERY.txt
+d82c495d5660bbdbacb814cc7ca7eefe90f80602e57440f3c200d745bafd3f93  ./README_H1_9A2_STRATEGY_API_RECOVERY_AND_BRAND_VOICE_ACTIONS.md
+8fedaf10e36807dbdf2e78937e2f58fc42e192099813bcf1e4bd7ac560f57a1c  ./src/components/campaigns/CampaignWebsiteForm.tsx
+3bd7dd27d66cc96eb4850913cfeae3ecd6b0a1b3c897261b259cbf515fb28fb6  ./src/lib/accounts/brand-voice-monthly-options.ts
+91f67cfcbbf1249272bbcfbd6b8f880d1254d94bb05ec26588c74e0eac08eb7e  ./src/lib/ai/one-off-strategy-generator.ts
+69335da9f3d9069bf8a05f87aab209b3eb1a10b94437665c473d6f088c16ae9a  ./src/lib/content-generation/strategy-engine-v2/errors.ts
+fab8f4cd5e3106843d079ecd8ce63590ed8b201b998dafcb09e28fd2176d4b6e  ./src/lib/content-generation/strategy-engine-v2/openai-stage-config.ts
+2bb0c49dae5be31d4eaa6892bc53eb2983ec698a93c00b7cb9a97e7a051c1656  ./src/lib/content-generation/strategy-engine-v2/types.ts
+7eddf92bef6aa990c2ffff505636d724b7184142cb590878f263b8480d3a57ed  ./tests/strategy-engine-v2.test.ts

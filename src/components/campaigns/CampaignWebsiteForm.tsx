@@ -118,6 +118,32 @@ function optionLabel(value: string) {
   return value.length > 84 ? `${value.slice(0, 81)}...` : value;
 }
 
+function suggestedCtaForOffer(value: string) {
+  const offer = value.replace(/\s+/g, " ").trim().replace(/[.!?]+$/, "");
+  if (!offer) return "";
+
+  if (/\bconsult(?:ation)?\b/i.test(offer)) return `Schedule a ${offer}`;
+  if (/\bdemo(?:nstration)?\b/i.test(offer)) return `Schedule a ${offer}`;
+  if (/\b(?:audit|assessment|diagnostic)\b/i.test(offer)) return `Book a ${offer}`;
+  if (/\b(?:webinar|workshop|seminar)\b/i.test(offer)) return `Register for the ${offer}`;
+  if (/\b(?:guide|checklist|playbook|ebook|template)\b/i.test(offer)) return `Download the ${offer}`;
+  if (/\b(?:trial|pilot)\b/i.test(offer)) return `Start the ${offer}`;
+  return "";
+}
+
+function offerFromCta(value: string) {
+  return value
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(
+      /^(?:please\s+)?(?:schedule|book|request|get|download|register(?:\s+for)?|join|start|reserve|claim)\s+/i,
+      "",
+    )
+    .replace(/^(?:a|an|the|your|our)\s+/i, "")
+    .replace(/[.!?]+$/, "")
+    .trim();
+}
+
 function diagnosticStageLabel(stage: StrategyQualityGateStage) {
   const labels: Record<StrategyQualityGateStage, string> = {
     configuration: "AI configuration",
@@ -355,7 +381,12 @@ export function CampaignWebsiteForm({
 
   function pickBrandOffer(value: string) {
     setPromotedOffer(value);
+    if (!campaignName.trim()) setCampaignName(`${value} Campaign`);
     if (!idea.trim()) setIdea(`Promote ${value}.`);
+    if (!cta.trim()) {
+      const suggestedCta = suggestedCtaForOffer(value);
+      if (suggestedCta) setCta(suggestedCta);
+    }
   }
 
   function pickBrandTone(value: string) {
@@ -364,6 +395,10 @@ export function CampaignWebsiteForm({
 
   function pickBrandCta(value: string) {
     setCta(value);
+    if (!promotedOffer.trim()) {
+      const inferredOffer = offerFromCta(value);
+      if (inferredOffer) setPromotedOffer(inferredOffer);
+    }
   }
 
   function pickDifferentiator(value: string) {
@@ -462,6 +497,11 @@ export function CampaignWebsiteForm({
         reviewApproved: null,
         reviewIssues: [],
         retryable: true,
+        httpStatus: null,
+        apiErrorCode: null,
+        requestId: null,
+        attemptedModels: [],
+        fallbackModelUsed: false,
       });
       setError(
         err instanceof Error ? err.message : "Unexpected strategy error.",
@@ -945,6 +985,31 @@ export function CampaignWebsiteForm({
                     .join(" → ")
                 : "No AI stage completed"}
             </p>
+
+            {strategyFailureDiagnostic.httpStatus ||
+            strategyFailureDiagnostic.apiErrorCode ||
+            strategyFailureDiagnostic.attemptedModels.length ? (
+              <p className={formStyles.description}>
+                API response: {strategyFailureDiagnostic.httpStatus
+                  ? `HTTP ${strategyFailureDiagnostic.httpStatus}`
+                  : "No HTTP status returned"}
+                {strategyFailureDiagnostic.apiErrorCode
+                  ? ` · Code: ${strategyFailureDiagnostic.apiErrorCode}`
+                  : ""}
+                {strategyFailureDiagnostic.attemptedModels.length
+                  ? ` · Models attempted: ${strategyFailureDiagnostic.attemptedModels.join(", ")}`
+                  : ""}
+                {strategyFailureDiagnostic.fallbackModelUsed
+                  ? " · Compatible model fallback attempted"
+                  : ""}
+              </p>
+            ) : null}
+
+            {strategyFailureDiagnostic.requestId ? (
+              <p className={formStyles.description}>
+                OpenAI request ID: {strategyFailureDiagnostic.requestId}
+              </p>
+            ) : null}
 
             {strategyFailureDiagnostic.reviewApproved !== null ? (
               <p className={formStyles.description}>

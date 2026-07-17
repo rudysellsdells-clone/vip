@@ -35,6 +35,11 @@ export class StrategyQualityGateError extends Error {
       reviewApproved: diagnostic?.reviewApproved ?? null,
       reviewIssues: diagnostic?.reviewIssues ?? [],
       retryable,
+      httpStatus: diagnostic?.httpStatus ?? null,
+      apiErrorCode: diagnostic?.apiErrorCode ?? null,
+      requestId: diagnostic?.requestId ?? null,
+      attemptedModels: diagnostic?.attemptedModels ?? [],
+      fallbackModelUsed: diagnostic?.fallbackModelUsed ?? false,
     };
   }
 }

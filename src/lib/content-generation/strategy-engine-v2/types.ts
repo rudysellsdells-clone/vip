@@ -1,6 +1,6 @@
 import type { OneOffCampaignStrategy } from "../one-off-strategy-gate.ts";
 
-export const STRATEGY_ENGINE_V2_VERSION = "h1.9a1" as const;
+export const STRATEGY_ENGINE_V2_VERSION = "h1.9a2" as const;
 
 export type OfferCategory =
   | "demo"
@@ -135,6 +135,11 @@ export type StrategyQualityGateDiagnostic = {
   reviewApproved: boolean | null;
   reviewIssues: string[];
   retryable: boolean;
+  httpStatus: number | null;
+  apiErrorCode: string | null;
+  requestId: string | null;
+  attemptedModels: string[];
+  fallbackModelUsed: boolean;
 };
 
 export type StrategyFieldKey = keyof OneOffCampaignStrategy;

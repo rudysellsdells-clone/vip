@@ -64,8 +64,13 @@ function uniq(items: string[]) {
   return result;
 }
 
-function optionsFrom(items: string[], source: BrandVoiceMonthlyOption["source"], prefix: string) {
-  return uniq(items).slice(0, 12).map((value, index) => ({
+function optionsFrom(
+  items: string[],
+  source: BrandVoiceMonthlyOption["source"],
+  prefix: string,
+  maxItems = 24,
+) {
+  return uniq(items).slice(0, maxItems).map((value, index) => ({
     id: `${prefix}-${index}-${value.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 36)}`,
     label: label(value),
     value,
@@ -75,6 +80,31 @@ function optionsFrom(items: string[], source: BrandVoiceMonthlyOption["source"],
 
 function joinContext(parts: Array<string | null | undefined>) {
   return parts.map((part) => text(part)).filter(Boolean).join("\n\n");
+}
+
+function shortOfferActions(items: string[]) {
+  return uniq(items).filter((item) => {
+    const wordCount = item.split(/\s+/).filter(Boolean).length;
+    return (
+      wordCount <= 10 &&
+      /\b(consult(?:ation)?|demo(?:nstration)?|audit|assessment|diagnostic|call|appointment|webinar|workshop|seminar|guide|checklist|playbook|ebook|template|trial|pilot|quote|estimate)\b/i.test(
+        item,
+      )
+    );
+  });
+}
+
+function ctaFromOffer(value: string) {
+  const offer = value.replace(/\s+/g, " ").trim().replace(/[.!?]+$/, "");
+  if (!offer) return "";
+  if (/\bconsult(?:ation)?\b/i.test(offer)) return `Schedule a ${offer}`;
+  if (/\bdemo(?:nstration)?\b/i.test(offer)) return `Schedule a ${offer}`;
+  if (/\b(?:audit|assessment|diagnostic)\b/i.test(offer)) return `Book a ${offer}`;
+  if (/\b(?:webinar|workshop|seminar)\b/i.test(offer)) return `Register for the ${offer}`;
+  if (/\b(?:guide|checklist|playbook|ebook|template)\b/i.test(offer)) return `Download the ${offer}`;
+  if (/\b(?:trial|pilot)\b/i.test(offer)) return `Start the ${offer}`;
+  if (/\b(?:quote|estimate)\b/i.test(offer)) return `Request a ${offer}`;
+  return "";
 }
 
 export function buildBrandVoiceMonthlyOptions({
@@ -99,13 +129,16 @@ export function buildBrandVoiceMonthlyOptions({
     "audience",
   );
 
+  const rawOffers = [
+    ...splitList(account.core_offers),
+    ...splitList(clone.offer_summary),
+  ];
+
   const offers = optionsFrom(
-    [
-      ...splitList(account.core_offers),
-      ...splitList(clone.offer_summary),
-    ],
+    rawOffers,
     "clone_profile",
     "offer",
+    30,
   );
 
   const tones = optionsFrom(
@@ -122,9 +155,11 @@ export function buildBrandVoiceMonthlyOptions({
     [
       ...splitList(account.primary_cta),
       ...splitList(clone.sales_outcome_summary, { preserveParagraph: true }),
+      ...shortOfferActions(rawOffers).map(ctaFromOffer).filter(Boolean),
     ],
     "brand_profile",
     "cta",
+    30,
   );
 
   const differentiators = optionsFrom(

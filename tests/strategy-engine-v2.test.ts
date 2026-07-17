@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { buildBrandVoiceMonthlyOptions } from "../src/lib/accounts/brand-voice-monthly-options.ts";
+
 import {
   blockingBriefConflicts,
   resolveCampaignBrief,
@@ -10,6 +12,11 @@ import {
   strategyQualityGateMessage,
 } from "../src/lib/content-generation/strategy-engine-v2/errors.ts";
 import { STRATEGY_FIELD_CONTRACTS } from "../src/lib/content-generation/strategy-engine-v2/field-contracts.ts";
+import {
+  parseSafeOpenAiError,
+  shouldTryNextStrategyModel,
+  strategyModelCandidates,
+} from "../src/lib/content-generation/strategy-engine-v2/openai-stage-config.ts";
 import {
   normalizeStrategySemanticPlan,
   validateStrategySemanticPlan,
@@ -389,5 +396,62 @@ test("channel direction covers every selected platform", () => {
       (issue) => issue.code === "channel_missing",
     ),
     false,
+  );
+});
+
+
+test("strategy stages ignore a generic application model and keep compatible fallbacks", () => {
+  const models = strategyModelCandidates("planning", {
+    OPENAI_STRATEGY_PLANNING_MODEL: "custom-planning-model",
+    OPENAI_STRATEGY_MODEL: "custom-strategy-model",
+  });
+
+  assert.deepEqual(models, [
+    "custom-planning-model",
+    "gpt-4.1",
+    "gpt-4.1-mini",
+  ]);
+
+  const defaultModels = strategyModelCandidates("strategy", {});
+  assert.deepEqual(defaultModels, ["gpt-4.1", "gpt-4.1-mini"]);
+});
+
+test("safe OpenAI error parsing identifies model compatibility failures", () => {
+  const details = parseSafeOpenAiError(
+    JSON.stringify({
+      error: {
+        code: "model_not_found",
+        type: "invalid_request_error",
+        message: "The requested model does not exist or you do not have access.",
+      },
+    }),
+  );
+
+  assert.equal(details.code, "model_not_found");
+  assert.equal(
+    shouldTryNextStrategyModel({ status: 404, details }),
+    true,
+  );
+  assert.equal(
+    shouldTryNextStrategyModel({ status: 401, details }),
+    false,
+  );
+});
+
+test("Brand Voice Free Consultation is available as both an offer and usable CTA", () => {
+  const options = buildBrandVoiceMonthlyOptions({
+    cloneProfile: {
+      offer_summary: "Website Audit, Marketing VIP Demo, Free Consultation",
+      sales_outcome_summary: "Help qualified prospects choose a practical next step",
+    },
+    accountBrandProfile: null,
+    brandRules: [],
+  });
+
+  assert.ok(options.offers.some((option) => option.value === "Free Consultation"));
+  assert.ok(
+    options.ctas.some(
+      (option) => option.value === "Schedule a Free Consultation",
+    ),
   );
 });
