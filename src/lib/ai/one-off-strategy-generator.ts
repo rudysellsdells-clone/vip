@@ -2,9 +2,10 @@ import type { CampaignIntelligenceContext } from "@/lib/content-generation/campa
 import type { OneOffPromptCampaign } from "@/lib/content-generation/one-off-campaign-brief";
 import {
   assessOneOffStrategyPrecision,
+  buildCustomerCenteredStrategySource,
   buildStrategyPrecisionSourceSnapshot,
-  derivePrimaryAudience,
   enforceOneOffStrategyPrecision,
+  formatCustomerCenteredStrategySource,
   formatStrategyPrecisionIssues,
 } from "@/lib/content-generation/one-off-strategy-precision";
 import {
@@ -40,7 +41,28 @@ function extractJson(value: string) {
 
 function timeoutMs() {
   const parsed = Number(process.env.VIP_STRATEGY_OPENAI_TIMEOUT_MS);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 22000;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 30000;
+}
+
+function qualityPassEnabled() {
+  return process.env.VIP_DISABLE_STRATEGY_QUALITY_PASS !== "1";
+}
+
+function initialStrategyModel() {
+  return (
+    process.env.OPENAI_STRATEGY_MODEL ??
+    process.env.OPENAI_MODEL ??
+    "gpt-4.1-mini"
+  );
+}
+
+function qualityStrategyModel() {
+  return (
+    process.env.OPENAI_STRATEGY_QUALITY_MODEL ??
+    process.env.OPENAI_STRATEGY_MODEL ??
+    process.env.OPENAI_MODEL ??
+    "gpt-4.1"
+  );
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit) {
@@ -54,33 +76,8 @@ async function fetchWithTimeout(url: string, init: RequestInit) {
   }
 }
 
-function strategySystemPrompt() {
-  return `You are Marketing VIP's senior campaign strategist.
-
-Your only job in this step is to create a persuasive, specific campaign strategy for human approval. Do not write the email, blog, social posts, video script, or other public assets yet.
-
-Strategy standard:
-- Synthesize the source material. Do not paste Brand Voice, Account Strategy, knowledge, campaign-form language, or field labels into the strategy.
-- Replace vague phrases such as "build trust," "increase visibility," "grow the business," "easy marketing," or "save time" with a specific buyer situation, problem, consequence, mechanism, and desired decision.
-- The point of view must be distinctive enough that a random competitor could not use it unchanged.
-- Explain the offer precisely: what happens, what the buyer receives, and what decision or outcome becomes easier afterward.
-- Use only supplied proof. Never invent statistics, testimonials, case studies, guarantees, rankings, or deliverables.
-- Treat inferred context as a strategic hypothesis, not factual proof.
-- Address a believable objection honestly.
-- Build a logical message progression that every channel can inherit.
-- Write polished internal strategy in everyday business English. Do not include prompt instructions or meta-commentary.
-
-Section precision rules:
-- Target audience: choose ONE primary decision-maker and business context. Do not repeat a full industry list. Use no more than two examples, only when examples materially clarify the category. Aim for 15–45 words.
-- Buyer situation: describe a moment in time, not a demographic or pain-point list. State what is happening, what the buyer is doing now, what is no longer working, and why the issue matters at this moment. Aim for 2–3 sentences.
-- Core problem: explain the underlying obstacle; do not repeat the buyer situation.
-- Business consequence: explain what continuing the problem costs or prevents; do not restate the core problem.
-- Campaign point of view: state the campaign's distinctive belief about why the usual approach falls short and what should be done differently.
-- Offer explanation: explain how the offer works. Offer deliverables: separately state what the buyer receives.
-- Every section must perform its own job. Do not recycle the same sentence, list, or phrasing across boxes.
-
-Return only valid JSON with exactly these string fields:
-{
+function strategyJsonContract() {
+  return `{
   "campaignObjective": "string",
   "targetAudience": "string",
   "buyerSituation": "string",
@@ -97,6 +94,53 @@ Return only valid JSON with exactly these string fields:
 }`;
 }
 
+function strategySystemPrompt() {
+  return `You are Marketing VIP's senior campaign strategist.
+
+Your only job is to create a customer-centered Marketing Spine for human approval before any public assets are written.
+
+The source contains four different kinds of information:
+1. Customer facts: buyer description, pain signals, desired outcomes, and objections.
+2. Campaign intent: topic, objective, CTA, tone, and channels.
+3. Verified offer facts: offer name, process, outcome, type, price note, and confirmed deliverables.
+4. Internal guidance: differentiator, originality angle, and creator notes.
+
+Do not mix those categories. Internal guidance may shape your reasoning, but it is not customer language and must never be copied into a strategy field.
+
+Use established marketing reasoning to bridge gaps safely:
+- A Buyer Situation is the moment the customer recognizes that the current workaround is failing.
+- A Core Problem is the customer-side cause behind the visible symptom. It is never the marketer's goal, the vendor's problem, or the campaign creator's frustration.
+- A Business Consequence is the downstream operational, financial, competitive, or opportunity effect if the customer's problem continues.
+- A Campaign Point of View is a defensible belief about why the familiar approach falls short and what should be done differently.
+- An Offer Explanation describes the mechanism: how the offer examines, changes, organizes, connects, or prioritizes something for the customer.
+- Offer Deliverables state only what the customer verifiably receives. Never manufacture a report, meeting, plan, implementation step, result, or guarantee.
+
+Field logic:
+- Campaign objective: define the belief, decision, or commercial action this campaign should make more likely. Do not write a slogan or a generic growth goal.
+- Target audience: identify one primary decision-maker, their business context, and their responsibility. Never output a roster of industries.
+- Buyer situation: write 2–3 logical sentences covering the trigger, current behavior or workaround, what has stopped working, and why the issue matters now.
+- Core problem: explain the customer's underlying causal obstacle in 1–2 sentences. Do not mention Marketing VIP, Web Search Professionals, the user, the form, the campaign, or the creator's internal issue.
+- Business consequence: explain what the customer loses, risks, delays, or cannot achieve if the problem continues. Do not restate the desired outcome.
+- Campaign point of view: write a distinctive contrast between the familiar approach and the better approach.
+- Offer explanation: explain how the offer works and why the mechanism helps. Do not paste a saved service or offer description.
+- Offer deliverables: state the verified outputs separately from the mechanism. When deliverables are not established, say they need confirmation before approval.
+- Proof and support: include only approved evidence. Knowledge summaries, aspirations, and offer outcomes are not proof.
+- Objections and response: name one believable customer concern and answer it honestly without pressure.
+- Message progression: create a coherent persuasion sequence from customer moment to CTA.
+- Primary CTA: one concise next action.
+- Content direction: assign a different strategic job to each planned channel.
+
+Writing standard:
+- Use complete, natural business sentences.
+- Rewrite source ideas rather than stitching fields together.
+- Do not output meta-language, prompt instructions, confidence labels, source labels, or phrases such as “the audience should understand.”
+- Do not invent statistics, testimonials, rankings, results, customer stories, guarantees, or deliverables.
+- Keep all thirteen fields meaningfully distinct.
+
+Return only valid JSON with exactly these fields:
+${strategyJsonContract()}`;
+}
+
 function strategyUserPrompt({
   campaign,
   intelligence,
@@ -104,60 +148,68 @@ function strategyUserPrompt({
   campaign: OneOffPromptCampaign;
   intelligence: CampaignIntelligenceContext;
 }) {
-  const primaryAudience = derivePrimaryAudience(campaign, intelligence);
+  const source = buildCustomerCenteredStrategySource({ campaign, intelligence });
 
-  return `Create the campaign strategy that must be reviewed and approved before any assets are written.
+  return `Create the Marketing Spine that must be reviewed and approved before assets are written.
 
-## Campaign identity
-Name: ${campaign.name}
-Campaign idea: ${campaign.idea}
-Primary audience to prioritize: ${primaryAudience}
-Raw intended-audience source: ${campaign.audience || campaign.buyer_segment || "Not explicitly supplied"}
-Business goal: ${campaign.goal || "Not explicitly supplied"}
-Primary CTA: ${campaign.cta || "Not explicitly supplied"}
-Tone constraint: ${campaign.tone || "Clear, practical, confident"}
-Platforms planned: ${(campaign.platforms ?? []).join(", ") || "Email, LinkedIn, Facebook, YouTube"}
+${formatCustomerCenteredStrategySource(source)}
 
-Audience decision: write the Target Audience box for the primary audience above. The raw audience source and account memory may contain examples or a longer market list; treat those as classification clues, never as text to reproduce.
-
-${intelligence.formattedBrief}
-
-## Campaign-relevant private source context
-${intelligence.formattedContext}
-
-## Required synthesis
-1. Select one primary decision-maker rather than summarizing every saved audience.
-2. Decide the real buyer situation and decision moment.
-3. Define the visible problem and the more important underlying problem.
-4. Explain the operational, financial, or opportunity consequence without manufacturing numbers.
-5. State a clear campaign point of view rather than repeating a generic differentiator.
-6. Explain the offer mechanism and deliverables in concrete, separate sections.
-7. Separate approved proof from assumptions.
-8. Address the strongest objection and provide an honest response.
-9. Define the message progression and channel direction.
-10. Compare all sections before returning JSON and rewrite any section that substantially repeats another.
-11. Keep all raw settings, source lists, and source labels private.
+Before returning JSON, perform these checks:
+1. Every field answers its own strategic question.
+2. Buyer Situation, Core Problem, and Business Consequence describe the customer—not the vendor or campaign creator.
+3. Core Problem explains a cause; Business Consequence explains a downstream effect.
+4. Offer Explanation describes a mechanism; Offer Deliverables describe verified outputs.
+5. No field substantially repeats a source sentence or another strategy field.
+6. No long audience list, raw Brand Voice wording, Account Strategy wording, creator notes, or internal labels appear.
+7. Every sentence is logical when read aloud.
 
 Return only valid JSON.`;
 }
 
-function precisionEditorSystemPrompt() {
-  return `You are Marketing VIP's campaign-strategy quality editor.
+function qualityEditorSystemPrompt() {
+  return `You are Marketing VIP's final strategy editor and marketing-logic reviewer.
 
-You receive an initial Marketing Spine and a focused diagnostic. Rewrite the full strategy so every section is precise, distinct, persuasive, and ready for human approval.
+You will receive a draft Marketing Spine, a complete field-by-field diagnostic, and a customer-centered source model. Perform a comprehensive quality pass across all thirteen fields—not just the fields named in the diagnostic.
 
-Hard rules:
-- Preserve the supplied campaign facts, offer, approved proof, CTA, and strategic intent.
-- Do not invent statistics, deliverables, results, testimonials, guarantees, or customer stories.
-- Do not copy a raw audience list, Brand Voice field, Account Strategy field, source label, or diagnostic instruction into the result.
-- Target one primary decision-maker. Never provide a roster of industries or trades.
-- Make Buyer Situation a believable moment in time with a trigger, current behavior, failing approach, and reason to act now.
-- Keep Core Problem, Business Consequence, Point of View, Offer Explanation, and Offer Deliverables meaningfully different.
-- Return all thirteen fields, even when only several require rewriting.
-- Return only valid JSON using exactly the same field names as the initial strategy.`;
+Your job is to make the strategy logically sound, customer-centered, persuasive, specific, and ready for approval.
+
+Mandatory reasoning sequence:
+1. Identify the customer's real trigger and current workaround.
+2. Distinguish the visible symptom from the underlying customer-side cause.
+3. Trace the downstream consequence without inventing numbers.
+4. State a useful point of view that changes how the customer interprets the problem.
+5. Explain the offer's verified mechanism and deliverables separately.
+6. Use only approved proof.
+7. Make the CTA the logical conclusion of the argument.
+
+Hard field boundaries:
+- Campaign Objective = intended decision change.
+- Target Audience = one decision-maker and business context.
+- Buyer Situation = moment and current behavior.
+- Core Problem = customer-side root cause.
+- Business Consequence = downstream effect.
+- Campaign Point of View = distinctive belief.
+- Offer Explanation = mechanism.
+- Offer Deliverables = verified outputs.
+- Proof and Support = approved evidence or an honest no-proof statement.
+- Objections and Response = concern plus direct answer.
+- Message Progression = persuasion order.
+- Primary CTA = one action.
+- Content Direction = distinct channel roles.
+
+Never:
+- Describe the vendor's internal problem inside Buyer Situation, Core Problem, or Business Consequence.
+- Paste Brand Voice, Account Strategy, campaign-form, service-description, offer-description, or creator-note sentences.
+- Turn a desired outcome into a current problem or business consequence.
+- Turn a knowledge-source summary into proof.
+- Invent deliverables, results, data, customers, guarantees, or implementation steps.
+- Use internal planning phrases such as “build a realistic moment,” “explain the consequence,” or “the audience should understand.”
+
+Return all thirteen fields as valid JSON using exactly this contract:
+${strategyJsonContract()}`;
 }
 
-function precisionEditorUserPrompt({
+function qualityEditorUserPrompt({
   campaign,
   intelligence,
   strategy,
@@ -168,33 +220,30 @@ function precisionEditorUserPrompt({
   strategy: OneOffCampaignStrategy;
   issues: ReturnType<typeof assessOneOffStrategyPrecision>;
 }) {
-  return `Refine this initial campaign strategy before it is shown for approval.
+  return `Run the final comprehensive strategy quality pass.
 
-## Precision diagnostic
+## Field-by-field diagnostic
 ${formatStrategyPrecisionIssues(issues)}
 
-## Prioritized source snapshot
+## Customer-centered source model
 ${buildStrategyPrecisionSourceSnapshot({ campaign, intelligence })}
 
-## Campaign identity
-Campaign name: ${campaign.name}
-Campaign idea: ${campaign.idea}
-Business goal: ${campaign.goal || "Not explicitly supplied"}
-CTA: ${campaign.cta || "Not explicitly supplied"}
-Tone: ${campaign.tone || "Clear, practical, confident"}
-
-## Initial strategy JSON
+## Draft strategy JSON
 ${JSON.stringify(strategy, null, 2)}
 
-Rewrite the complete strategy. Return only valid JSON.`;
+Rewrite the complete strategy, including fields that appear acceptable, so the full spine works as one persuasive argument. Preserve verified facts, approved proof, and the CTA. Return only valid JSON.`;
 }
 
 async function requestStrategyJson({
   apiKey,
   messages,
+  model,
+  temperature,
 }: {
   apiKey: string;
   messages: OpenAiMessage[];
+  model: string;
+  temperature: number;
 }) {
   const response = await fetchWithTimeout(
     "https://api.openai.com/v1/chat/completions",
@@ -205,10 +254,8 @@ async function requestStrategyJson({
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model:
-          process.env.OPENAI_STRATEGY_MODEL ??
-          process.env.OPENAI_MODEL ??
-          "gpt-4.1-mini",
+        model,
+        temperature,
         response_format: { type: "json_object" },
         messages,
       }),
@@ -277,39 +324,43 @@ export async function generateOneOffCampaignStrategy({
   try {
     let strategy = await requestStrategyJson({
       apiKey,
+      model: initialStrategyModel(),
+      temperature: 0.45,
       messages: [
         { role: "system", content: strategySystemPrompt() },
         { role: "user", content: strategyUserPrompt({ campaign, intelligence }) },
       ],
     });
 
-    const precisionIssues = assessOneOffStrategyPrecision({
+    const initialIssues = assessOneOffStrategyPrecision({
       strategy,
       campaign,
       intelligence,
     });
 
-    if (precisionIssues.length) {
+    if (qualityPassEnabled()) {
       try {
         strategy = await requestStrategyJson({
           apiKey,
+          model: qualityStrategyModel(),
+          temperature: 0.25,
           messages: [
-            { role: "system", content: precisionEditorSystemPrompt() },
+            { role: "system", content: qualityEditorSystemPrompt() },
             {
               role: "user",
-              content: precisionEditorUserPrompt({
+              content: qualityEditorUserPrompt({
                 campaign,
                 intelligence,
                 strategy,
-                issues: precisionIssues,
+                issues: initialIssues,
               }),
             },
           ],
         });
-      } catch (precisionError) {
+      } catch (qualityError) {
         console.error(
-          "One-off strategy precision rewrite failed; applying deterministic precision safeguards.",
-          precisionError,
+          "One-off strategy comprehensive quality pass failed; applying deterministic customer-centered safeguards.",
+          qualityError,
         );
       }
     }
@@ -324,7 +375,7 @@ export async function generateOneOffCampaignStrategy({
     };
   } catch (error) {
     console.error(
-      "One-off strategy generation failed; using a reviewable deterministic draft.",
+      "One-off strategy generation failed; using a reviewable deterministic customer-centered draft.",
       error,
     );
     return { strategy: fallback, generator: "fallback" };
