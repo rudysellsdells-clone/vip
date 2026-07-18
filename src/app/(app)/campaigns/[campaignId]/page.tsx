@@ -161,7 +161,7 @@ export default async function CampaignDetailPage({ params }: PageProps) {
       <WebsiteSection
         eyebrow="Marketing Spine"
         title="Approve the campaign strategy before generating assets"
-        description="The one-off workflow now follows the same review-before-execution principle as monthly campaigns. VIP creates the strategy first, saves it with the campaign, and blocks asset generation until you approve it."
+        description="Review and approve the campaign strategy before generating assets. Approved strategy and verified facts guide every asset in this campaign."
       >
         <OneOffStrategyApprovalPanel
           campaignId={campaign.id}

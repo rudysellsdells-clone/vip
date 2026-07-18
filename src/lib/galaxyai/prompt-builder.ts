@@ -25,7 +25,7 @@ export function buildGalaxyAiPromptFromVideoScript({
   const promptTitle = clean(title, "Short-form social video");
   const script = clean(videoScript, "Use the approved video script as the source narrative.");
   const cta = clean(callToAction, "Schedule a visibility review.");
-  const brand = clean(brandName, "Web Search Professionals");
+  const brand = clean(brandName, "Marketing VIP");
   const viewer = clean(audience, "local business owners and service business leaders");
   const angle = clean(campaignAngle, "Help the viewer understand the practical business value behind the message.");
 

@@ -120,7 +120,7 @@ export default async function AccountsPage() {
     <WebsitePage>
       <div className={accountStyles.accountPage}>
       <WebsiteHero
-        eyebrow="Phase 3B · Accounts"
+        eyebrow="Accounts"
         title="Manage client accounts and workspace access."
         description="Create separate accounts for clients or brands, assign owners, and invite the people who should review, edit, or approve work inside each workspace."
         primaryAction={{ label: "Settings", href: "/settings" }}
@@ -179,7 +179,7 @@ export default async function AccountsPage() {
       <WebsiteSection
         eyebrow="Workspaces"
         title="Accounts you can manage"
-        description="Each account can have its own owner, seats, brand profile, campaigns, and publishing setup as Phase 3 continues."
+        description="Each account has its own owner, seats, brand profile, campaigns, analytics, and publishing settings."
       >
         <div className={accountStyles.accountsList}>
           {accounts.length ? (
@@ -225,9 +225,9 @@ export default async function AccountsPage() {
 
                     <div className={accountStyles.accountManageActionPanel}>
                       <div>
-                        <p className="font-semibold text-slate-900">Phase 3B foundation</p>
+                        <p className="font-semibold text-slate-900">Workspace ready</p>
                         <p className="mt-1 max-w-sm">
-                          The account exists now. Next, campaign and asset screens can be scoped to this workspace through an account switcher.
+                          Make this the active workspace or open its settings to manage brand, access, campaigns, and publishing.
                         </p>
                       </div>
                       <div className={accountStyles.accountManageActions}>

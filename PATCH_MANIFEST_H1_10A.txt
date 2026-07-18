@@ -1,0 +1,36 @@
+H1.10A Launch Branding and UX Cleanup
+
+Direct-unzip patch: extract into the VIP repository root and choose Replace.
+No database migration. No environment-variable changes.
+
+Files:
+- README_H1_10A_LAUNCH_BRANDING_UX_CLEANUP.md
+- docs/H1_10_LAUNCH_QA_CHECKLIST.md
+- docs/H1_10_UI_AUDIT.md
+- public/marketing-vip-logo.png
+- public/wsp-logo.png
+- src/app/icon.png
+- src/app/layout.tsx
+- src/app/page.tsx
+- src/app/login/page.tsx
+- src/app/login/login.module.css
+- src/app/(app)/accounts/page.tsx
+- src/app/(app)/actions/page.tsx
+- src/app/(app)/analytics/Analytics.module.css
+- src/app/(app)/analytics/assets/[assetId]/page.tsx
+- src/app/(app)/analytics/page.tsx
+- src/app/(app)/campaigns/[campaignId]/page.tsx
+- src/app/(app)/content-calendar/monthly-review/page.tsx
+- src/app/(app)/content-calendar/page.tsx
+- src/app/(app)/dashboard/page.tsx
+- src/app/(app)/publishing-ready/page.tsx
+- src/app/(app)/publishing-schedule/page.tsx
+- src/components/accounts/AccountBrandProfileForm.tsx
+- src/components/analytics/AnalyticsSetupPanel.tsx
+- src/components/campaigns/CampaignWebsiteForm.tsx
+- src/components/layout/SidebarNav.module.css
+- src/components/layout/SidebarNav.tsx
+- src/components/publishing/SendAssetToZapierMcpButton.tsx
+- src/lib/ai/asset-pack-generator.ts
+- src/lib/config/product.ts
+- src/lib/galaxyai/prompt-builder.ts

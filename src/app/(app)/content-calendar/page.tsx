@@ -162,9 +162,6 @@ function metricCard({
   );
 }
 
-function statusBadge(text: string) {
-  return <span className={websiteStyles.badge}>{text}</span>;
-}
 
 export default async function ContentCalendarCommandCenterPage({ searchParams }: PageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
@@ -437,72 +434,22 @@ export default async function ContentCalendarCommandCenterPage({ searchParams }:
         )}
       </WebsiteSection>
 
-      <WebsiteSection
-        eyebrow="Workflow"
-        title="Content workflow map"
-        description="These are the main working pages in the VIP content system."
-      >
-        <div className={websiteStyles.cardGrid}>
-          <article className={websiteStyles.card}>
-            <div className="flex flex-wrap gap-2">{statusBadge("Plan")}</div>
-            <h3 className={websiteStyles.cardTitle}>Monthly Calendar</h3>
-            <p className={websiteStyles.cardText}>Generate and view active content by day, week, or month.</p>
-            <Link href={`/content-calendar/monthly?view=month&date=${monthDate}`} className={websiteStyles.link}>
-              Open Calendar →
-            </Link>
-          </article>
-
-          <article className={websiteStyles.card}>
-            <div className="flex flex-wrap gap-2">{statusBadge("Review")}</div>
-            <h3 className={websiteStyles.cardTitle}>Monthly Review</h3>
-            <p className={websiteStyles.cardText}>Review the month’s active generated assets.</p>
-            <Link href={`/content-calendar/monthly-review?view=month&date=${monthDate}`} className={websiteStyles.link}>
-              Open Review →
-            </Link>
-          </article>
-
-          <article className={websiteStyles.card}>
-            <div className="flex flex-wrap gap-2">{statusBadge("Quality")}</div>
-            <h3 className={websiteStyles.cardTitle}>Content Quality</h3>
-            <p className={websiteStyles.cardText}>Score, inspect, and improve generated assets.</p>
-            <Link href={`/content-quality?view=week&date=${monthDate}`} className={websiteStyles.link}>
-              Open Quality →
-            </Link>
-          </article>
-
-          <article className={websiteStyles.card}>
-            <div className="flex flex-wrap gap-2">{statusBadge("Approval")}</div>
-            <h3 className={websiteStyles.cardTitle}>Approvals</h3>
-            <p className={websiteStyles.cardText}>Approve assets that are ready for publishing.</p>
-            <Link href={`/approvals?view=week&date=${monthDate}`} className={websiteStyles.link}>
-              Open Approvals →
-            </Link>
-          </article>
-
-          <article className={websiteStyles.card}>
-            <div className="flex flex-wrap gap-2">{statusBadge("Publish")}</div>
-            <h3 className={websiteStyles.cardTitle}>Publish Center</h3>
-            <p className={websiteStyles.cardText}>See approved active assets waiting to schedule, send, or publish.</p>
-            <Link href={`/publishing-schedule?view=week&date=${monthDate}`} className={websiteStyles.link}>
-              Open Schedule →
-            </Link>
-          </article>
-
-          <article className={websiteStyles.card}>
-            <div className="flex flex-wrap gap-2">{statusBadge("History")}</div>
-            <h3 className={websiteStyles.cardTitle}>Action History</h3>
-            <p className={websiteStyles.cardText}>Review completed publishing, draft, and automation activity.</p>
-            <Link href={`/actions?view=month&date=${monthDate}`} className={websiteStyles.link}>
-              Open History →
-            </Link>
-          </article>
+      <details className={websiteStyles.card}>
+        <summary className={websiteStyles.cardTitle}>Content workspace links</summary>
+        <div className="mt-4 flex flex-wrap gap-4">
+          <Link href={`/content-calendar/monthly?view=month&date=${monthDate}`} className={websiteStyles.link}>Monthly Calendar →</Link>
+          <Link href={`/content-calendar/monthly-review?view=month&date=${monthDate}`} className={websiteStyles.link}>Monthly Review →</Link>
+          <Link href={`/content-quality?view=week&date=${monthDate}`} className={websiteStyles.link}>Content Quality →</Link>
+          <Link href={`/approvals?view=week&date=${monthDate}`} className={websiteStyles.link}>Approvals →</Link>
+          <Link href={`/publishing-schedule?view=week&date=${monthDate}`} className={websiteStyles.link}>Publish Center →</Link>
+          <Link href={`/actions?view=month&date=${monthDate}`} className={websiteStyles.link}>Action History →</Link>
         </div>
-      </WebsiteSection>
+      </details>
 
       <WebsiteSection
         eyebrow="Health"
         title="Content health"
-        description="This catches clutter and workflow issues that make the interface confusing."
+        description="Review duplicate, orphaned, or inconsistent content records that need attention."
       >
         <div id="health">
           {healthWarnings.length ? (

@@ -21,8 +21,8 @@
 }
 
 .logoLink {
-  display: inline-grid;
-  gap: 0.1rem;
+  display: inline-flex;
+  align-items: center;
   min-width: 220px;
   color: #0f172a;
   text-decoration: none;
@@ -31,17 +31,9 @@
 .marketingVipLogo {
   display: block;
   width: 220px;
-  height: 48px;
-  border-radius: 10px;
-  object-fit: cover;
-  object-position: center;
-}
-
-.logoSub {
-  font-family: Montserrat, system-ui, sans-serif;
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: #64748b;
+  height: 52px;
+  object-fit: contain;
+  object-position: left center;
 }
 
 .desktopNav {
@@ -314,10 +306,6 @@
 @media (max-width: 520px) {
   .headerInner {
     width: min(100%, calc(100% - 20px));
-  }
-
-  .logoSub {
-    display: none;
   }
 
   .marketingVipLogo {

@@ -91,7 +91,7 @@ export function AccountBrandProfileForm({
 
       <div className={accountStyles.buttonRow}>
         <p className={accountStyles.helperText}>
-          VIP will use this as the account-level memory for campaign generation, content tone, visual direction, and creative direction as Phase 3 continues.
+          VIP uses this account-level memory for campaign strategy, content tone, visual direction, and creative guidance.
         </p>
         <button
           type="submit"

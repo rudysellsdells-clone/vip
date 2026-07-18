@@ -127,8 +127,7 @@
 }
 
 .metricCard,
-.panel,
-.nextStep {
+.panel {
   border: 1px solid #dbe5ef;
   background: #ffffff;
   box-shadow: 0 12px 34px rgba(15, 23, 42, 0.06);
@@ -189,8 +188,7 @@
   gap: 18px;
 }
 
-.panelHeader h2,
-.nextStep h2 {
+.panelHeader h2 {
   margin: 8px 0 0;
   color: #0f172a;
   font-size: 25px;
@@ -198,8 +196,7 @@
   letter-spacing: -0.025em;
 }
 
-.panelCopy,
-.nextStep p {
+.panelCopy {
   max-width: 820px;
   margin: 10px 0 0;
   color: #64748b;
@@ -415,18 +412,6 @@
   font-size: 11px;
 }
 
-.nextStep {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  margin-top: 22px;
-  border-radius: 28px;
-  background:
-    radial-gradient(circle at 95% 20%, rgba(245, 182, 66, 0.20), transparent 240px),
-    #ffffff;
-  padding: 28px;
-}
 
 .secondaryButton {
   display: inline-flex;
@@ -460,8 +445,7 @@
 }
 
 @media (max-width: 820px) {
-  .hero,
-  .nextStep {
+  .hero {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -490,8 +474,7 @@
   }
 
   .hero,
-  .panel,
-  .nextStep {
+  .panel {
     border-radius: 22px;
     padding: 20px;
   }

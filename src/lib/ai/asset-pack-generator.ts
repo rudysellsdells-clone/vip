@@ -432,7 +432,7 @@ function normalizeGalaxyAiPromptFromVideoScript(
       videoScript: script,
       campaignAngle: input.campaign.idea,
       callToAction: input.campaign.cta,
-      brandName: "Web Search Professionals",
+      brandName: "Marketing VIP",
       audience: input.campaign.buyer_segment ?? input.campaign.audience,
     }),
   };

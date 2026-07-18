@@ -316,7 +316,7 @@ export function AnalyticsSetupPanel({
             Install first-party tracking for Marketing VIP attribution, then connect GA4 for historical traffic and familiar website reporting.
           </p>
         </div>
-        <span className={styles.panelPill}>H1.7C3</span>
+        <span className={styles.panelPill}>Account isolated</span>
       </div>
 
       <div className={styles.accountScopeBanner}>

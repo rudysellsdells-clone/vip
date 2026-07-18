@@ -138,7 +138,7 @@ export function SendAssetToZapierMcpButton({
         <article className={websiteStyles.card}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className={websiteStyles.cardTitle}>Tracked campaign link ready</h3>
-            <span className={websiteStyles.badge}>H1.7C2</span>
+            <span className={websiteStyles.badge}>Attribution ready</span>
           </div>
           <p className={websiteStyles.cardMeta}>
             {preview.utmSource} / {preview.utmMedium} · {preview.utmCampaign} · {preview.utmContent}

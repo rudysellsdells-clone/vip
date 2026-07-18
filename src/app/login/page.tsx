@@ -95,7 +95,7 @@ export default function LoginPage() {
       <main className={styles.page}>
         <section className={styles.setupShell}>
           <div className={styles.setupCard}>
-            <img className={styles.logo} src="/wsp-logo.png" alt="Web Search Professionals" />
+            <img className={styles.logo} src="/marketing-vip-logo.png" alt="Marketing VIP" />
             <p className={styles.eyebrow}>Setup required</p>
             <h1 className={styles.cardTitle}>Marketing VIP needs Supabase configuration</h1>
             <p className={styles.cardCopy}>
@@ -125,7 +125,7 @@ export default function LoginPage() {
       <header className={styles.header}>
         <div className={styles.headerInner}>
           <Link href="/" aria-label="Back to Marketing VIP home">
-            <img className={styles.logo} src="/wsp-logo.png" alt="Web Search Professionals" />
+            <img className={styles.logo} src="/marketing-vip-logo.png" alt="Marketing VIP" />
           </Link>
           <Link href="/" className={styles.backLink}>
             Back to home
@@ -236,8 +236,7 @@ export default function LoginPage() {
               </div>
 
               <div className={styles.magicNote}>
-                Magic links use Supabase email sending and may be rate limited. Password login is
-                still the fastest testing path.
+                We will email a secure sign-in link. Delivery can take a minute.
               </div>
 
               <button type="submit" disabled={loading} className={styles.primaryButton}>
@@ -249,11 +248,6 @@ export default function LoginPage() {
           {message && <p className={styles.successBox}>{message}</p>}
           {errorMessage && <p className={styles.errorBox}>{errorMessage}</p>}
 
-          <div className={styles.infoBox}>
-            <strong>Protected workflow</strong>
-            After login, VIP sends you into the authenticated dashboard where workspace and role
-            rules control what each user can see and do.
-          </div>
         </section>
       </section>
     </main>

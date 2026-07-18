@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
-import { productConfig } from "@/lib/config/product";
 import { AccountSwitcher } from "@/components/accounts/AccountSwitcher";
 import { SignOutButton } from "@/components/layout/SignOutButton";
 import type { AccountContextAccount } from "@/lib/accounts/account-context";
@@ -283,7 +282,6 @@ function Logo() {
         alt="Marketing VIP"
         className={styles.marketingVipLogo}
       />
-      <span className={styles.logoSub}>{productConfig.brandName}</span>
     </Link>
   );
 }

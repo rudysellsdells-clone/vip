@@ -921,27 +921,23 @@ export function CampaignWebsiteForm({
       </div>
 
       {strategyContext || sourceContext ? (
-        <div className={formStyles.row}>
+        <details className={formStyles.row}>
+          <summary className={formStyles.label}>Advanced campaign context</summary>
           <label className={formStyles.field}>
-            <span className={formStyles.label}>Context VIP will save with this one-off campaign</span>
+            <span className={formStyles.help}>Saved with the campaign and used as private generation context.</span>
             <textarea
               value={[strategyContext, sourceContext].filter(Boolean).join("\n\n")}
               readOnly
               className={formStyles.textarea}
             />
           </label>
-        </div>
+        </details>
       ) : null}
 
       <div className={formStyles.divider} />
 
       <div className={formStyles.header}>
-        <div className="flex flex-wrap gap-2">
-          <span className={websiteStyles.badge}>Step 1</span>
-          <span className={websiteStyles.badge}>Strategy preview only</span>
-          <span className={websiteStyles.badge}>No campaign created yet</span>
-        </div>
-        <h3 className={formStyles.smallTitle} style={{ marginTop: 14 }}>
+        <h3 className={formStyles.smallTitle}>
           Generate the Marketing Spine
         </h3>
         <p className={formStyles.description}>
@@ -1063,11 +1059,6 @@ export function CampaignWebsiteForm({
 
           <div className={formStyles.header}>
             <div className="flex flex-wrap gap-2">
-              <span className={websiteStyles.badge}>Step 2</span>
-              <span className={websiteStyles.badge}>Review before creation</span>
-              <span className={websiteStyles.badge}>
-                {strategyPreview.intelligenceReadinessScore}/100 source readiness
-              </span>
               <span className={websiteStyles.badge}>
                 {strategyEdited ? "Human edited" : "Quality-approved AI draft"}
               </span>
@@ -1080,18 +1071,18 @@ export function CampaignWebsiteForm({
             </p>
           </div>
 
-          <div className={formStyles.row}>
+          <details className={formStyles.row}>
+            <summary className={formStyles.label}>Strategy generation details</summary>
             <div className={formStyles.field}>
-              <span className={formStyles.label}>Strategy source resolution</span>
               <p className={formStyles.description}>
                 Promoted offer: <strong>{strategyPreview.strategyEngine.promotedOffer}</strong>
                 {" · "}Source: {strategyPreview.strategyEngine.offerSource.replaceAll("_", " ")}
-                {" · "}Engine: {strategyPreview.strategyEngine.version}
+                {" · "}Source readiness: {strategyPreview.intelligenceReadinessScore}/100
               </p>
               <p className={formStyles.description}>
                 Semantic plan: {strategyPreview.strategyEngine.semanticPlanGenerated ? "passed" : "not run"}
                 {" · "}Planning repair: {strategyPreview.strategyEngine.semanticPlanRepairUsed ? "used" : "not needed"}
-                {" · "}Editorial quality review: {strategyPreview.strategyEngine.qualityReviewPassed ? "passed" : "blocked"}
+                {" · "}Editorial review: {strategyPreview.strategyEngine.qualityReviewPassed ? "passed" : "blocked"}
               </p>
               {strategyPreview.strategyEngine.ignoredOffers.length ? (
                 <p className={formStyles.message}>
@@ -1104,7 +1095,7 @@ export function CampaignWebsiteForm({
                 </p>
               ))}
             </div>
-          </div>
+          </details>
 
           {strategyStale ? (
             <p className={formStyles.error}>

@@ -418,8 +418,8 @@ export default async function DashboardPage() {
       <section className={styles.twoColumn}>
         <Section
           eyebrow="Digital Marketing Services"
-          title="Organized around the services Rudy sells."
-          description="The dashboard now uses the same service-led structure as Web Search Pros: visibility, content, automation, and revenue."
+          title="Work organized by marketing outcome."
+          description="Move directly into visibility, content, automation, publishing, and revenue work for the active account."
         >
           <div className={styles.serviceGrid}>
             {services.map((service) => (

@@ -185,7 +185,7 @@ export default async function ActionsPage() {
       <WebsiteSection
         eyebrow="Legacy Actions"
         title="Recent legacy tool runs"
-        description="Tool runs are kept for compatibility and historical audit. H1.4D3A shows runnable legacy items for review only; live execution guards come next."
+        description="Tool runs remain available for compatibility and historical audit. New publishing activity should use the canonical Publish Center flow."
       >
         {toolRuns.length ? (
           <div className={websiteStyles.cardGrid}>

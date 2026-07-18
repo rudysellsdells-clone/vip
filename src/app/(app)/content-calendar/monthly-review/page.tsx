@@ -151,7 +151,7 @@ export default async function MonthlyReviewPage({ searchParams }: PageProps) {
       <WebsiteSection
         eyebrow="Active Workspace"
         title={accountContext.activeAccountName ?? "Current workspace"}
-        description="Monthly Review is now aligned with workspace-scoped approvals and publishing. Legacy unassigned items are shown to MASTER only for rescue and rerouting."
+        description="Review content for this workspace. MASTER users can also recover unassigned legacy items when necessary."
       >
         <article className={websiteStyles.card}>
           <div className="flex flex-wrap gap-2">
@@ -166,7 +166,7 @@ export default async function MonthlyReviewPage({ searchParams }: PageProps) {
       <WebsiteSection
         eyebrow="Marketing Spine"
         title="Strategy bridge used by this review set"
-        description="This shows the visible strategy spine that sat between campaign planning and asset execution. Generated assets should inherit this context through their asset briefs and quality review."
+        description="Review the approved strategy that guided this month’s generated assets."
       >
         {marketingSpines.length ? (
           <div className={websiteStyles.cardGrid}>

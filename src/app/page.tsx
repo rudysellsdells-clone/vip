@@ -121,8 +121,8 @@ export default function HomePage() {
     <main className={styles.page}>
       <header className={styles.header}>
         <div className={styles.headerInner}>
-          <Link href="/" aria-label="Web Search Professionals home">
-            <img className={styles.logo} src="/wsp-logo.png" alt="Web Search Professionals" />
+          <Link href="/" aria-label="Marketing VIP home">
+            <img className={styles.logo} src="/marketing-vip-logo.png" alt="Marketing VIP" />
           </Link>
 
           <nav className={styles.nav} aria-label="Marketing VIP sections">
@@ -462,7 +462,7 @@ export default function HomePage() {
 
       <footer className={styles.footer}>
         <div className={styles.footerInner}>
-          <img className={styles.footerLogo} src="/wsp-logo.png" alt="Web Search Professionals" />
+          <img className={styles.footerLogo} src="/marketing-vip-logo.png" alt="Marketing VIP" />
           <p>AI-first marketing systems for growth-focused service businesses.</p>
         </div>
       </footer>

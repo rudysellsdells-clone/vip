@@ -258,7 +258,6 @@
 }
 
 .magicNote,
-.infoBox,
 .warningBox,
 .successBox,
 .errorBox {
@@ -275,22 +274,6 @@
   color: #475569;
 }
 
-.infoBox {
-  margin-top: 1.6rem;
-  border: 1px solid #dbeaf7;
-  background: #f6fbff;
-  color: #64748b;
-}
-
-.infoBox strong {
-  display: block;
-  margin-bottom: 0.5rem;
-  color: #0b4a7a;
-  font-size: 0.76rem;
-  font-weight: 950;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
 
 .warningBox {
   margin-top: 2rem;

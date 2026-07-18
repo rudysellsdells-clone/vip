@@ -314,7 +314,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
         </div>
         <div className={styles.heroStatus}>
           <span className={schemaReady ? styles.statusReady : styles.statusWarning}>
-            {schemaReady ? "H1.7C reporting operational" : "H1.7C migration required"}
+            {schemaReady ? "Reporting operational" : "Analytics setup required"}
           </span>
           <p>{range.startDate} through {range.endDate}</p>
         </div>
@@ -324,8 +324,8 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
         <section className={styles.notice}>
           <div>
             <p className={styles.noticeLabel}>Setup required</p>
-            <h2>Apply the H1.7C1 analytics migration.</h2>
-            <p>The dashboard needs sync-history and reporting-operation fields before this release can run.</p>
+            <h2>Complete the analytics database setup.</h2>
+            <p>The dashboard needs its reporting and sync-history fields before analytics can run.</p>
           </div>
         </section>
       ) : null}
@@ -425,7 +425,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
                 </Link>
               ))}
             </div>
-          ) : <div className={styles.emptyState}><strong>No attributed campaigns yet.</strong><p>C2 will automatically enrich outbound Marketing VIP links; native URLs containing a valid <code>vip_campaign</code> parameter are already supported.</p></div>}
+          ) : <div className={styles.emptyState}><strong>No attributed campaigns yet.</strong><p>Results will appear after tracked campaign links begin recording activity. <Link href="/campaigns">Review campaigns →</Link></p></div>}
         </section>
 
         <section className={styles.panel}>
@@ -478,10 +478,6 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
         </div>
       </section>
 
-      <section className={styles.nextStep}>
-        <div><p className={styles.panelEyebrow}>Next implementation gate</p><h2>H1.7C2: automatic link attribution</h2><p>The reporting model is ready. C2 will inject campaign and asset identifiers into canonical publishing links so attribution happens automatically across outbound content.</p></div>
-        <Link href="/campaigns" className={styles.secondaryButton}>Review campaigns</Link>
-      </section>
     </main>
   );
 }

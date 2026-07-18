@@ -18,8 +18,8 @@ function readPublicEnv(key: string, fallback: string) {
 }
 
 export const productConfig: ProductConfig = {
-  appName: readPublicEnv("NEXT_PUBLIC_PRODUCT_APP_NAME", "Rudy's VIP"),
-  brandName: readPublicEnv("NEXT_PUBLIC_PRODUCT_BRAND_NAME", "Web Search Pros OS"),
+  appName: readPublicEnv("NEXT_PUBLIC_PRODUCT_APP_NAME", "Marketing VIP"),
+  brandName: readPublicEnv("NEXT_PUBLIC_PRODUCT_BRAND_NAME", "Marketing VIP"),
   companyName: readPublicEnv("NEXT_PUBLIC_PRODUCT_COMPANY_NAME", "Web Search Pros"),
   ownerName: readPublicEnv("NEXT_PUBLIC_PRODUCT_OWNER_NAME", "Rudy"),
   supportEmail: readPublicEnv("NEXT_PUBLIC_PRODUCT_SUPPORT_EMAIL", "support@example.com"),

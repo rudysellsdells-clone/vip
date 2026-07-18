@@ -147,7 +147,7 @@ export default async function AnalyticsAssetPage({ params, searchParams }: PageP
           <div className={styles.panelHeader}><div><p className={styles.panelEyebrow}>Interpretation</p><h2>What this view proves</h2></div></div>
           <div className={styles.insightBox}>
             <p>This page isolates performance recorded with this asset’s Marketing VIP identifier. GA4 account-level traffic remains visible on the main dashboard, while asset attribution depends on the native tracking parameter.</p>
-            <p>C2 will automatically add that identifier to eligible publishing links.</p>
+            <p>Eligible publishing links use that identifier to preserve asset-level attribution.</p>
           </div>
         </section>
       </div>

@@ -215,7 +215,7 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
       <WebsiteSection
         eyebrow="Active Workspace"
         title={accountContext.activeAccountName ?? "Current workspace"}
-        description="H1.4D3A scopes Publish Center by workspace so you can review the destination and payload before anything leaves VIP."
+        description="Publishing is scoped to this workspace so destinations and payloads can be reviewed before anything leaves Marketing VIP."
       >
         <article className={websiteStyles.card}>
           <div className="flex flex-wrap gap-2">
@@ -274,7 +274,7 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
         <WebsiteSection
           eyebrow="Ready Now"
           title={`${readyNowCount} item(s) ready for a publishing action`}
-          description="These items can be acted on now. Canonical assets open an asset-specific publishing step. Legacy publishing actions can be executed directly here while we finish consolidating old workflows."
+          description="These items can be acted on now. Canonical assets open an asset-specific publishing step; compatible legacy actions remain available below."
         >
           <div className={websiteStyles.cardGrid}>
             {unscheduledCount ? (
@@ -291,7 +291,7 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
               <article className={websiteStyles.card}>
                 <h3 className={websiteStyles.cardTitle}>Legacy publishing actions</h3>
                 <p className={websiteStyles.cardText}>
-                  Some older flows still create executable publishing actions. H1.4D3A shows them for review only so no external provider is triggered during preflight testing.
+                  Older compatible publishing actions remain visible so they can be reviewed without losing historical workflow records.
                 </p>
                 <p className={websiteStyles.cardMeta}>{legacyPublishingActions.length} action(s) ready</p>
               </article>
@@ -383,7 +383,7 @@ export default async function PublishingSchedulePage({ searchParams }: PageProps
         <WebsiteSection
           eyebrow="Legacy Publish Actions"
           title="Publish actions ready to run"
-          description="These are older ZapierMCP tool-run actions. H1.4D3A shows them for review only while the live execution guard is completed in H1.4D3B."
+          description="These older ZapierMCP tool-run actions remain available for compatibility and audit history."
         >
           <div className={websiteStyles.cardGrid}>
             {legacyPublishingActions.map((run) => (

@@ -237,7 +237,7 @@ export default async function PublishingReadyPage({ searchParams }: PageProps) {
       <WebsiteSection
         eyebrow="Preflight"
         title={preflight.ready ? "Ready for controlled execution" : "Execution blocked until this workspace is ready"}
-        description="H1.4D3A lets you review exactly what VIP would send without needing a second external Zapier, Facebook, LinkedIn, WordPress, or GalaxyAI stack."
+        description="Review exactly what Marketing VIP will send, including the active workspace, destination, provider action, and structured payload."
       >
         <div className={websiteStyles.cardGrid}>
           <article className={websiteStyles.card}>
