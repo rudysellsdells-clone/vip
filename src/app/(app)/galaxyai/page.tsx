@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
+import { RefreshGalaxyAiRunButton } from "@/components/galaxyai/RefreshGalaxyAiRunButton";
 import { SyncGalaxyWorkflowsButton } from "@/components/galaxyai/SyncGalaxyWorkflowsButton";
 import {
   WebsiteBadge,
@@ -15,6 +17,23 @@ import { untypedSupabase } from "@/lib/supabase/untyped";
 function formatDate(value: string | null) {
   if (!value) return "No date";
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function recoveredAssetId(value: unknown) {
+  const output = record(value);
+  const id = String(
+    output.recoveredAssetId ??
+      output.socialImageAssetId ??
+      output.mediaAssetId ??
+      "",
+  ).trim();
+  return id || null;
 }
 
 export default async function GalaxyAiPage() {
@@ -102,6 +121,18 @@ export default async function GalaxyAiPage() {
                   Created {formatDate(run.created_at)} • Completed {formatDate(run.completed_at)}
                 </p>
                 {run.error ? <p className={websiteStyles.cardText}><strong>Error:</strong> {run.error}</p> : null}
+                <div className={websiteStyles.cardActions}>
+                  <RefreshGalaxyAiRunButton runId={run.id} initialStatus={run.status} />
+                  {recoveredAssetId(run.output) ? (
+                    <Link href={`/assets/${recoveredAssetId(run.output)}`} className={websiteStyles.link}>
+                      Open generated asset →
+                    </Link>
+                  ) : run.asset_id ? (
+                    <Link href={`/assets/${run.asset_id}`} className={websiteStyles.link}>
+                      Open source prompt →
+                    </Link>
+                  ) : null}
+                </div>
               </article>
             ))}
           </div>

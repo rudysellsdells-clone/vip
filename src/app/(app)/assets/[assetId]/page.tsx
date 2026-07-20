@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AssetTitleLink } from "@/components/assets/AssetTitleLink";
 import { AssetReviewActions } from "@/components/approvals/AssetReviewActions";
+import { RefreshGalaxyAiRunButton } from "@/components/galaxyai/RefreshGalaxyAiRunButton";
 import { RunGalaxyAiAssetButton } from "@/components/galaxyai/RunGalaxyAiAssetButton";
 import { ExecuteApprovedAssetButton } from "@/components/publishing/ExecuteApprovedAssetButton";
 import { RequestRevisionButton } from "@/components/assets/RequestRevisionButton";
@@ -191,6 +192,20 @@ export default async function AssetDetailPage({ params }: PageProps) {
     name: string;
   }>;
 
+  let galaxyRunsQuery = supabase
+    .from("galaxyai_runs")
+    .select("id,status,error,created_at,completed_at,galaxy_workflow_id,output")
+    .eq("asset_id", asset.id);
+
+  galaxyRunsQuery = accountId
+    ? galaxyRunsQuery.eq("account_id", accountId)
+    : galaxyRunsQuery.eq("user_id", user.id);
+
+  const { data: galaxyRunsData } = await galaxyRunsQuery
+    .order("created_at", { ascending: false })
+    .limit(5);
+  const galaxyRuns = (galaxyRunsData ?? []) as Array<Record<string, any>>;
+
   return (
     <WebsitePage>
       <WebsiteHero
@@ -343,6 +358,28 @@ export default async function AssetDetailPage({ params }: PageProps) {
                 campaignId={asset.campaign_id ?? ""}
                 workflows={workflows}
               />
+            ) : null}
+
+            {galaxyRuns.length ? (
+              <div className="w-full space-y-2 rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Recent GalaxyAI runs
+                </p>
+                {galaxyRuns.map((run) => (
+                  <div key={run.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-2 first:border-t-0 first:pt-0">
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800">
+                        {run.galaxy_workflow_id ?? "GalaxyAI workflow"}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {String(run.status ?? "queued")} • {formatDate(run.created_at ?? null)}
+                      </p>
+                      {run.error ? <p className="text-xs font-semibold text-rose-700">{run.error}</p> : null}
+                    </div>
+                    <RefreshGalaxyAiRunButton runId={run.id} initialStatus={run.status} />
+                  </div>
+                ))}
+              </div>
             ) : null}
 
             {canRevise ? (

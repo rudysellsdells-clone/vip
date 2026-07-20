@@ -1,0 +1,18 @@
+H1.10B GalaxyAI Run Output Recovery
+
+Files:
+- src/lib/galaxyai/run-recovery.ts
+- src/lib/galaxyai/types.ts
+- src/app/api/galaxyai/runs/[runId]/route.ts
+- src/components/galaxyai/RunGalaxyAiAssetButton.tsx
+- src/components/galaxyai/RefreshGalaxyAiRunButton.tsx
+- src/app/(app)/galaxyai/page.tsx
+- src/app/(app)/assets/[assetId]/page.tsx
+- tests/galaxyai-run-recovery.test.ts
+- package.json
+- README_H1_10B_GALAXYAI_RUN_OUTPUT_RECOVERY.md
+- FILE_SHA256SUMS_H1_10B.txt
+
+Install: unzip directly into repository root and choose Replace.
+Database migration: none.
+Environment changes: none.

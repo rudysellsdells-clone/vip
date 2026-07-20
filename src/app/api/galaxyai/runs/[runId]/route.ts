@@ -8,6 +8,7 @@ import {
   getGalaxyAiWorkflowMedia,
 } from "@/lib/galaxyai/client";
 import { logActivity } from "@/lib/security/auditLog";
+import { collectGalaxyAiRunMedia } from "@/lib/galaxyai/run-recovery";
 import type { GalaxyAiMediaItem } from "@/lib/galaxyai/types";
 import type { Json } from "@/types/database.types";
 
@@ -16,6 +17,8 @@ type RouteContext = {
     runId: string;
   }>;
 };
+
+export const maxDuration = 60;
 
 const CAMPAIGN_ASSETS_BUCKET =
   process.env.SUPABASE_CAMPAIGN_ASSETS_BUCKET || "campaign-assets";
@@ -231,14 +234,14 @@ async function createGalaxyAiMediaAssetIfNeeded(input: {
     throw new Error(existingError.message);
   }
 
-  const alreadySaved = (existingAssets ?? []).some((asset: Record<string, unknown>) => {
+  const alreadySaved = (existingAssets ?? []).find((asset: Record<string, unknown>) => {
     const metadata = isPlainObject(asset.metadata) ? asset.metadata : null;
 
     return metadata?.provider === "galaxyai" && metadata?.runId === input.galaxyRunId;
   });
 
   if (alreadySaved) {
-    return null;
+    return alreadySaved;
   }
 
   const urls = getMediaUrls(input.mediaItems);
@@ -542,6 +545,7 @@ export async function GET(_request: Request, context: RouteContext) {
       );
     }
 
+    const previousStatus = normalizeGalaxyAiStatus(localRun.status);
     const galaxyRun = await getGalaxyAiRun(localRun.galaxy_run_id);
     const galaxyRunRecord = galaxyRun as Record<string, unknown>;
     const status = normalizeGalaxyAiStatus(galaxyRunRecord.status);
@@ -551,40 +555,74 @@ export async function GET(_request: Request, context: RouteContext) {
     let matchedMedia: GalaxyAiMediaItem[] = [];
     let createdMediaAsset: Record<string, unknown> | null = null;
     let createdSocialImageAsset: Record<string, unknown> | null = null;
+    let mediaRetrievalError: string | null = null;
+    let assetCreationError: string | null = null;
 
     if (status === "completed") {
-      const workflowMedia = await getGalaxyAiWorkflowMedia(localRun.galaxy_workflow_id);
-      matchedMedia = filterMediaForRun(workflowMedia.items ?? [], localRun.galaxy_run_id);
+      let workflowMediaItems: GalaxyAiMediaItem[] = [];
 
-      createdSocialImageAsset = await createGeneratedSocialImageAssetIfNeeded({
-        supabase,
-        userId: user.id,
-        accountId: localRunAccountId,
-        campaignId: localRun.campaign_id,
-        localRun: localRun as Record<string, unknown>,
-        localRunId: localRun.id,
-        galaxyRunId: localRun.galaxy_run_id,
-        workflowId: localRun.galaxy_workflow_id,
-        mediaItems: matchedMedia,
+      try {
+        const workflowMedia = await getGalaxyAiWorkflowMedia(localRun.galaxy_workflow_id);
+        workflowMediaItems = filterMediaForRun(
+          workflowMedia.items ?? [],
+          localRun.galaxy_run_id,
+        );
+      } catch (error) {
+        mediaRetrievalError =
+          error instanceof Error
+            ? error.message
+            : "GalaxyAI completed, but workflow media could not be retrieved yet.";
+      }
+
+      // Workflow media can lag behind a completed run. The run-details endpoint
+      // often already contains node output URLs, so recover from both sources.
+      matchedMedia = collectGalaxyAiRunMedia({
         galaxyRun,
+        galaxyRunId: localRun.galaxy_run_id,
+        workflowMediaItems,
       });
 
-      if (!createdSocialImageAsset) {
-        createdMediaAsset = await createGalaxyAiMediaAssetIfNeeded({
-          supabase,
-          userId: user.id,
-          accountId: localRunAccountId,
-          campaignId: localRun.campaign_id,
-          localRunId: localRun.id,
-          galaxyRunId: localRun.galaxy_run_id,
-          workflowId: localRun.galaxy_workflow_id,
-          mediaItems: matchedMedia,
-          galaxyRun,
-        });
+      if (matchedMedia.length) {
+        try {
+          createdSocialImageAsset = await createGeneratedSocialImageAssetIfNeeded({
+            supabase,
+            userId: user.id,
+            accountId: localRunAccountId,
+            campaignId: localRun.campaign_id,
+            localRun: localRun as Record<string, unknown>,
+            localRunId: localRun.id,
+            galaxyRunId: localRun.galaxy_run_id,
+            workflowId: localRun.galaxy_workflow_id,
+            mediaItems: matchedMedia,
+            galaxyRun,
+          });
+
+          if (!createdSocialImageAsset) {
+            createdMediaAsset = await createGalaxyAiMediaAssetIfNeeded({
+              supabase,
+              userId: user.id,
+              accountId: localRunAccountId,
+              campaignId: localRun.campaign_id,
+              localRunId: localRun.id,
+              galaxyRunId: localRun.galaxy_run_id,
+              workflowId: localRun.galaxy_workflow_id,
+              mediaItems: matchedMedia,
+              galaxyRun,
+            });
+          }
+        } catch (error) {
+          assetCreationError =
+            error instanceof Error
+              ? error.message
+              : "GalaxyAI output was found, but VIP could not create the review asset.";
+        }
       }
     }
 
     const createdSocialImageMetadata = jsonRecord(createdSocialImageAsset?.metadata);
+    const recoveredAssetId =
+      stringOrNull(createdSocialImageAsset?.id) ?? stringOrNull(createdMediaAsset?.id);
+    const mediaPending = status === "completed" && matchedMedia.length === 0;
 
     const { data: updatedRun, error: updateError } = await supabase
       .from("galaxyai_runs")
@@ -601,11 +639,17 @@ export async function GET(_request: Request, context: RouteContext) {
             stringOrNull(createdSocialImageAsset?.content) ??
             stringOrNull(createdSocialImageMetadata.hostedImageUrl) ??
             null,
+          recoveredAssetId,
+          mediaPending,
+          mediaRetrievalError,
+          assetCreationError,
         }),
         error:
           typeof galaxyRunRecord.error === "string"
             ? galaxyRunRecord.error
-            : null,
+            : status === "failed"
+              ? "GalaxyAI reported a failed run without an error message."
+              : null,
         completed_at: isFinished ? getFinishedAt(galaxyRunRecord) : null,
       })
       .eq("id", localRun.id)
@@ -617,32 +661,45 @@ export async function GET(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: updateError.message }, { status: 400 });
     }
 
-    await logActivity(supabase, {
-      userId: user.id,
-      activityType: createdSocialImageAsset
-        ? "galaxyai_social_image_stored"
-        : "galaxyai_run_status_checked",
-      title: createdSocialImageAsset
-        ? "GalaxyAI social image stored"
-        : "GalaxyAI run status checked",
-      description:
-        status === "completed"
-          ? createdSocialImageAsset
-            ? "GalaxyAI image run completed and social image asset was created."
-            : `GalaxyAI run completed with ${matchedMedia.length} media item(s).`
-          : `GalaxyAI run is ${status}.`,
-      metadata: toJson({
-        localRunId: stringOrNull(localRun.id),
-        accountId: localRunAccountId,
-        galaxyRunId: stringOrNull(localRun.galaxy_run_id),
-        status,
-        mediaCount: matchedMedia.length,
-        mediaAssetCreated: Boolean(createdMediaAsset),
-        mediaAssetId: stringOrNull(createdMediaAsset?.id),
-        socialImageAssetCreated: Boolean(createdSocialImageAsset),
-        socialImageAssetId: stringOrNull(createdSocialImageAsset?.id),
-      }),
-    });
+    const shouldLogActivity =
+      status !== previousStatus ||
+      Boolean(createdMediaAsset) ||
+      Boolean(createdSocialImageAsset) ||
+      Boolean(assetCreationError);
+
+    if (shouldLogActivity) {
+      await logActivity(supabase, {
+        userId: user.id,
+        activityType: createdSocialImageAsset
+          ? "galaxyai_social_image_stored"
+          : "galaxyai_run_status_checked",
+        title: createdSocialImageAsset
+          ? "GalaxyAI social image stored"
+          : "GalaxyAI run status checked",
+        description:
+          status === "completed"
+            ? createdSocialImageAsset
+              ? "GalaxyAI image run completed and social image asset was created."
+              : `GalaxyAI run completed with ${matchedMedia.length} media item(s).`
+            : `GalaxyAI run is ${status}.`,
+        metadata: toJson({
+          localRunId: stringOrNull(localRun.id),
+          accountId: localRunAccountId,
+          galaxyRunId: stringOrNull(localRun.galaxy_run_id),
+          previousStatus,
+          status,
+          mediaCount: matchedMedia.length,
+          mediaAssetCreated: Boolean(createdMediaAsset),
+          mediaAssetId: stringOrNull(createdMediaAsset?.id),
+          socialImageAssetCreated: Boolean(createdSocialImageAsset),
+          socialImageAssetId: stringOrNull(createdSocialImageAsset?.id),
+          recoveredAssetId,
+          mediaPending,
+          mediaRetrievalError,
+          assetCreationError,
+        }),
+      });
+    }
 
     return NextResponse.json({
       run: updatedRun,
@@ -650,6 +707,14 @@ export async function GET(_request: Request, context: RouteContext) {
       media: matchedMedia,
       createdMediaAsset,
       createdSocialImageAsset,
+      recovery: {
+        status,
+        mediaCount: matchedMedia.length,
+        mediaPending,
+        recoveredAssetId,
+        mediaRetrievalError,
+        assetCreationError,
+      },
     });
   } catch (error) {
     if (error instanceof Error) {
