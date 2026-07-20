@@ -63,7 +63,7 @@ function metadataRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function firstNonEmptyRecord(...values: unknown[]) {
+function firstNonEmptyRecord(...values: unknown[]): Record<string, unknown> {
   for (const value of values) {
     const record = metadataRecord(value);
     if (Object.keys(record).length) {
@@ -86,7 +86,7 @@ function firstText(...values: unknown[]) {
 function strategyRecordWithSource(
   entries: Array<{ label: string; metadata: Record<string, unknown> }>,
   key: string,
-) {
+): { record: Record<string, unknown>; source: string | null } {
   for (const entry of entries) {
     const record = metadataRecord(entry.metadata[key]);
     if (Object.keys(record).length) {
@@ -94,7 +94,7 @@ function strategyRecordWithSource(
     }
   }
 
-  return { record: {}, source: null as string | null };
+  return { record: {}, source: null };
 }
 
 function shortText(value: unknown, fallback = "Not supplied") {
