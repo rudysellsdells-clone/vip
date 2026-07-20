@@ -1,3 +1,9 @@
+export type GalaxyAiCatalogSubModel = {
+  subModelId: string | null;
+  name: string | null;
+  category?: string | null;
+  metadata: Record<string, unknown>;
+};
 
 export type GalaxyAiCatalogNode = {
   id: string | null;
@@ -6,6 +12,17 @@ export type GalaxyAiCatalogNode = {
   slug: string | null;
   description?: string | null;
   category?: string | null;
+  subModels?: GalaxyAiCatalogSubModel[];
+  metadata: Record<string, unknown>;
+};
+
+export type GalaxyAiModelSchemaField = {
+  key: string;
+  label: string;
+  type: string | null;
+  required: boolean;
+  defaultValue?: unknown;
+  options?: Array<{ label: string; value: string }>;
   metadata: Record<string, unknown>;
 };
 
@@ -13,6 +30,8 @@ export type GalaxyAiWorkflow = {
   id: string;
   name: string;
   description?: string | null;
+  nodes?: unknown[];
+  edges?: unknown[];
   [key: string]: unknown;
 };
 

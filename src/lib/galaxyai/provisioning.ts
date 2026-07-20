@@ -1,11 +1,28 @@
 import {
-  createGalaxyAiWorkflowWithFallback,
+  addGalaxyAiWorkflowNode,
+  connectGalaxyAiWorkflowNodes,
+  getGalaxyAiModelSchema,
+  getGalaxyAiWorkflow,
+  jsonRecord,
   listGalaxyAiNodeCatalog,
+  quickCreateGalaxyAiWorkflow,
+  stringValue,
 } from "@/lib/galaxyai/client";
-import type { GalaxyAiCatalogNode } from "@/lib/galaxyai/types";
+import type {
+  GalaxyAiCatalogNode,
+  GalaxyAiCatalogSubModel,
+  GalaxyAiModelSchemaField,
+  GalaxyAiWorkflow,
+} from "@/lib/galaxyai/types";
 import type { Json } from "@/types/database.types";
-import type { VipManagedGalaxyWorkflowKind } from "@/lib/galaxyai/workflow-metadata";
-import { mergeWorkflowMetadataWithVip } from "@/lib/galaxyai/workflow-metadata";
+import type {
+  VipManagedGalaxyWorkflowKind,
+  VipManagedGalaxyWorkflowMetadata,
+} from "@/lib/galaxyai/workflow-metadata";
+import {
+  getVipManagedGalaxyWorkflowMetadata,
+  mergeWorkflowMetadataWithVip,
+} from "@/lib/galaxyai/workflow-metadata";
 
 export type ProvisionedGalaxyAiWorkflow = {
   workflowId: string;
@@ -15,291 +32,666 @@ export type ProvisionedGalaxyAiWorkflow = {
   metadata: Json;
 };
 
-function stringValue(value: unknown) {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
+export type GalaxyAiProvisioningResult = {
+  created: ProvisionedGalaxyAiWorkflow[];
+  reused: ProvisionedGalaxyAiWorkflow[];
+  diagnostics: string[];
+  catalogCount: number;
+  imageNode: string | null;
+  videoNode: string | null;
+};
+
+type ExistingWorkflowRef = {
+  workflowId: string;
+  metadata: unknown;
+};
+
+type CatalogCandidate = {
+  modelId: string;
+  nodeType: string;
+  modelName: string;
+  modeId: string | null;
+  modeName: string | null;
+  category: string | null;
+  score: number;
+};
+
+type Port = {
+  handle: string;
+  label: string;
+};
+
+type WorkflowNodeRecord = {
+  id: string;
+  type: string;
+  label: string;
+  raw: Record<string, unknown>;
+};
+
+function toJson(value: unknown): Json {
+  return JSON.parse(JSON.stringify(value)) as Json;
 }
 
-function scoreNode(node: GalaxyAiCatalogNode, kind: "image" | "video") {
-  const haystack = [node.id, node.name, node.type, node.slug, node.description, node.category]
+function firstArray(value: unknown): unknown[] {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  const record = jsonRecord(value);
+  for (const key of ["items", "data", "nodes", "edges", "fields", "ports", "inputs", "outputs"]) {
+    if (Array.isArray(record[key])) {
+      return record[key] as unknown[];
+    }
+  }
+
+  return [];
+}
+
+function recommendedAssetTypes(kind: VipManagedGalaxyWorkflowKind) {
+  return kind === "vip_social_image_only"
+    ? ["galaxyai_image_prompt"]
+    : ["galaxyai_prompt"];
+}
+
+function displayKind(kind: VipManagedGalaxyWorkflowKind) {
+  return kind === "vip_social_image_only"
+    ? "VIP social image"
+    : "VIP social image + video";
+}
+
+function workflowName(kind: VipManagedGalaxyWorkflowKind) {
+  return kind === "vip_social_image_only"
+    ? "Marketing VIP Social Image"
+    : "Marketing VIP Social Image + Video";
+}
+
+function workflowDescription(kind: VipManagedGalaxyWorkflowKind) {
+  return kind === "vip_social_image_only"
+    ? "Creates a polished social-media-ready image from an approved Marketing VIP prompt."
+    : "Creates a polished social image and a short derived video from an approved Marketing VIP prompt.";
+}
+
+function subModelCandidates(node: GalaxyAiCatalogNode) {
+  const subModels = Array.isArray(node.subModels) ? node.subModels : [];
+
+  if (subModels.length) {
+    return subModels.map((subModel) => ({
+      ...subModel,
+      parentNode: node,
+    }));
+  }
+
+  return [
+    {
+      subModelId: null,
+      name: null,
+      category: node.category ?? node.type ?? null,
+      metadata: {},
+      parentNode: node,
+    },
+  ];
+}
+
+function scoreCandidate(input: {
+  node: GalaxyAiCatalogNode;
+  subModel: GalaxyAiCatalogSubModel | { subModelId: string | null; name: string | null; category?: string | null; metadata: Record<string, unknown> };
+  kind: "image" | "video";
+}) {
+  const terms = [
+    input.node.id,
+    input.node.name,
+    input.node.type,
+    input.node.slug,
+    input.node.category,
+    input.node.description,
+    input.subModel.subModelId,
+    input.subModel.name,
+    input.subModel.category,
+  ]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
 
   let score = 0;
 
-  if (kind === "image") {
-    if (haystack.includes("gpt image 2")) score += 18;
-    if (haystack.includes("flux 2 max")) score += 16;
-    if (haystack.includes("flux")) score += 10;
-    if (haystack.includes("image")) score += 8;
-    if (haystack.includes("text-to-image")) score += 8;
-    if (haystack.includes("video")) score -= 14;
-    if (haystack.includes("audio")) score -= 10;
+  if (input.kind === "image") {
+    if (terms.includes("text-to-image")) score += 30;
+    if (terms.includes("image generation")) score += 16;
+    if (terms.includes("image")) score += 8;
+    if (terms.includes("flux")) score += 10;
+    if (terms.includes("gpt image")) score += 12;
+    if (terms.includes("image-to-video")) score -= 25;
+    if (terms.includes("video")) score -= 18;
   } else {
-    if (haystack.includes("seedance 2.0 fast reference")) score += 20;
-    if (haystack.includes("seedance")) score += 16;
-    if (haystack.includes("image to video")) score += 14;
-    if (haystack.includes("reference")) score += 8;
-    if (haystack.includes("video")) score += 8;
-    if (haystack.includes("audio")) score -= 10;
+    if (terms.includes("image-to-video")) score += 30;
+    if (terms.includes("video generation")) score += 16;
+    if (terms.includes("video")) score += 8;
+    if (terms.includes("seedance")) score += 12;
+    if (terms.includes("text-to-image")) score -= 25;
+  }
+
+  if (input.subModel.subModelId) {
+    score += 2;
   }
 
   return score;
 }
 
-function pickBestNode(nodes: GalaxyAiCatalogNode[], kind: "image" | "video") {
-  const candidates = nodes
-    .map((node) => ({ node, score: scoreNode(node, kind) }))
-    .filter((entry) => entry.score > 0)
-    .sort((a, b) => b.score - a.score);
+function pickBestCatalogCandidate(
+  nodes: GalaxyAiCatalogNode[],
+  kind: "image" | "video",
+) {
+  const candidates: CatalogCandidate[] = [];
 
-  return candidates[0]?.node ?? null;
-}
+  for (const node of nodes) {
+    for (const subModel of subModelCandidates(node)) {
+      const score = scoreCandidate({ node, subModel, kind });
+      if (score <= 0) continue;
 
-function buildInputMapping() {
-  return {
-    nodeRequestKey: "vip_prompt_request",
-    promptFieldName: "VIP Prompt",
-  };
-}
+      const nodeType = stringValue(node.type ?? node.id ?? node.slug);
+      const modelId = stringValue(node.id ?? node.slug ?? node.type);
+      if (!nodeType || !modelId) continue;
 
-function buildManagedWorkflowPayload(input: {
-  kind: VipManagedGalaxyWorkflowKind;
-  name: string;
-  description: string;
-  imageNode: GalaxyAiCatalogNode;
-  videoNode?: GalaxyAiCatalogNode | null;
-}) {
-  const promptExpression = "{{vip_prompt_request.VIP Prompt}}";
-  const baseNodes: Array<Record<string, unknown>> = [
-    {
-      id: "vip_prompt_request",
-      type: "request",
-      name: "VIP Prompt Input",
-      label: "VIP Prompt Input",
-      data: {
-        requestKey: "vip_prompt_request",
-        fields: [{ name: "VIP Prompt", key: "VIP Prompt", type: "text", required: true }],
-      },
-    },
-    {
-      id: "vip_social_image",
-      type: input.imageNode.type ?? input.imageNode.id ?? input.imageNode.slug ?? "image_generation",
-      name: "Social Image Generation",
-      label: "Social Image Generation",
-      data: {
-        modelId: input.imageNode.id ?? input.imageNode.slug ?? input.imageNode.type,
-        prompt: promptExpression,
-        inputs: {
-          prompt: promptExpression,
-          aspectRatio: "4:5",
-          count: 1,
-          quality: "high",
-          style:
-            "Create a polished social media grade visual with clean composition, brand-safe business styling, realistic imagery, and minimal readable text.",
-        },
-      },
-    },
-  ];
-
-  const baseEdges: Array<Record<string, unknown>> = [
-    {
-      id: "edge_prompt_to_image",
-      source: "vip_prompt_request",
-      sourceHandle: "VIP Prompt",
-      target: "vip_social_image",
-      targetHandle: "prompt",
-    },
-  ];
-
-  const outputs: Array<Record<string, unknown>> = [
-    {
-      id: "output_image",
-      sourceNodeId: "vip_social_image",
-      label: "Generated social image",
-      type: "image",
-    },
-  ];
-
-  const nodes: Array<Record<string, unknown>> = [...baseNodes];
-  const edges: Array<Record<string, unknown>> = [...baseEdges];
-
-  if (input.kind === "vip_social_image_video" && input.videoNode) {
-    nodes.push({
-      id: "vip_social_video",
-      type: input.videoNode.type ?? input.videoNode.id ?? input.videoNode.slug ?? "video_generation",
-      name: "Social Video Generation",
-      label: "Social Video Generation",
-      data: {
-        modelId: input.videoNode.id ?? input.videoNode.slug ?? input.videoNode.type,
-        prompt: `${promptExpression}\n\nAnimate the generated image into a short 5-second marketing video with subtle motion, clean transitions, and realistic movement.`,
-        inputs: {
-          prompt: `${promptExpression}\n\nAnimate the generated image into a short 5-second marketing video with subtle motion, clean transitions, and realistic movement.`,
-          referenceImage: "{{vip_social_image.output}}",
-          image: "{{vip_social_image.output}}",
-          durationSeconds: 5,
-          resolution: "720p",
-          motionStyle: "subtle",
-        },
-      },
-    });
-
-    edges.push(
-      {
-        id: "edge_prompt_to_video",
-        source: "vip_prompt_request",
-        sourceHandle: "VIP Prompt",
-        target: "vip_social_video",
-        targetHandle: "prompt",
-      },
-      {
-        id: "edge_image_to_video",
-        source: "vip_social_image",
-        sourceHandle: "output",
-        target: "vip_social_video",
-        targetHandle: "image",
-      },
-    );
-
-    outputs.push({
-      id: "output_video",
-      sourceNodeId: "vip_social_video",
-      label: "Generated social video",
-      type: "video",
-    });
-  }
-
-  return {
-    name: input.name,
-    description: input.description,
-    metadata: {
-      createdBy: "Marketing VIP",
-      templateVersion: "H1.10C",
-      workflowKind: input.kind,
-    },
-    requestSchema: {
-      requestKey: "vip_prompt_request",
-      fields: [{ name: "VIP Prompt", type: "text", required: true }],
-    },
-    nodes,
-    edges,
-    outputs,
-    template: {
-      requestNodeId: "vip_prompt_request",
-      primaryImageNodeId: "vip_social_image",
-      primaryVideoNodeId: input.kind === "vip_social_image_video" ? "vip_social_video" : null,
-    },
-  };
-}
-
-function buildLocalWorkflowMetadata(input: {
-  kind: VipManagedGalaxyWorkflowKind;
-  remoteWorkflow: unknown;
-  imageNode: GalaxyAiCatalogNode;
-  videoNode?: GalaxyAiCatalogNode | null;
-}) {
-  const vipMetadata = {
-    managed: true,
-    workflowKind: input.kind,
-    recommendedAssetTypes:
-      input.kind === "vip_social_image_video"
-        ? ["galaxyai_prompt"]
-        : ["galaxyai_image_prompt"],
-    displayKind:
-      input.kind === "vip_social_image_video"
-        ? "VIP social image + video workflow"
-        : "VIP social image workflow",
-    inputMapping: buildInputMapping(),
-    createdBy: "Marketing VIP",
-    templateVersion: "H1.10C",
-    selectedImageModel:
-      input.imageNode.name ?? input.imageNode.id ?? input.imageNode.slug ?? input.imageNode.type,
-    selectedVideoModel:
-      input.videoNode
-        ? input.videoNode.name ?? input.videoNode.id ?? input.videoNode.slug ?? input.videoNode.type
-        : null,
-    createdAt: new Date().toISOString(),
-    notes:
-      input.kind === "vip_social_image_video"
-        ? "Creates a social image, then animates it into a short video."
-        : "Creates a social media grade still image.",
-  };
-
-  return mergeWorkflowMetadataWithVip(input.remoteWorkflow, vipMetadata) as Json;
-}
-
-export async function provisionVipGalaxyAiWorkflows() {
-  const catalog = await listGalaxyAiNodeCatalog();
-  const imageNode = pickBestNode(catalog, "image");
-  const videoNode = pickBestNode(catalog, "video");
-
-  if (!imageNode) {
-    throw new Error("GalaxyAI provisioning could not find a supported image-generation node in the live catalog.");
-  }
-
-  if (!videoNode) {
-    throw new Error("GalaxyAI provisioning could not find a supported image-to-video node in the live catalog.");
-  }
-
-  const plans = [
-    {
-      kind: "vip_social_image_only" as const,
-      name: "Marketing VIP Social Image",
-      description:
-        "Creates a polished social media grade still image from the approved Marketing VIP prompt.",
-      videoNode: null,
-    },
-    {
-      kind: "vip_social_image_video" as const,
-      name: "Marketing VIP Social Image + Video",
-      description:
-        "Creates a polished social image and then a short marketing video derived from that image and the approved Marketing VIP prompt.",
-      videoNode,
-    },
-  ];
-
-  const created: ProvisionedGalaxyAiWorkflow[] = [];
-  const diagnostics: string[] = [];
-
-  for (const plan of plans) {
-    try {
-      const payload = buildManagedWorkflowPayload({
-        kind: plan.kind,
-        name: plan.name,
-        description: plan.description,
-        imageNode,
-        videoNode: plan.videoNode,
+      candidates.push({
+        modelId,
+        nodeType,
+        modelName: stringValue(node.name) ?? nodeType,
+        modeId: stringValue(subModel.subModelId),
+        modeName: stringValue(subModel.name),
+        category: stringValue(subModel.category ?? node.category),
+        score,
       });
-
-      const createdWorkflow = await createGalaxyAiWorkflowWithFallback({
-        name: plan.name,
-        description: plan.description,
-        payload,
-      });
-
-      created.push({
-        workflowId: createdWorkflow.workflowId,
-        name: plan.name,
-        description: plan.description,
-        kind: plan.kind,
-        metadata: buildLocalWorkflowMetadata({
-          kind: plan.kind,
-          remoteWorkflow: createdWorkflow.raw,
-          imageNode,
-          videoNode: plan.videoNode,
-        }),
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown GalaxyAI provisioning error.";
-      diagnostics.push(`${plan.name}: ${message}`);
     }
   }
 
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates[0] ?? null;
+}
+
+function findField(fields: GalaxyAiModelSchemaField[], aliases: string[]) {
+  const lowered = aliases.map((alias) => alias.toLowerCase());
+
+  return (
+    fields.find((field) => lowered.includes(field.key.toLowerCase())) ??
+    fields.find((field) => lowered.some((alias) => field.label.toLowerCase().includes(alias))) ??
+    null
+  );
+}
+
+function pickOption(field: GalaxyAiModelSchemaField | null, preferredValues: string[]) {
+  if (!field?.options?.length) {
+    return null;
+  }
+
+  const lowered = preferredValues.map((value) => value.toLowerCase());
+
+  const exact = field.options.find((option) => lowered.includes(option.value.toLowerCase()));
+  if (exact) {
+    return exact.value;
+  }
+
+  const fuzzy = field.options.find((option) =>
+    lowered.some((value) => option.value.toLowerCase().includes(value) || option.label.toLowerCase().includes(value)),
+  );
+  if (fuzzy) {
+    return fuzzy.value;
+  }
+
+  return field.options[0]?.value ?? null;
+}
+
+function buildImageNodeInputs(fields: GalaxyAiModelSchemaField[]) {
+  const inputs: Record<string, unknown> = {};
+
+  const countField = findField(fields, ["count", "num_images", "n"]);
+  if (countField) {
+    inputs[countField.key] = 1;
+  }
+
+  const aspectField = findField(fields, ["aspectratio", "aspect_ratio", "imagesize", "image_size", "ratio"]);
+  if (aspectField) {
+    const picked = pickOption(aspectField, ["4:5", "3:4", "portrait"]);
+    if (picked) inputs[aspectField.key] = picked;
+  }
+
+  const qualityField = findField(fields, ["quality"]);
+  if (qualityField) {
+    const picked = pickOption(qualityField, ["high", "best", "standard"]);
+    if (picked) inputs[qualityField.key] = picked;
+  }
+
+  const styleField = findField(fields, ["style", "prompt_style"]);
+  if (styleField) {
+    const picked = pickOption(styleField, ["photorealistic", "realistic", "natural"]);
+    if (picked) inputs[styleField.key] = picked;
+  }
+
+  const formatField = findField(fields, ["format", "outputformat", "output_format"]);
+  if (formatField) {
+    const picked = pickOption(formatField, ["jpeg", "jpg", "png"]);
+    if (picked) inputs[formatField.key] = picked;
+  }
+
+  return inputs;
+}
+
+function buildVideoNodeInputs(fields: GalaxyAiModelSchemaField[]) {
+  const inputs: Record<string, unknown> = {};
+
+  const durationField = findField(fields, ["duration", "durationseconds", "duration_seconds"]);
+  if (durationField) {
+    const picked = pickOption(durationField, ["5", "5s"]);
+    inputs[durationField.key] = picked ?? 5;
+  }
+
+  const resolutionField = findField(fields, ["resolution", "size"]);
+  if (resolutionField) {
+    const picked = pickOption(resolutionField, ["720p", "hd"]);
+    if (picked) inputs[resolutionField.key] = picked;
+  }
+
+  const aspectField = findField(fields, ["aspectratio", "aspect_ratio", "ratio"]);
+  if (aspectField) {
+    const picked = pickOption(aspectField, ["4:5", "3:4", "portrait"]);
+    if (picked) inputs[aspectField.key] = picked;
+  }
+
+  return inputs;
+}
+
+function parseWorkflowNodes(workflow: GalaxyAiWorkflow) {
+  return firstArray(workflow.nodes).map((node) => {
+    const raw = jsonRecord(node);
+    const id = stringValue(raw.id ?? raw.nodeId) ?? "";
+    const type = stringValue(raw.type ?? raw.nodeType ?? raw.kind) ?? "";
+    const label = stringValue(raw.name ?? raw.title ?? raw.label) ?? type;
+    return { id, type, label, raw } satisfies WorkflowNodeRecord;
+  }).filter((node) => node.id);
+}
+
+function nodeHaystack(node: WorkflowNodeRecord) {
+  return [node.id, node.type, node.label]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function findScaffoldNode(workflow: GalaxyAiWorkflow, kind: "request" | "response") {
+  const nodes = parseWorkflowNodes(workflow);
+  const preferred = nodes.find((node) => nodeHaystack(node).includes(kind));
+  if (preferred) return preferred;
+
+  if (kind === "request") {
+    return nodes.find((node) => firstArray(node.raw.fields ?? jsonRecord(node.raw.data).fields).length > 0) ?? null;
+  }
+
+  return nodes.find((node) => firstArray(node.raw.inputPorts ?? node.raw.inputs).length > 0) ?? null;
+}
+
+function parsePorts(value: unknown): Port[] {
+  return firstArray(value)
+    .map((entry) => {
+      const record = jsonRecord(entry);
+      const handle = stringValue(record.handle ?? record.key ?? record.id ?? record.name ?? record.fieldId);
+      const label = stringValue(record.label ?? record.name ?? record.title ?? record.key ?? record.id);
+      if (!handle) {
+        return null;
+      }
+      return {
+        handle,
+        label: label ?? handle,
+      };
+    })
+    .filter(Boolean) as Port[];
+}
+
+function findPortHandle(ports: Port[], aliases: string[]) {
+  const lowered = aliases.map((alias) => alias.toLowerCase());
+  const exact = ports.find((port) => lowered.includes(port.handle.toLowerCase()));
+  if (exact) return exact.handle;
+
+  const fuzzy = ports.find((port) => {
+    const haystack = `${port.handle} ${port.label}`.toLowerCase();
+    return lowered.some((alias) => haystack.includes(alias));
+  });
+  if (fuzzy) return fuzzy.handle;
+
+  return ports[0]?.handle ?? null;
+}
+
+function requestFieldHandle(requestNode: WorkflowNodeRecord) {
+  const fields = parsePorts(requestNode.raw.fields ?? jsonRecord(requestNode.raw.data).fields ?? requestNode.raw.requestFields);
+  return findPortHandle(fields, ["prompt", "text", "input"]);
+}
+
+function nodeInputHandle(nodeRaw: Record<string, unknown>, aliases: string[]) {
+  return findPortHandle(parsePorts(nodeRaw.inputPorts ?? nodeRaw.inputs), aliases);
+}
+
+function nodeOutputHandle(nodeRaw: Record<string, unknown>, aliases: string[]) {
+  return findPortHandle(parsePorts(nodeRaw.outputPorts ?? nodeRaw.outputs), aliases);
+}
+
+function responseInputHandle(responseNode: WorkflowNodeRecord) {
+  return findPortHandle(parsePorts(responseNode.raw.inputPorts ?? responseNode.raw.inputs), ["result", "output", "media", "image", "video"]);
+}
+
+async function verifyManagedWorkflow(input: {
+  workflowId: string;
+  kind: VipManagedGalaxyWorkflowKind;
+  metadata: VipManagedGalaxyWorkflowMetadata;
+}) {
+  const workflow = await getGalaxyAiWorkflow(input.workflowId);
+  const nodeIds = new Set(parseWorkflowNodes(workflow).map((node) => node.id));
+  const problems: string[] = [];
+
+  if (input.metadata.requestNodeId && !nodeIds.has(input.metadata.requestNodeId)) {
+    problems.push("request node missing");
+  }
+  if (input.metadata.imageNodeId && !nodeIds.has(input.metadata.imageNodeId)) {
+    problems.push("image node missing");
+  }
+  if (input.kind === "vip_social_image_video" && input.metadata.videoNodeId && !nodeIds.has(input.metadata.videoNodeId)) {
+    problems.push("video node missing");
+  }
+
+  if (!input.metadata.inputMapping.nodeRequestKey || !input.metadata.inputMapping.promptFieldName) {
+    problems.push("input mapping missing");
+  }
+
   return {
-    catalogCount: catalog.length,
-    imageNode,
-    videoNode,
-    created,
-    diagnostics,
+    valid: problems.length === 0,
+    workflow,
+    problems,
   };
+}
+
+async function getSchemaForCandidate(candidate: CatalogCandidate) {
+  const attempts = [candidate.modeId, candidate.modelId].filter(Boolean) as string[];
+  const errors: string[] = [];
+
+  for (const id of attempts) {
+    try {
+      const schema = await getGalaxyAiModelSchema(id);
+      if (schema.length) {
+        return schema;
+      }
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : `Unknown schema error for ${id}`);
+    }
+  }
+
+  if (errors.length) {
+    throw new Error(errors.join(" | "));
+  }
+
+  return [] as GalaxyAiModelSchemaField[];
+}
+
+async function createManagedWorkflow(input: {
+  kind: VipManagedGalaxyWorkflowKind;
+  imageCandidate: CatalogCandidate;
+  videoCandidate: CatalogCandidate | null;
+  diagnostics: string[];
+}) {
+  const name = workflowName(input.kind);
+  const description = workflowDescription(input.kind);
+
+  const scaffold = await quickCreateGalaxyAiWorkflow({
+    name,
+    description,
+    requestFields: [{ name: "prompt", type: "text", value: "" }],
+  });
+  const workflow = await getGalaxyAiWorkflow(scaffold.id);
+  const requestNode = findScaffoldNode(workflow, "request");
+  const responseNode = findScaffoldNode(workflow, "response");
+
+  if (!requestNode || !responseNode) {
+    throw new Error("Magica did not return the expected Request/Response scaffold nodes.");
+  }
+
+  const requestHandle = requestFieldHandle(requestNode);
+  if (!requestHandle) {
+    throw new Error("Could not find the prompt field on the Magica Request node.");
+  }
+
+  const imageSchema = await getSchemaForCandidate(input.imageCandidate);
+  const imageInputs = buildImageNodeInputs(imageSchema);
+  const imageNode = await addGalaxyAiWorkflowNode({
+    workflowId: workflow.id,
+    nodeType: input.imageCandidate.nodeType,
+    mode: input.imageCandidate.modeId,
+    column: 1,
+    row: 0,
+    inputs: imageInputs,
+  });
+
+  const imagePromptHandle = nodeInputHandle(imageNode.raw, ["prompt", "text", "input"]);
+  const imageResultHandle = nodeOutputHandle(imageNode.raw, ["result", "image", "output"]);
+
+  if (!imagePromptHandle || !imageResultHandle) {
+    throw new Error("Magica image node did not expose the expected prompt/result ports.");
+  }
+
+  await connectGalaxyAiWorkflowNodes({
+    workflowId: workflow.id,
+    sourceNodeId: requestNode.id,
+    sourceHandle: requestHandle,
+    targetNodeId: imageNode.id,
+    targetHandle: imagePromptHandle,
+  });
+
+  let videoNodeId: string | null = null;
+  let selectedVideoModel: string | null = null;
+  let selectedVideoMode: string | null = null;
+
+  if (input.kind === "vip_social_image_video") {
+    if (!input.videoCandidate) {
+      throw new Error("No suitable image-to-video Magica model was found.");
+    }
+
+    const videoSchema = await getSchemaForCandidate(input.videoCandidate);
+    const videoInputs = buildVideoNodeInputs(videoSchema);
+    const videoNode = await addGalaxyAiWorkflowNode({
+      workflowId: workflow.id,
+      nodeType: input.videoCandidate.nodeType,
+      mode: input.videoCandidate.modeId,
+      column: 2,
+      row: 0,
+      inputs: videoInputs,
+    });
+
+    const videoImageHandle = nodeInputHandle(videoNode.raw, ["image", "reference", "image_url", "first_frame"]);
+    const videoPromptHandle = nodeInputHandle(videoNode.raw, ["prompt", "text"]);
+    const videoResultHandle = nodeOutputHandle(videoNode.raw, ["result", "video", "output"]);
+    const responseHandle = responseInputHandle(responseNode);
+
+    if (!videoImageHandle || !videoResultHandle) {
+      throw new Error("Magica video node did not expose the expected image/result ports.");
+    }
+
+    await connectGalaxyAiWorkflowNodes({
+      workflowId: workflow.id,
+      sourceNodeId: imageNode.id,
+      sourceHandle: imageResultHandle,
+      targetNodeId: videoNode.id,
+      targetHandle: videoImageHandle,
+    });
+
+    if (videoPromptHandle) {
+      await connectGalaxyAiWorkflowNodes({
+        workflowId: workflow.id,
+        sourceNodeId: requestNode.id,
+        sourceHandle: requestHandle,
+        targetNodeId: videoNode.id,
+        targetHandle: videoPromptHandle,
+      });
+    }
+
+    if (responseHandle) {
+      await connectGalaxyAiWorkflowNodes({
+        workflowId: workflow.id,
+        sourceNodeId: videoNode.id,
+        sourceHandle: videoResultHandle,
+        targetNodeId: responseNode.id,
+        targetHandle: responseHandle,
+      });
+    }
+
+    videoNodeId = videoNode.id;
+    selectedVideoModel = input.videoCandidate.modelId;
+    selectedVideoMode = input.videoCandidate.modeId;
+  } else {
+    const responseHandle = responseInputHandle(responseNode);
+    if (responseHandle) {
+      await connectGalaxyAiWorkflowNodes({
+        workflowId: workflow.id,
+        sourceNodeId: imageNode.id,
+        sourceHandle: imageResultHandle,
+        targetNodeId: responseNode.id,
+        targetHandle: responseHandle,
+      });
+    }
+  }
+
+  const verifiedWorkflow = await getGalaxyAiWorkflow(workflow.id);
+  const vipMetadata: VipManagedGalaxyWorkflowMetadata = {
+    managed: true,
+    workflowKind: input.kind,
+    recommendedAssetTypes: recommendedAssetTypes(input.kind),
+    displayKind: displayKind(input.kind),
+    inputMapping: {
+      nodeRequestKey: requestNode.id,
+      promptFieldName: requestHandle,
+      requestFieldId: requestHandle,
+    },
+    requestNodeId: requestNode.id,
+    responseNodeId: responseNode.id,
+    imageNodeId: imageNode.id,
+    videoNodeId,
+    selectedImageModel: input.imageCandidate.modelId,
+    selectedImageMode: input.imageCandidate.modeId,
+    selectedVideoModel,
+    selectedVideoMode,
+    verificationStatus: "verified",
+    lastVerifiedAt: new Date().toISOString(),
+    createdBy: "marketing_vip",
+    templateVersion: "H1.10D",
+    createdAt: new Date().toISOString(),
+    notes:
+      input.kind === "vip_social_image_only"
+        ? "Provisioned once and reused for approved social image prompts."
+        : "Provisioned once and reused for approved social image + video prompts.",
+  };
+
+  input.diagnostics.push(`Created ${displayKind(input.kind)} workflow ${verifiedWorkflow.id}.`);
+
+  return {
+    workflowId: verifiedWorkflow.id,
+    name,
+    description,
+    kind: input.kind,
+    metadata: toJson(mergeWorkflowMetadataWithVip(verifiedWorkflow, vipMetadata)),
+  } satisfies ProvisionedGalaxyAiWorkflow;
+}
+
+export async function provisionVipGalaxyAiWorkflows(input?: {
+  existingWorkflows?: ExistingWorkflowRef[];
+  forceRebuild?: boolean;
+}) {
+  const diagnostics: string[] = [];
+  const created: ProvisionedGalaxyAiWorkflow[] = [];
+  const reused: ProvisionedGalaxyAiWorkflow[] = [];
+  const catalog = await listGalaxyAiNodeCatalog();
+
+  diagnostics.push(`Loaded ${catalog.length} Magica model entries.`);
+
+  const imageCandidate = pickBestCatalogCandidate(catalog, "image");
+  const videoCandidate = pickBestCatalogCandidate(catalog, "video");
+
+  if (!imageCandidate) {
+    throw new Error("Could not find a suitable Magica text-to-image model in the current catalog.");
+  }
+
+  diagnostics.push(
+    `Selected image model: ${imageCandidate.modelName}${imageCandidate.modeName ? ` / ${imageCandidate.modeName}` : ""}.`,
+  );
+
+  if (videoCandidate) {
+    diagnostics.push(
+      `Selected video model: ${videoCandidate.modelName}${videoCandidate.modeName ? ` / ${videoCandidate.modeName}` : ""}.`,
+    );
+  } else {
+    diagnostics.push("No image-to-video model was detected in the current Magica catalog.");
+  }
+
+  const existingVipByKind = new Map<VipManagedGalaxyWorkflowKind, ExistingWorkflowRef>();
+  for (const item of input?.existingWorkflows ?? []) {
+    const vip = getVipManagedGalaxyWorkflowMetadata(item.metadata);
+    if (vip?.workflowKind) {
+      existingVipByKind.set(vip.workflowKind, item);
+    }
+  }
+
+  for (const kind of ["vip_social_image_only", "vip_social_image_video"] as VipManagedGalaxyWorkflowKind[]) {
+    const existing = existingVipByKind.get(kind);
+    const existingVip = existing ? getVipManagedGalaxyWorkflowMetadata(existing.metadata) : null;
+
+    if (existing && existingVip && !input?.forceRebuild) {
+      try {
+        const verification = await verifyManagedWorkflow({
+          workflowId: existing.workflowId,
+          kind,
+          metadata: existingVip,
+        });
+
+        if (verification.valid) {
+          const refreshedVip: VipManagedGalaxyWorkflowMetadata = {
+            ...existingVip,
+            verificationStatus: "verified",
+            lastVerifiedAt: new Date().toISOString(),
+            notes: existingVip.notes ?? "Existing Magica workflow verified and reused.",
+          };
+
+          diagnostics.push(`Reused existing ${displayKind(kind)} workflow ${existing.workflowId}.`);
+          reused.push({
+            workflowId: existing.workflowId,
+            name: workflowName(kind),
+            description: workflowDescription(kind),
+            kind,
+            metadata: toJson(mergeWorkflowMetadataWithVip(verification.workflow, refreshedVip)),
+          });
+          continue;
+        }
+
+        diagnostics.push(
+          `Existing ${displayKind(kind)} workflow ${existing.workflowId} failed verification (${verification.problems.join(", ")}). Rebuilding.`,
+        );
+      } catch (error) {
+        diagnostics.push(
+          `Existing ${displayKind(kind)} workflow ${existing.workflowId} could not be verified. Rebuilding. ${error instanceof Error ? error.message : "Unknown verification error."}`,
+        );
+      }
+    }
+
+    created.push(
+      await createManagedWorkflow({
+        kind,
+        imageCandidate,
+        videoCandidate,
+        diagnostics,
+      }),
+    );
+  }
+
+  return {
+    created,
+    reused,
+    diagnostics,
+    catalogCount: catalog.length,
+    imageNode: `${imageCandidate.modelName}${imageCandidate.modeName ? ` / ${imageCandidate.modeName}` : ""}`,
+    videoNode: videoCandidate
+      ? `${videoCandidate.modelName}${videoCandidate.modeName ? ` / ${videoCandidate.modeName}` : ""}`
+      : null,
+  } satisfies GalaxyAiProvisioningResult;
 }

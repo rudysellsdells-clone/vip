@@ -66,8 +66,8 @@ export default async function GalaxyAiPage() {
     <WebsitePage>
       <WebsiteHero
         eyebrow={`GalaxyAI • ${activeWorkspace.activeAccountName}`}
-        title="Creative workflow control center."
-        description="Provision VIP-managed creative workflows, sync the remote GalaxyAI library, monitor runs, and pull finished outputs back into the active VIP workspace."
+        title="Magica creative workflow control center."
+        description="Provision the VIP-managed Magica workflows once for this workspace, reuse them for approved prompts, monitor runs, and pull finished outputs back into the active VIP workspace."
         primaryAction={{ label: "Review Assets", href: "/approvals" }}
         secondaryAction={{ label: "Dashboard", href: "/dashboard" }}
       />
@@ -82,8 +82,8 @@ export default async function GalaxyAiPage() {
 
       <WebsiteSection
         eyebrow="Provision"
-        title="Create the VIP workflow pair"
-        description="Provision two GalaxyAI workflows using the live GalaxyAI node catalog: one for social image generation and one that creates a social image and then animates it into a short video."
+        title="Provision the VIP workflow pair"
+        description="Create the two reusable VIP-managed Magica workflows one time for this workspace: one for social image generation and one that creates a social image and then animates it into a short video. Future approved prompts simply start new runs against these saved workflows."
       >
         <div className={websiteStyles.actionRow}>
           <ProvisionGalaxyAiWorkflowsButton />

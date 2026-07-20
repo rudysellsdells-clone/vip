@@ -29,12 +29,15 @@ export function ProvisionGalaxyAiWorkflowsButton() {
       }
 
       const created = Array.isArray(result.created) ? result.created : [];
+      const reused = Array.isArray(result.reused) ? result.reused : [];
       const diagnostics = Array.isArray(result.diagnostics) ? result.diagnostics : [];
 
       setMessage(
         created.length
-          ? `Provisioned ${created.length} VIP GalaxyAI workflow${created.length === 1 ? "" : "s"}.`
-          : "Provisioning completed, but no workflows were created.",
+          ? `Provisioned ${created.length} VIP workflow${created.length === 1 ? "" : "s"}${reused.length ? ` and reused ${reused.length} existing workflow${reused.length === 1 ? "" : "s"}` : ""}.`
+          : reused.length
+            ? `Verified and reused ${reused.length} existing VIP workflow${reused.length === 1 ? "" : "s"}.`
+            : "Provisioning completed, but no workflows were created or reused.",
       );
       setDetails(diagnostics);
       router.refresh();
@@ -53,7 +56,7 @@ export function ProvisionGalaxyAiWorkflowsButton() {
         disabled={running}
         className={websiteStyles.primarySubmit}
       >
-        {running ? "Provisioning..." : "Provision VIP Workflows"}
+        {running ? "Provisioning..." : "Provision / Verify VIP Workflows"}
       </button>
       {message ? <p className="mt-2 text-sm font-bold text-emerald-700">{message}</p> : null}
       {error ? <p className="mt-2 text-sm font-bold text-rose-700">{error}</p> : null}

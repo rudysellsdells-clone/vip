@@ -1,6 +1,7 @@
 export type GalaxyAiInputMapping = {
   nodeRequestKey: string;
   promptFieldName: string;
+  requestFieldId?: string | null;
 };
 
 export type VipManagedGalaxyWorkflowKind =
@@ -13,10 +14,18 @@ export type VipManagedGalaxyWorkflowMetadata = {
   recommendedAssetTypes: string[];
   displayKind: string;
   inputMapping: GalaxyAiInputMapping;
+  requestNodeId?: string | null;
+  responseNodeId?: string | null;
+  imageNodeId?: string | null;
+  videoNodeId?: string | null;
+  selectedImageModel?: string | null;
+  selectedImageMode?: string | null;
+  selectedVideoModel?: string | null;
+  selectedVideoMode?: string | null;
+  verificationStatus?: string | null;
+  lastVerifiedAt?: string | null;
   createdBy?: string | null;
   templateVersion?: string | null;
-  selectedImageModel?: string | null;
-  selectedVideoModel?: string | null;
   createdAt?: string | null;
   notes?: string | null;
 };
@@ -63,11 +72,20 @@ export function getVipManagedGalaxyWorkflowMetadata(
     inputMapping: {
       nodeRequestKey,
       promptFieldName,
+      requestFieldId: stringValue(inputMapping.requestFieldId),
     },
+    requestNodeId: stringValue(vip.requestNodeId),
+    responseNodeId: stringValue(vip.responseNodeId),
+    imageNodeId: stringValue(vip.imageNodeId),
+    videoNodeId: stringValue(vip.videoNodeId),
     createdBy: stringValue(vip.createdBy),
     templateVersion: stringValue(vip.templateVersion),
     selectedImageModel: stringValue(vip.selectedImageModel),
+    selectedImageMode: stringValue(vip.selectedImageMode),
     selectedVideoModel: stringValue(vip.selectedVideoModel),
+    selectedVideoMode: stringValue(vip.selectedVideoMode),
+    verificationStatus: stringValue(vip.verificationStatus),
+    lastVerifiedAt: stringValue(vip.lastVerifiedAt),
     createdAt: stringValue(vip.createdAt),
     notes: stringValue(vip.notes),
   };

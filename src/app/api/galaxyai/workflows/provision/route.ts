@@ -32,9 +32,20 @@ export async function POST() {
       return NextResponse.json({ error: activeWorkspaceManageRequiredMessage() }, { status: 403 });
     }
 
-    const result = await provisionVipGalaxyAiWorkflows();
+    const { data: existingRows } = await supabase
+      .from("galaxyai_workflows")
+      .select("galaxy_workflow_id, metadata")
+      .eq("account_id", workspace.activeAccountId);
 
-    for (const workflow of result.created) {
+    const result = await provisionVipGalaxyAiWorkflows({
+      existingWorkflows: ((existingRows ?? []) as Array<Record<string, unknown>>).flatMap((row) => {
+        const workflowId = typeof row.galaxy_workflow_id === "string" ? row.galaxy_workflow_id : null;
+        if (!workflowId) return [];
+        return [{ workflowId, metadata: row.metadata ?? null }];
+      }),
+    });
+
+    for (const workflow of [...result.reused, ...result.created]) {
       const { error } = await supabase.from("galaxyai_workflows").upsert(
         {
           user_id: user.id,
@@ -60,21 +71,23 @@ export async function POST() {
       userId: user.id,
       activityType: "galaxyai_workflows_provisioned",
       title: "VIP GalaxyAI workflows provisioned",
-      description: `Provisioned ${result.created.length} VIP GalaxyAI workflows for the active workspace.`,
+      description: `Provisioned or verified ${result.created.length + result.reused.length} VIP GalaxyAI workflows for the active workspace.`,
       metadata: {
         accountId: workspace.activeAccountId,
         catalogCount: result.catalogCount,
         createdWorkflowIds: result.created.map((item) => item.workflowId),
+        reusedWorkflowIds: result.reused.map((item) => item.workflowId),
         diagnostics: result.diagnostics,
       },
     });
 
-    const ok = result.created.length > 0;
+    const ok = result.created.length + result.reused.length > 0;
 
     return NextResponse.json(
       {
         ok,
         created: result.created,
+        reused: result.reused,
         diagnostics: result.diagnostics,
         selectedImageNode: result.imageNode,
         selectedVideoNode: result.videoNode,
