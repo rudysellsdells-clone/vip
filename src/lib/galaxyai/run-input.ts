@@ -1,9 +1,9 @@
+import type { CompactMagicaPromptResult } from "./prompt-compactor.ts";
 import {
-  compactMagicaPrompt,
-  MAGICA_PROMPT_SAFE_LIMIT,
-  MAGICA_VIDEO_PROMPT_SAFE_LIMIT,
-  type CompactMagicaPromptResult,
-} from "./prompt-compactor.ts";
+  buildMagicaImageExecutionPrompt,
+  buildMagicaSharedExecutionPrompt,
+  buildMagicaVideoExecutionPrompt,
+} from "./quality-prompt.ts";
 import {
   getVipManagedGalaxyWorkflowMetadata,
   type VipManagedGalaxyWorkflowMetadata,
@@ -16,6 +16,7 @@ export type PreparedGalaxyAiRunInput = {
   workflowMetadata: VipManagedGalaxyWorkflowMetadata | null;
   imagePrompt: CompactMagicaPromptResult;
   videoPrompt: CompactMagicaPromptResult | null;
+  sharedPrompt: CompactMagicaPromptResult | null;
   sharedPromptMode: boolean;
 };
 
@@ -31,12 +32,9 @@ export function prepareGalaxyAiRunInput(input: {
     workflowMetadata?.workflowKind === "vip_social_image_video" ||
     input.assetType === "galaxyai_prompt";
 
-  const imagePrompt = compactMagicaPrompt(
-    input.sourcePrompt,
-    MAGICA_PROMPT_SAFE_LIMIT,
-  );
+  const imagePrompt = buildMagicaImageExecutionPrompt(input.sourcePrompt);
   const videoPrompt = isVideoWorkflow
-    ? compactMagicaPrompt(input.sourcePrompt, MAGICA_VIDEO_PROMPT_SAFE_LIMIT)
+    ? buildMagicaVideoExecutionPrompt(input.sourcePrompt)
     : null;
 
   if (workflowMetadata?.inputMapping) {
@@ -44,9 +42,12 @@ export function prepareGalaxyAiRunInput(input: {
     const requestValues: Record<string, unknown> = {};
     const hasSeparateVideoField = Boolean(mapping.videoPromptFieldName);
     const sharedPromptMode = isVideoWorkflow && !hasSeparateVideoField;
+    const sharedPrompt = sharedPromptMode
+      ? buildMagicaSharedExecutionPrompt(input.sourcePrompt)
+      : null;
 
     requestValues[mapping.promptFieldName] = sharedPromptMode
-      ? videoPrompt?.prompt ?? imagePrompt.prompt
+      ? sharedPrompt?.prompt ?? imagePrompt.prompt
       : imagePrompt.prompt;
 
     if (isVideoWorkflow && mapping.videoPromptFieldName) {
@@ -61,11 +62,15 @@ export function prepareGalaxyAiRunInput(input: {
       workflowMetadata,
       imagePrompt,
       videoPrompt,
+      sharedPrompt,
       sharedPromptMode,
     };
   }
 
-  const fallbackPrompt = videoPrompt?.prompt ?? imagePrompt.prompt;
+  const sharedPrompt = isVideoWorkflow
+    ? buildMagicaSharedExecutionPrompt(input.sourcePrompt)
+    : null;
+  const fallbackPrompt = sharedPrompt?.prompt ?? imagePrompt.prompt;
 
   return {
     values: {
@@ -76,6 +81,7 @@ export function prepareGalaxyAiRunInput(input: {
     workflowMetadata,
     imagePrompt,
     videoPrompt,
+    sharedPrompt,
     sharedPromptMode: isVideoWorkflow,
   };
 }

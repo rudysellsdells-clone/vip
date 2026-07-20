@@ -119,7 +119,7 @@ export async function POST(request: Request) {
     });
     const values = preparedInput.values;
     const promptCompaction = preparedInput.sharedPromptMode
-      ? preparedInput.videoPrompt ?? preparedInput.imagePrompt
+      ? preparedInput.sharedPrompt ?? preparedInput.videoPrompt ?? preparedInput.imagePrompt
       : preparedInput.imagePrompt;
 
     const run = await startGalaxyAiWorkflowRun({
@@ -167,6 +167,8 @@ export async function POST(request: Request) {
             sharedPromptMode: preparedInput.sharedPromptMode,
             imagePromptLength: preparedInput.imagePrompt.sentLength,
             videoPromptLength: preparedInput.videoPrompt?.sentLength ?? null,
+            sharedPromptLength: preparedInput.sharedPrompt?.sentLength ?? null,
+            qualityEnvelopeVersion: "h1_10d6",
           },
         }),
         output: {},
@@ -209,6 +211,8 @@ export async function POST(request: Request) {
           sharedPromptMode: preparedInput.sharedPromptMode,
           imagePromptLength: preparedInput.imagePrompt.sentLength,
           videoPromptLength: preparedInput.videoPrompt?.sentLength ?? null,
+          sharedPromptLength: preparedInput.sharedPrompt?.sentLength ?? null,
+          qualityEnvelopeVersion: "h1_10d6",
         },
       },
     });
@@ -223,6 +227,8 @@ export async function POST(request: Request) {
         sharedPromptMode: preparedInput.sharedPromptMode,
         imagePromptLength: preparedInput.imagePrompt.sentLength,
         videoPromptLength: preparedInput.videoPrompt?.sentLength ?? null,
+        sharedPromptLength: preparedInput.sharedPrompt?.sentLength ?? null,
+        qualityEnvelopeVersion: "h1_10d6",
       },
     });
   } catch (error) {

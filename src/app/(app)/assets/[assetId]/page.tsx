@@ -63,6 +63,40 @@ function metadataRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function firstNonEmptyRecord(...values: unknown[]) {
+  for (const value of values) {
+    const record = metadataRecord(value);
+    if (Object.keys(record).length) {
+      return record;
+    }
+  }
+
+  return {};
+}
+
+function firstText(...values: unknown[]) {
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (text) return text;
+  }
+
+  return "";
+}
+
+function strategyRecordWithSource(
+  entries: Array<{ label: string; metadata: Record<string, unknown> }>,
+  key: string,
+) {
+  for (const entry of entries) {
+    const record = metadataRecord(entry.metadata[key]);
+    if (Object.keys(record).length) {
+      return { record, source: entry.label };
+    }
+  }
+
+  return { record: {}, source: null as string | null };
+}
+
 function shortText(value: unknown, fallback = "Not supplied") {
   const text = String(value ?? "").trim();
   return text || fallback;
@@ -162,12 +196,39 @@ export default async function AssetDetailPage({ params }: PageProps) {
   const approvalRows = (approvals ?? []) as Array<Record<string, any>>;
   const primaryVisualAssetId = primaryVisualAssetIdFromMetadata(asset.metadata);
   const assetMetadata = metadataRecord(asset.metadata);
+  const parentAssetMetadata = metadataRecord(parentAsset?.metadata);
   const campaignMetadata = metadataRecord(campaign?.metadata);
-  const marketingSpine = metadataRecord(
-    assetMetadata.marketingSpine || campaignMetadata.marketingSpine,
+  const strategySources = [
+    { label: "this asset", metadata: assetMetadata },
+    { label: "the parent/source asset", metadata: parentAssetMetadata },
+    { label: "the campaign record", metadata: campaignMetadata },
+  ];
+  const spineContext = strategyRecordWithSource(strategySources, "marketingSpine");
+  const marketingSpine = spineContext.record;
+  const assetBrief = firstNonEmptyRecord(
+    assetMetadata.assetBrief,
+    parentAssetMetadata.assetBrief,
   );
-  const assetBrief = metadataRecord(assetMetadata.assetBrief);
-  const inheritancePath = stringList(assetMetadata.strategyInheritancePath);
+  const inheritancePath = stringList(
+    assetMetadata.strategyInheritancePath ??
+      parentAssetMetadata.strategyInheritancePath ??
+      campaignMetadata.strategyInheritancePath,
+  );
+  const approvedCampaignStrategy = firstNonEmptyRecord(
+    assetMetadata.approvedCampaignStrategy,
+    parentAssetMetadata.approvedCampaignStrategy,
+    campaignMetadata.approvedCampaignStrategy,
+    assetMetadata.oneOffCampaignStrategy,
+    parentAssetMetadata.oneOffCampaignStrategy,
+    campaignMetadata.oneOffCampaignStrategy,
+    campaignMetadata.privateStrategy,
+  );
+  const approvedStrategyStatus = firstText(
+    assetMetadata.oneOffStrategyApprovalStatus,
+    parentAssetMetadata.oneOffStrategyApprovalStatus,
+    campaignMetadata.oneOffStrategyApprovalStatus,
+    campaignMetadata.marketingSpineReviewGate,
+  );
   const channelRoles = metadataRecord(marketingSpine.channelRoles);
   const assetChannelRole = metadataRecord(
     channelRoles[String(assetBrief.channel ?? "")] ?? null,
@@ -249,9 +310,9 @@ export default async function AssetDetailPage({ params }: PageProps) {
       </section>
 
       <WebsiteSection
-        eyebrow="Marketing Spine"
-        title="Strategy spine used for this asset"
-        description="This shows how the asset inherited strategy before execution. Use it to judge whether the content followed the campaign spine or drifted into generic output."
+        eyebrow="Strategy Lineage"
+        title="Strategy used for this asset"
+        description="This section reports the strategy evidence attached to the asset, its source asset, or its campaign. It distinguishes missing audit metadata from proof that strategy was not used."
       >
         {Object.keys(marketingSpine).length ? (
           <div className={websiteStyles.cardGrid}>
@@ -260,6 +321,9 @@ export default async function AssetDetailPage({ params }: PageProps) {
                 <span className={websiteStyles.badge}>Marketing Spine</span>
                 <span className={websiteStyles.badge}>{shortText(marketingSpine.gateStatus, "saved")}</span>
                 <span className={websiteStyles.badge}>{shortText(marketingSpine.readinessScore, "?")}/100</span>
+                {spineContext.source ? (
+                  <span className={websiteStyles.badge}>Source: {spineContext.source}</span>
+                ) : null}
               </div>
               <h3 className={websiteStyles.cardTitle} style={{ marginTop: 12 }}>
                 {shortText(marketingSpine.campaignObjective, "Campaign strategy")}
@@ -314,9 +378,43 @@ export default async function AssetDetailPage({ params }: PageProps) {
               ) : null}
             </article>
           </div>
+        ) : Object.keys(approvedCampaignStrategy).length ? (
+          <div className={websiteStyles.cardGrid}>
+            <article className={websiteStyles.card}>
+              <div className="flex flex-wrap gap-2">
+                <span className={websiteStyles.badge}>Approved Campaign Strategy</span>
+                <span className={websiteStyles.badge}>{approvedStrategyStatus || "approved"}</span>
+              </div>
+              <h3 className={websiteStyles.cardTitle} style={{ marginTop: 12 }}>
+                {shortText(
+                  approvedCampaignStrategy.campaignObjective ??
+                    approvedCampaignStrategy.objective ??
+                    approvedCampaignStrategy.goal,
+                  "Approved strategy context",
+                )}
+              </h3>
+              <p className={websiteStyles.cardText}>
+                <strong>Audience:</strong>{" "}
+                {shortText(
+                  approvedCampaignStrategy.audience ??
+                    approvedCampaignStrategy.targetAudience,
+                )}
+              </p>
+              <p className={websiteStyles.cardText}>
+                <strong>Offer:</strong>{" "}
+                {shortText(
+                  approvedCampaignStrategy.offer ??
+                    approvedCampaignStrategy.primaryOffer,
+                )}
+              </p>
+              <p className={websiteStyles.cardText}>
+                This asset uses an approved campaign-strategy record rather than the monthly Marketing Spine metadata format.
+              </p>
+            </article>
+          </div>
         ) : (
           <div className={websiteStyles.empty}>
-            No Marketing Spine metadata found on this asset yet. Generate new monthly content through the visible spine gate to populate this section.
+            No strategy-lineage metadata is attached to this asset, its parent/source asset, or its campaign record. This means the audit metadata was not copied forward; it does not prove that strategy was absent during generation. New Magica outputs now inherit the source prompt&apos;s strategy metadata.
           </div>
         )}
       </WebsiteSection>

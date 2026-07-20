@@ -146,6 +146,30 @@ function mergeMetadata(existing: unknown, patch: Record<string, unknown>) {
   });
 }
 
+function strategyLineagePatch(value: unknown) {
+  const metadata = jsonRecord(value);
+  const keys = [
+    "marketingSpine",
+    "assetBrief",
+    "strategyInheritancePath",
+    "approvedCampaignStrategy",
+    "oneOffCampaignStrategy",
+    "oneOffStrategyApprovalStatus",
+    "oneOffStrategyApprovedAt",
+    "oneOffStrategySourceSignature",
+    "rawSettingsExcludedFromAssetPrompt",
+  ];
+  const patch: Record<string, unknown> = {};
+
+  for (const key of keys) {
+    if (metadata[key] !== undefined && metadata[key] !== null) {
+      patch[key] = metadata[key];
+    }
+  }
+
+  return patch;
+}
+
 async function uploadGalaxyAiImageToStorage(input: {
   adminSupabase: ReturnType<typeof createAdminClient>;
   userId: string;
@@ -214,6 +238,7 @@ async function createGalaxyAiMediaAssetIfNeeded(input: {
   localRunId: string;
   galaxyRunId: string;
   workflowId: string;
+  sourceAssetId?: string | null;
   mediaItems: GalaxyAiMediaItem[];
   galaxyRun: unknown;
 }) {
@@ -249,6 +274,18 @@ async function createGalaxyAiMediaAssetIfNeeded(input: {
     ? urls.join("\n")
     : "GalaxyAI completed the run, but no media URLs were returned.";
 
+  let sourceStrategyMetadata: Record<string, unknown> = {};
+  if (input.sourceAssetId) {
+    const { data: sourceAsset } = await readSupabase
+      .from("generated_assets")
+      .select("metadata")
+      .eq("id", input.sourceAssetId)
+      .eq("account_id", input.accountId)
+      .maybeSingle();
+
+    sourceStrategyMetadata = strategyLineagePatch(sourceAsset?.metadata);
+  }
+
   const { data: createdAsset, error: insertError } = await readSupabase
     .from("generated_assets")
     .insert({
@@ -259,6 +296,7 @@ async function createGalaxyAiMediaAssetIfNeeded(input: {
       title: "GalaxyAI Generated Media",
       content,
       metadata: toJson({
+        ...sourceStrategyMetadata,
         provider: "galaxyai",
         workflowId: input.workflowId,
         runId: input.galaxyRunId,
@@ -397,6 +435,7 @@ async function createGeneratedSocialImageAssetIfNeeded(input: {
         : "Social";
 
   const generatedImageMetadata = {
+    ...strategyLineagePatch(promptMetadata),
     provider: "galaxyai",
     assetRole: "generated_social_image",
     runId: input.galaxyRunId,
@@ -606,6 +645,7 @@ export async function GET(_request: Request, context: RouteContext) {
               localRunId: localRun.id,
               galaxyRunId: localRun.galaxy_run_id,
               workflowId: localRun.galaxy_workflow_id,
+              sourceAssetId: stringOrNull(localRun.asset_id),
               mediaItems: matchedMedia,
               galaxyRun,
             });

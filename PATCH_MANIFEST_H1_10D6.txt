@@ -1,0 +1,12 @@
+README_H1_10D6_STRATEGY_LINEAGE_AND_MAGICA_QUALITY.md
+PATCH_MANIFEST_H1_10D6.txt
+FILE_SHA256SUMS_H1_10D6.txt
+src/app/(app)/assets/[assetId]/page.tsx
+src/app/api/galaxyai/runs/[runId]/route.ts
+src/app/api/galaxyai/runs/route.ts
+src/lib/galaxyai/image-prompt-builder.ts
+src/lib/galaxyai/prompt-builder.ts
+src/lib/galaxyai/quality-prompt.ts
+src/lib/galaxyai/run-input.ts
+tests/galaxyai-quality-prompt.test.ts
+tests/galaxyai-run-input.test.ts

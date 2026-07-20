@@ -116,11 +116,12 @@ export function buildGalaxyAiSocialImagePrompt({
     ].join("\n"),
     [
       "Artifact control and quality requirements:",
-      "- Before finalizing, review the output at least three times for artifacts that do not fit the prompt.",
-      "- Check for distorted hands, malformed faces, warped logos, fake UI numbers, impossible reflections, misspelled words, unreadable text, strange objects, clutter, or mismatched service context.",
-      "- If artifacts are present, regenerate or refine until the image is clean, realistic, professional, and consistent with the prompt.",
-      "- Avoid detailed small text inside dashboards, screens, signs, documents, or charts.",
-      "- Do not include fake metrics, fake analytics results, fake awards, or exaggerated claims.",
+      "- Build one coherent, physically plausible scene with one clear focal subject and only the objects needed to communicate the campaign idea.",
+      "- Use realistic anatomy, natural facial structure, correct hands and fingers, consistent perspective, believable lighting, matching shadows, clean object boundaries, and accurate reflections.",
+      "- Avoid close-up hands unless they are essential. Do not create extra or fused limbs, duplicated people or objects, warped faces, floating items, melted surfaces, impossible geometry, or unrelated background details.",
+      "- Do not render dashboards, charts, screens, signs, documents, or small decorative text unless the source post explicitly requires them. Never invent UI numbers or analytics data.",
+      "- Do not invent logos, metrics, testimonials, awards, product features, or performance claims.",
+      "- Keep the image uncluttered, realistic, professional, and consistent with the campaign context.",
     ].join("\n"),
     [
       "Output requirement:",

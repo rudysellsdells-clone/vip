@@ -50,7 +50,8 @@ test("uses the Seedance-safe shared prompt for an existing one-field video workf
   assert.equal(result.sharedPromptMode, true);
   const sent = String(result.values["request-node"]?.field_prompt ?? "");
   assert.ok(sent.length <= MAGICA_VIDEO_PROMPT_SAFE_LIMIT);
-  assert.equal(sent, result.videoPrompt?.prompt);
+  assert.equal(sent, result.sharedPrompt?.prompt);
+  assert.match(sent, /IMAGE \+ 15-SECOND VIDEO QUALITY STANDARD/);
 });
 
 test("uses separate image and video prompts for a newly provisioned two-field workflow", () => {
@@ -73,6 +74,8 @@ test("uses separate image and video prompts for a newly provisioned two-field wo
   assert.ok(videoPrompt.length <= MAGICA_VIDEO_PROMPT_SAFE_LIMIT);
   assert.equal(imagePrompt, result.imagePrompt.prompt);
   assert.equal(videoPrompt, result.videoPrompt?.prompt);
+  assert.match(imagePrompt, /IMAGE QUALITY STANDARD/);
+  assert.match(videoPrompt, /15-SECOND IMAGE-TO-VIDEO QUALITY STANDARD/);
 });
 
 test("keeps image-only workflows on the larger FLUX-safe limit", () => {
@@ -90,4 +93,5 @@ test("keeps image-only workflows on the larger FLUX-safe limit", () => {
   const sent = String(result.values["request-node"]?.field_prompt ?? "");
   assert.ok(sent.length <= MAGICA_PROMPT_SAFE_LIMIT);
   assert.equal(sent, result.imagePrompt.prompt);
+  assert.match(sent, /IMAGE QUALITY STANDARD/);
 });
