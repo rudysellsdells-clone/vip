@@ -172,9 +172,8 @@ function parseWorkflowId(value: unknown) {
 
 function parseWorkflow(value: unknown): GalaxyAiWorkflow {
   const record = jsonRecord(value);
-  const workflowRecord = Object.keys(jsonRecord(record.workflow)).length
-    ? jsonRecord(record.workflow)
-    : record;
+  const nestedWorkflow = jsonRecord(record.workflow);
+  const workflowRecord = Object.keys(nestedWorkflow).length ? nestedWorkflow : record;
 
   const id = parseWorkflowId(value);
   if (!id) {
@@ -185,12 +184,15 @@ function parseWorkflow(value: unknown): GalaxyAiWorkflow {
   const edges = firstArray(workflowRecord.edges);
 
   return {
+    ...record,
     ...workflowRecord,
     id,
     name:
-      stringValue(workflowRecord.name ?? workflowRecord.title) ??
+      stringValue(workflowRecord.name ?? workflowRecord.title ?? record.name ?? record.title) ??
       "Untitled GalaxyAI Workflow",
-    description: stringValue(workflowRecord.description ?? workflowRecord.summary),
+    description: stringValue(
+      workflowRecord.description ?? workflowRecord.summary ?? record.description ?? record.summary,
+    ),
     nodes,
     edges,
   };
@@ -255,24 +257,32 @@ function parseSchema(value: unknown): GalaxyAiModelSchemaField[] {
 
 function parseNodeResponse(value: unknown) {
   const record = jsonRecord(value);
-  const nodeRecord = Object.keys(jsonRecord(record.node)).length
-    ? jsonRecord(record.node)
-    : record;
+  const nestedNode = jsonRecord(record.node);
+  const nodeRecord = Object.keys(nestedNode).length ? nestedNode : record;
 
-  const nodeId = stringValue(nodeRecord.id ?? nodeRecord.nodeId);
+  const nodeId = stringValue(nodeRecord.id ?? nodeRecord.nodeId ?? record.nodeId);
   if (!nodeId) {
     throw new Error("GalaxyAI did not return a node id.");
   }
 
-  const inputPorts = firstArray(nodeRecord.inputPorts ?? nodeRecord.inputs);
-  const outputPorts = firstArray(nodeRecord.outputPorts ?? nodeRecord.outputs);
+  const inputPorts = firstArray(
+    nodeRecord.inputPorts ?? nodeRecord.inputs ?? record.inputPorts ?? record.inputs,
+  );
+  const outputPorts = firstArray(
+    nodeRecord.outputPorts ?? nodeRecord.outputs ?? record.outputPorts ?? record.outputs,
+  );
 
   return {
     id: nodeId,
-    type: stringValue(nodeRecord.type ?? nodeRecord.nodeType),
+    type: stringValue(nodeRecord.type ?? nodeRecord.nodeType ?? record.type ?? record.nodeType),
     inputPorts,
     outputPorts,
-    raw: nodeRecord,
+    raw: {
+      ...record,
+      ...nodeRecord,
+      inputPorts,
+      outputPorts,
+    },
   };
 }
 

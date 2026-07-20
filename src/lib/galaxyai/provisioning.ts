@@ -331,9 +331,18 @@ function findScaffoldNode(workflow: GalaxyAiWorkflow, kind: "request" | "respons
 function parsePorts(value: unknown): Port[] {
   return firstArray(value)
     .map((entry) => {
+      if (typeof entry === "string" && entry.trim()) {
+        const handle = entry.trim();
+        return { handle, label: handle };
+      }
+
       const record = jsonRecord(entry);
-      const handle = stringValue(record.handle ?? record.key ?? record.id ?? record.name ?? record.fieldId);
-      const label = stringValue(record.label ?? record.name ?? record.title ?? record.key ?? record.id);
+      const handle = stringValue(
+        record.handle ?? record.key ?? record.id ?? record.name ?? record.fieldId,
+      );
+      const label = stringValue(
+        record.label ?? record.name ?? record.title ?? record.key ?? record.id,
+      );
       if (!handle) {
         return null;
       }
@@ -359,9 +368,93 @@ function findPortHandle(ports: Port[], aliases: string[]) {
   return ports[0]?.handle ?? null;
 }
 
-function requestFieldHandle(requestNode: WorkflowNodeRecord) {
-  const fields = parsePorts(requestNode.raw.fields ?? jsonRecord(requestNode.raw.data).fields ?? requestNode.raw.requestFields);
-  return findPortHandle(fields, ["prompt", "text", "input"]);
+function slugifyFieldName(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function collectFieldCandidates(value: unknown, output: Port[], depth = 0) {
+  if (depth > 7 || value == null) {
+    return;
+  }
+
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (text.startsWith("field_") && !output.some((item) => item.handle === text)) {
+      output.push({ handle: text, label: text });
+    }
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectFieldCandidates(item, output, depth + 1);
+    }
+    return;
+  }
+
+  if (typeof value !== "object") {
+    return;
+  }
+
+  const record = value as Record<string, unknown>;
+  const directHandle = stringValue(
+    record.fieldId ?? record.id ?? record.key ?? record.handle,
+  );
+  const directLabel = stringValue(
+    record.name ?? record.label ?? record.title ?? record.fieldName,
+  );
+
+  if (directHandle && (directHandle.startsWith("field_") || directLabel)) {
+    if (!output.some((item) => item.handle === directHandle)) {
+      output.push({
+        handle: directHandle,
+        label: directLabel ?? directHandle,
+      });
+    }
+  }
+
+  for (const [key, nested] of Object.entries(record)) {
+    if (key.startsWith("field_") && !output.some((item) => item.handle === key)) {
+      const nestedRecord = jsonRecord(nested);
+      output.push({
+        handle: key,
+        label:
+          stringValue(nestedRecord.name ?? nestedRecord.label ?? nestedRecord.title) ?? key,
+      });
+    }
+    collectFieldCandidates(nested, output, depth + 1);
+  }
+}
+
+function requestFieldHandle(
+  scaffold: GalaxyAiWorkflow,
+  requestNode: WorkflowNodeRecord,
+  requestedFieldName: string,
+) {
+  const candidates: Port[] = [];
+  collectFieldCandidates(scaffold, candidates);
+  collectFieldCandidates(requestNode.raw, candidates);
+
+  const requested = requestedFieldName.toLowerCase();
+  const matched = candidates.find((candidate) => {
+    const haystack = `${candidate.handle} ${candidate.label}`.toLowerCase();
+    return haystack.includes(requested) || haystack.includes("prompt");
+  });
+
+  if (matched) {
+    return matched.handle;
+  }
+
+  // Magica's Request-node field IDs use the bare `field_<slug>` format.
+  // The workflow-builder documentation shows examples such as field_cat and
+  // field_dog. A prompt field therefore resolves deterministically to
+  // field_prompt even when GET /workflows omits the field schema from node.data.
+  const slug = slugifyFieldName(requestedFieldName);
+  return slug ? `field_${slug}` : null;
 }
 
 function nodeInputHandle(nodeRaw: Record<string, unknown>, aliases: string[]) {
@@ -373,7 +466,12 @@ function nodeOutputHandle(nodeRaw: Record<string, unknown>, aliases: string[]) {
 }
 
 function responseInputHandle(responseNode: WorkflowNodeRecord) {
-  return findPortHandle(parsePorts(responseNode.raw.inputPorts ?? responseNode.raw.inputs), ["result", "output", "media", "image", "video"]);
+  return (
+    findPortHandle(
+      parsePorts(responseNode.raw.inputPorts ?? responseNode.raw.inputs),
+      ["result", "in:result", "output", "media", "image", "video"],
+    ) ?? "result"
+  );
 }
 
 async function verifyManagedWorkflow(input: {
@@ -450,10 +548,11 @@ async function createManagedWorkflow(input: {
     throw new Error("Magica did not return the expected Request/Response scaffold nodes.");
   }
 
-  const requestHandle = requestFieldHandle(requestNode);
+  const requestHandle = requestFieldHandle(scaffold, requestNode, "prompt");
   if (!requestHandle) {
-    throw new Error("Could not find the prompt field on the Magica Request node.");
+    throw new Error("Could not resolve the prompt field ID on the Magica Request node.");
   }
+  input.diagnostics.push(`Resolved Magica Request field: ${requestHandle}.`);
 
   const imageSchema = await getSchemaForCandidate(input.imageCandidate);
   const imageInputs = buildImageNodeInputs(imageSchema);
