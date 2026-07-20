@@ -3,6 +3,7 @@ import { getAssetAccessForUser } from "@/lib/accounts/asset-access";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 import { startGalaxyAiWorkflowRun } from "@/lib/galaxyai/client";
+import { compactMagicaPrompt } from "@/lib/galaxyai/prompt-compactor";
 import { getVipManagedGalaxyWorkflowMetadata } from "@/lib/galaxyai/workflow-metadata";
 import { logActivity } from "@/lib/security/auditLog";
 import type { Json } from "@/types/database.types";
@@ -132,8 +133,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: workflowError.message }, { status: 400 });
     }
 
+    const promptCompaction = compactMagicaPrompt(asset.content);
     const values = buildGalaxyAiValues({
-      prompt: asset.content,
+      prompt: promptCompaction.prompt,
       workflowMetadata: workflowRecord?.metadata ?? null,
     });
 
@@ -170,6 +172,12 @@ export async function POST(request: Request) {
           inputMapping:
             getVipManagedGalaxyWorkflowMetadata(workflowRecord?.metadata ?? null)?.inputMapping ??
             "fallback_prompt_mapping",
+          promptCompaction: {
+            originalLength: promptCompaction.originalLength,
+            sentLength: promptCompaction.sentLength,
+            wasCompacted: promptCompaction.wasCompacted,
+            limit: promptCompaction.limit,
+          },
         }),
         output: {},
         started_at: new Date().toISOString(),
@@ -203,10 +211,24 @@ export async function POST(request: Request) {
         inputMapping:
           getVipManagedGalaxyWorkflowMetadata(workflowRecord?.metadata ?? null)?.inputMapping ??
           "fallback_prompt_mapping",
+        promptCompaction: {
+          originalLength: promptCompaction.originalLength,
+          sentLength: promptCompaction.sentLength,
+          wasCompacted: promptCompaction.wasCompacted,
+          limit: promptCompaction.limit,
+        },
       },
     });
 
-    return NextResponse.json({ run: savedRun });
+    return NextResponse.json({
+      run: savedRun,
+      promptCompaction: {
+        originalLength: promptCompaction.originalLength,
+        sentLength: promptCompaction.sentLength,
+        wasCompacted: promptCompaction.wasCompacted,
+        limit: promptCompaction.limit,
+      },
+    });
   } catch (error) {
     if (error instanceof Error) {
       return NextResponse.json({ error: error.message }, { status: 400 });

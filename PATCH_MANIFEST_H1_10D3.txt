@@ -1,0 +1,6 @@
+README_H1_10D3_MAGICA_PROMPT_LENGTH_GUARD.md
+PATCH_MANIFEST_H1_10D3.txt
+FILE_SHA256SUMS_H1_10D3.txt
+src/app/api/galaxyai/runs/route.ts
+src/lib/galaxyai/prompt-compactor.ts
+tests/galaxyai-prompt-compactor.test.ts
