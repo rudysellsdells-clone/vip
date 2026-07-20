@@ -318,8 +318,8 @@ function buildVideoNodeInputs(fields: GalaxyAiModelSchemaField[]) {
 
   const durationField = findField(fields, ["duration", "durationseconds", "duration_seconds"]);
   if (durationField) {
-    const picked = pickOption(durationField, ["5", "5s"]);
-    inputs[durationField.key] = picked ?? 5;
+    const picked = pickOption(durationField, ["15", "15s", "15 seconds"]);
+    inputs[durationField.key] = picked ?? 15;
   }
 
   const resolutionField = findField(fields, ["resolution", "size"]);
@@ -478,13 +478,29 @@ function requestFieldHandle(
   collectFieldCandidates(requestNode.raw, candidates);
 
   const requested = requestedFieldName.toLowerCase();
-  const matched = candidates.find((candidate) => {
-    const haystack = `${candidate.handle} ${candidate.label}`.toLowerCase();
-    return haystack.includes(requested) || haystack.includes("prompt");
+  const requestedSlug = slugifyFieldName(requestedFieldName);
+  const exact = candidates.find((candidate) => {
+    const handle = candidate.handle.toLowerCase();
+    const label = candidate.label.toLowerCase();
+    return (
+      handle === requested ||
+      handle === `field_${requestedSlug}` ||
+      label === requested ||
+      slugifyFieldName(label) === requestedSlug
+    );
   });
 
-  if (matched) {
-    return matched.handle;
+  if (exact) {
+    return exact.handle;
+  }
+
+  const fuzzy = candidates.find((candidate) => {
+    const haystack = `${candidate.handle} ${candidate.label}`.toLowerCase();
+    return haystack.includes(requested) || haystack.includes(requestedSlug);
+  });
+
+  if (fuzzy) {
+    return fuzzy.handle;
   }
 
   // Magica's Request-node field IDs use the bare `field_<slug>` format.
@@ -575,10 +591,18 @@ async function createManagedWorkflow(input: {
   const name = workflowName(input.kind);
   const description = workflowDescription(input.kind);
 
+  const requestFields =
+    input.kind === "vip_social_image_video"
+      ? [
+          { name: "image_prompt", type: "text", value: "" },
+          { name: "video_prompt", type: "text", value: "" },
+        ]
+      : [{ name: "prompt", type: "text", value: "" }];
+
   const scaffold = await quickCreateGalaxyAiWorkflow({
     name,
     description,
-    requestFields: [{ name: "prompt", type: "text", value: "" }],
+    requestFields,
   });
   const workflow = await getGalaxyAiWorkflow(scaffold.id);
   const requestNode = findScaffoldNode(workflow, "request");
@@ -588,11 +612,28 @@ async function createManagedWorkflow(input: {
     throw new Error("Magica did not return the expected Request/Response scaffold nodes.");
   }
 
-  const requestHandle = requestFieldHandle(scaffold, requestNode, "prompt");
+  const requestHandle = requestFieldHandle(
+    scaffold,
+    requestNode,
+    input.kind === "vip_social_image_video" ? "image_prompt" : "prompt",
+  );
+  const videoRequestHandle =
+    input.kind === "vip_social_image_video"
+      ? requestFieldHandle(scaffold, requestNode, "video_prompt")
+      : null;
+
   if (!requestHandle) {
-    throw new Error("Could not resolve the prompt field ID on the Magica Request node.");
+    throw new Error("Could not resolve the image prompt field ID on the Magica Request node.");
   }
-  input.diagnostics.push(`Resolved Magica Request field: ${requestHandle}.`);
+
+  if (input.kind === "vip_social_image_video" && !videoRequestHandle) {
+    throw new Error("Could not resolve the video prompt field ID on the Magica Request node.");
+  }
+
+  input.diagnostics.push(`Resolved Magica image Request field: ${requestHandle}.`);
+  if (videoRequestHandle) {
+    input.diagnostics.push(`Resolved Magica video Request field: ${videoRequestHandle}.`);
+  }
 
   const imageInputs = buildImageNodeInputs(input.imageSchema);
   const imageNode = await addGalaxyAiWorkflowNode({
@@ -659,11 +700,11 @@ async function createManagedWorkflow(input: {
       targetHandle: videoImageHandle,
     });
 
-    if (videoPromptHandle) {
+    if (videoPromptHandle && videoRequestHandle) {
       await connectGalaxyAiWorkflowNodes({
         workflowId: workflow.id,
         sourceNodeId: requestNode.id,
-        sourceHandle: requestHandle,
+        sourceHandle: videoRequestHandle,
         targetNodeId: videoNode.id,
         targetHandle: videoPromptHandle,
       });
@@ -705,6 +746,8 @@ async function createManagedWorkflow(input: {
       nodeRequestKey: requestNode.id,
       promptFieldName: requestHandle,
       requestFieldId: requestHandle,
+      videoPromptFieldName: videoRequestHandle,
+      videoRequestFieldId: videoRequestHandle,
     },
     requestNodeId: requestNode.id,
     responseNodeId: responseNode.id,
@@ -717,12 +760,12 @@ async function createManagedWorkflow(input: {
     verificationStatus: "verified",
     lastVerifiedAt: new Date().toISOString(),
     createdBy: "marketing_vip",
-    templateVersion: "H1.10D2",
+    templateVersion: "H1.10D5",
     createdAt: new Date().toISOString(),
     notes:
       input.kind === "vip_social_image_only"
         ? "Provisioned once and reused for approved social image prompts."
-        : "Provisioned once and reused for approved social image + video prompts.",
+        : "Provisioned once with separate image and video prompt fields and reused for approved social image + video prompts.",
   };
 
   input.diagnostics.push(`Created ${displayKind(input.kind)} workflow ${verifiedWorkflow.id}.`);

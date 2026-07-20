@@ -2,6 +2,8 @@ export type GalaxyAiInputMapping = {
   nodeRequestKey: string;
   promptFieldName: string;
   requestFieldId?: string | null;
+  videoPromptFieldName?: string | null;
+  videoRequestFieldId?: string | null;
 };
 
 export type VipManagedGalaxyWorkflowKind =
@@ -73,6 +75,8 @@ export function getVipManagedGalaxyWorkflowMetadata(
       nodeRequestKey,
       promptFieldName,
       requestFieldId: stringValue(inputMapping.requestFieldId),
+      videoPromptFieldName: stringValue(inputMapping.videoPromptFieldName),
+      videoRequestFieldId: stringValue(inputMapping.videoRequestFieldId),
     },
     requestNodeId: stringValue(vip.requestNodeId),
     responseNodeId: stringValue(vip.responseNodeId),

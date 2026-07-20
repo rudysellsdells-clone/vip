@@ -3,7 +3,7 @@ import { getAssetAccessForUser } from "@/lib/accounts/asset-access";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 import { startGalaxyAiWorkflowRun } from "@/lib/galaxyai/client";
-import { compactMagicaPrompt } from "@/lib/galaxyai/prompt-compactor";
+import { prepareGalaxyAiRunInput } from "@/lib/galaxyai/run-input";
 import { getVipManagedGalaxyWorkflowMetadata } from "@/lib/galaxyai/workflow-metadata";
 import { logActivity } from "@/lib/security/auditLog";
 import type { Json } from "@/types/database.types";
@@ -28,27 +28,6 @@ function numberOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-
-function buildGalaxyAiValues(input: {
-  prompt: string;
-  workflowMetadata: unknown;
-}) {
-  const vipWorkflowMetadata = getVipManagedGalaxyWorkflowMetadata(input.workflowMetadata);
-
-  if (vipWorkflowMetadata?.inputMapping) {
-    return {
-      [vipWorkflowMetadata.inputMapping.nodeRequestKey]: {
-        [vipWorkflowMetadata.inputMapping.promptFieldName]: input.prompt,
-      },
-    };
-  }
-
-  return {
-    prompt: {
-      prompt: input.prompt,
-    },
-  };
-}
 
 export async function POST(request: Request) {
   try {
@@ -133,11 +112,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: workflowError.message }, { status: 400 });
     }
 
-    const promptCompaction = compactMagicaPrompt(asset.content);
-    const values = buildGalaxyAiValues({
-      prompt: promptCompaction.prompt,
+    const preparedInput = prepareGalaxyAiRunInput({
+      sourcePrompt: asset.content,
       workflowMetadata: workflowRecord?.metadata ?? null,
+      assetType: String(asset.asset_type ?? ""),
     });
+    const values = preparedInput.values;
+    const promptCompaction = preparedInput.sharedPromptMode
+      ? preparedInput.videoPrompt ?? preparedInput.imagePrompt
+      : preparedInput.imagePrompt;
 
     const run = await startGalaxyAiWorkflowRun({
       workflowId,
@@ -177,6 +160,13 @@ export async function POST(request: Request) {
             sentLength: promptCompaction.sentLength,
             wasCompacted: promptCompaction.wasCompacted,
             limit: promptCompaction.limit,
+            limitReason: preparedInput.sharedPromptMode
+              ? "shared_seedance_safe_prompt"
+              : "separate_model_prompt_fields",
+            workflowKind: preparedInput.workflowMetadata?.workflowKind ?? null,
+            sharedPromptMode: preparedInput.sharedPromptMode,
+            imagePromptLength: preparedInput.imagePrompt.sentLength,
+            videoPromptLength: preparedInput.videoPrompt?.sentLength ?? null,
           },
         }),
         output: {},
@@ -216,6 +206,9 @@ export async function POST(request: Request) {
           sentLength: promptCompaction.sentLength,
           wasCompacted: promptCompaction.wasCompacted,
           limit: promptCompaction.limit,
+          sharedPromptMode: preparedInput.sharedPromptMode,
+          imagePromptLength: preparedInput.imagePrompt.sentLength,
+          videoPromptLength: preparedInput.videoPrompt?.sentLength ?? null,
         },
       },
     });
@@ -227,6 +220,9 @@ export async function POST(request: Request) {
         sentLength: promptCompaction.sentLength,
         wasCompacted: promptCompaction.wasCompacted,
         limit: promptCompaction.limit,
+        sharedPromptMode: preparedInput.sharedPromptMode,
+        imagePromptLength: preparedInput.imagePrompt.sentLength,
+        videoPromptLength: preparedInput.videoPrompt?.sentLength ?? null,
       },
     });
   } catch (error) {

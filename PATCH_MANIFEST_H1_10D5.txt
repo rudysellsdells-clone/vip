@@ -1,0 +1,10 @@
+README_H1_10D5_MAGICA_SEEDANCE_PROMPT_LIMIT_DUAL_INPUT.md
+PATCH_MANIFEST_H1_10D5.txt
+FILE_SHA256SUMS_H1_10D5.txt
+src/app/api/galaxyai/runs/route.ts
+src/lib/galaxyai/prompt-compactor.ts
+src/lib/galaxyai/provisioning.ts
+src/lib/galaxyai/run-input.ts
+src/lib/galaxyai/workflow-metadata.ts
+tests/galaxyai-prompt-compactor.test.ts
+tests/galaxyai-run-input.test.ts

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   MAGICA_PROMPT_SAFE_LIMIT,
+  MAGICA_VIDEO_PROMPT_SAFE_LIMIT,
   compactMagicaPrompt,
 } from "../src/lib/galaxyai/prompt-compactor.ts";
 
@@ -51,4 +52,22 @@ test("never exceeds a caller-provided limit", () => {
 
   assert.ok(result.prompt.length <= 500);
   assert.equal(result.limit, 500);
+});
+
+
+test("compacts a shared image-video prompt below the Seedance limit", () => {
+  const source = [
+    "Create a polished social image and animate it into a 15-second video.",
+    "Target audience: Local business owners who need stronger visibility.",
+    "Creative direction: Show a confident owner reviewing a clean marketing dashboard.",
+    "Motion direction: Use slow camera movement, subtle natural gestures, and a clean final hold.",
+    "detail ".repeat(700),
+  ].join("\n\n");
+
+  const result = compactMagicaPrompt(source, MAGICA_VIDEO_PROMPT_SAFE_LIMIT);
+
+  assert.equal(result.wasCompacted, true);
+  assert.ok(result.prompt.length <= MAGICA_VIDEO_PROMPT_SAFE_LIMIT);
+  assert.match(result.prompt, /15-second video/);
+  assert.match(result.prompt, /Motion direction/);
 });

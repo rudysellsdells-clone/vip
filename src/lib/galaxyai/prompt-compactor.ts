@@ -1,5 +1,7 @@
 export const MAGICA_PROMPT_HARD_LIMIT = 3500;
 export const MAGICA_PROMPT_SAFE_LIMIT = 3400;
+export const MAGICA_VIDEO_PROMPT_HARD_LIMIT = 2500;
+export const MAGICA_VIDEO_PROMPT_SAFE_LIMIT = 2400;
 
 export type CompactMagicaPromptResult = {
   prompt: string;
