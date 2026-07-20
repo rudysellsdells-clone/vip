@@ -1,3 +1,14 @@
+
+export type GalaxyAiCatalogNode = {
+  id: string | null;
+  name: string | null;
+  type: string | null;
+  slug: string | null;
+  description?: string | null;
+  category?: string | null;
+  metadata: Record<string, unknown>;
+};
+
 export type GalaxyAiWorkflow = {
   id: string;
   name: string;
@@ -58,7 +69,7 @@ export type GalaxyAiRunDetails = {
 
 export type GalaxyAiMediaItem = {
   url: string;
-  type?: string;
+  type: string;
   nodeType?: string | null;
   nodeLabel?: string | null;
   nodeId?: string | null;

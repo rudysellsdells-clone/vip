@@ -3,20 +3,9 @@ import { getAssetAccessForUser } from "@/lib/accounts/asset-access";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 import { startGalaxyAiWorkflowRun } from "@/lib/galaxyai/client";
+import { getVipManagedGalaxyWorkflowMetadata } from "@/lib/galaxyai/workflow-metadata";
 import { logActivity } from "@/lib/security/auditLog";
 import type { Json } from "@/types/database.types";
-
-type GalaxyAiInputMapping = {
-  nodeRequestKey: string;
-  promptFieldName: string;
-};
-
-const GALAXYAI_WORKFLOW_INPUT_MAPPINGS: Record<string, GalaxyAiInputMapping> = {
-  cmp4j5u8o0001jm049rtesgiw: {
-    nodeRequestKey: "node_1772800705319_request",
-    promptFieldName: "Car prompt",
-  },
-};
 
 function toJson(value: unknown): Json {
   return JSON.parse(JSON.stringify(value)) as Json;
@@ -40,21 +29,19 @@ function numberOrNull(value: unknown): number | null {
 
 
 function buildGalaxyAiValues(input: {
-  workflowId: string;
   prompt: string;
+  workflowMetadata: unknown;
 }) {
-  const mapping = GALAXYAI_WORKFLOW_INPUT_MAPPINGS[input.workflowId];
+  const vipWorkflowMetadata = getVipManagedGalaxyWorkflowMetadata(input.workflowMetadata);
 
-  if (mapping) {
+  if (vipWorkflowMetadata?.inputMapping) {
     return {
-      [mapping.nodeRequestKey]: {
-        [mapping.promptFieldName]: input.prompt,
+      [vipWorkflowMetadata.inputMapping.nodeRequestKey]: {
+        [vipWorkflowMetadata.inputMapping.promptFieldName]: input.prompt,
       },
     };
   }
 
-  // Fallback for future workflows that expose a simple prompt node.
-  // If a workflow rejects this shape, add its workflowId to GALAXYAI_WORKFLOW_INPUT_MAPPINGS.
   return {
     prompt: {
       prompt: input.prompt,
@@ -134,9 +121,20 @@ export async function POST(request: Request) {
 
     const assetMetadata = jsonRecord(asset.metadata);
 
+    const { data: workflowRecord, error: workflowError } = await supabase
+      .from("galaxyai_workflows")
+      .select("metadata")
+      .eq("account_id", assetAccess.accountId)
+      .eq("galaxy_workflow_id", workflowId)
+      .maybeSingle();
+
+    if (workflowError) {
+      return NextResponse.json({ error: workflowError.message }, { status: 400 });
+    }
+
     const values = buildGalaxyAiValues({
-      workflowId,
       prompt: asset.content,
+      workflowMetadata: workflowRecord?.metadata ?? null,
     });
 
     const run = await startGalaxyAiWorkflowRun({
@@ -170,7 +168,8 @@ export async function POST(request: Request) {
           imagePlatform: stringOrNull(assetMetadata.imagePlatform),
           imageFormat: stringOrNull(assetMetadata.imageFormat),
           inputMapping:
-            GALAXYAI_WORKFLOW_INPUT_MAPPINGS[workflowId] ?? "fallback_prompt_mapping",
+            getVipManagedGalaxyWorkflowMetadata(workflowRecord?.metadata ?? null)?.inputMapping ??
+            "fallback_prompt_mapping",
         }),
         output: {},
         started_at: new Date().toISOString(),
@@ -202,7 +201,8 @@ export async function POST(request: Request) {
         parentAssetId: asset.parent_asset_id ?? null,
         campaignId: asset.campaign_id ?? null,
         inputMapping:
-          GALAXYAI_WORKFLOW_INPUT_MAPPINGS[workflowId] ?? "fallback_prompt_mapping",
+          getVipManagedGalaxyWorkflowMetadata(workflowRecord?.metadata ?? null)?.inputMapping ??
+          "fallback_prompt_mapping",
       },
     });
 

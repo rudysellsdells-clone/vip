@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
-import { getActiveWorkspaceForUser, activeWorkspaceManageRequiredMessage, activeWorkspaceRequiredMessage } from "@/lib/accounts/active-workspace";
+import {
+  activeWorkspaceManageRequiredMessage,
+  activeWorkspaceRequiredMessage,
+  getActiveWorkspaceForUser,
+} from "@/lib/accounts/active-workspace";
 import { listGalaxyAiWorkflows } from "@/lib/galaxyai/client";
+import {
+  getVipManagedGalaxyWorkflowMetadata,
+  mergeWorkflowMetadataWithVip,
+} from "@/lib/galaxyai/workflow-metadata";
 import { logActivity } from "@/lib/security/auditLog";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
@@ -61,9 +69,27 @@ export async function GET() {
 
     const workflows = await listGalaxyAiWorkflows();
 
+    const { data: existingRows } = await supabase
+      .from("galaxyai_workflows")
+      .select("galaxy_workflow_id, metadata")
+      .eq("account_id", workspace.activeAccountId);
+
+    const existingMetadataByWorkflowId = new Map<string, unknown>();
+
+    for (const row of (existingRows ?? []) as Array<Record<string, unknown>>) {
+      const workflowId = typeof row.galaxy_workflow_id === "string" ? row.galaxy_workflow_id : null;
+      if (workflowId) {
+        existingMetadataByWorkflowId.set(workflowId, row.metadata ?? null);
+      }
+    }
+
     for (const workflow of workflows) {
       const workflowRecord = workflow as Record<string, unknown>;
       const workflowId = getWorkflowId(workflowRecord);
+      const priorVipMetadata = getVipManagedGalaxyWorkflowMetadata(
+        existingMetadataByWorkflowId.get(workflowId),
+      );
+      const metadata = mergeWorkflowMetadataWithVip(workflow, priorVipMetadata);
 
       const { error } = await supabase.from("galaxyai_workflows").upsert(
         {
@@ -72,7 +98,7 @@ export async function GET() {
           galaxy_workflow_id: workflowId,
           name: getWorkflowName(workflowRecord),
           description: getWorkflowDescription(workflowRecord),
-          metadata: toJson(workflow),
+          metadata: toJson(metadata),
           active: true,
           last_synced_at: new Date().toISOString(),
         },
