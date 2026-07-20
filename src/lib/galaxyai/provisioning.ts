@@ -71,7 +71,7 @@ function buildManagedWorkflowPayload(input: {
   videoNode?: GalaxyAiCatalogNode | null;
 }) {
   const promptExpression = "{{vip_prompt_request.VIP Prompt}}";
-  const baseNodes = [
+  const baseNodes: Array<Record<string, unknown>> = [
     {
       id: "vip_prompt_request",
       type: "request",
@@ -102,7 +102,7 @@ function buildManagedWorkflowPayload(input: {
     },
   ];
 
-  const baseEdges = [
+  const baseEdges: Array<Record<string, unknown>> = [
     {
       id: "edge_prompt_to_image",
       source: "vip_prompt_request",
@@ -121,8 +121,8 @@ function buildManagedWorkflowPayload(input: {
     },
   ];
 
-  const nodes = [...baseNodes];
-  const edges = [...baseEdges];
+  const nodes: Array<Record<string, unknown>> = [...baseNodes];
+  const edges: Array<Record<string, unknown>> = [...baseEdges];
 
   if (input.kind === "vip_social_image_video" && input.videoNode) {
     nodes.push({
