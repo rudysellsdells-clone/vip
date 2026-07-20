@@ -50,7 +50,8 @@ type CatalogCandidate = {
   modelId: string;
   nodeType: string;
   modelName: string;
-  modeId: string | null;
+  schemaId: string;
+  executionMode: string;
   modeName: string | null;
   category: string | null;
   score: number;
@@ -132,6 +133,39 @@ function subModelCandidates(node: GalaxyAiCatalogNode) {
   ];
 }
 
+function normalizedMode(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, "-");
+}
+
+function requiredExecutionMode(kind: "image" | "video") {
+  return kind === "image" ? "text-to-image" : "image-to-video";
+}
+
+function resolveExecutionMode(input: {
+  node: GalaxyAiCatalogNode;
+  subModel: GalaxyAiCatalogSubModel | {
+    subModelId: string | null;
+    name: string | null;
+    category?: string | null;
+    metadata: Record<string, unknown>;
+  };
+  kind: "image" | "video";
+}) {
+  const required = requiredExecutionMode(input.kind);
+  const candidates = [
+    input.subModel.category,
+    input.subModel.metadata.mode,
+    input.subModel.metadata.category,
+    input.node.metadata.mode,
+    input.node.category,
+  ].map(normalizedMode).filter(Boolean);
+
+  return candidates.find((candidate) => candidate === required) ?? null;
+}
+
 function scoreCandidate(input: {
   node: GalaxyAiCatalogNode;
   subModel: GalaxyAiCatalogSubModel | { subModelId: string | null; name: string | null; category?: string | null; metadata: Record<string, unknown> };
@@ -192,11 +226,15 @@ function pickBestCatalogCandidate(
       const modelId = stringValue(node.id ?? node.slug ?? node.type);
       if (!nodeType || !modelId) continue;
 
+      const executionMode = resolveExecutionMode({ node, subModel, kind });
+      if (!executionMode) continue;
+
       candidates.push({
         modelId,
         nodeType,
         modelName: stringValue(node.name) ?? nodeType,
-        modeId: stringValue(subModel.subModelId),
+        schemaId: stringValue(subModel.subModelId) ?? modelId,
+        executionMode,
         modeName: stringValue(subModel.name),
         category: stringValue(subModel.category ?? node.category),
         score,
@@ -505,7 +543,7 @@ async function verifyManagedWorkflow(input: {
 }
 
 async function getSchemaForCandidate(candidate: CatalogCandidate) {
-  const attempts = [candidate.modeId, candidate.modelId].filter(Boolean) as string[];
+  const attempts = [candidate.schemaId, candidate.modelId].filter(Boolean) as string[];
   const errors: string[] = [];
 
   for (const id of attempts) {
@@ -529,7 +567,9 @@ async function getSchemaForCandidate(candidate: CatalogCandidate) {
 async function createManagedWorkflow(input: {
   kind: VipManagedGalaxyWorkflowKind;
   imageCandidate: CatalogCandidate;
+  imageSchema: GalaxyAiModelSchemaField[];
   videoCandidate: CatalogCandidate | null;
+  videoSchema: GalaxyAiModelSchemaField[] | null;
   diagnostics: string[];
 }) {
   const name = workflowName(input.kind);
@@ -554,12 +594,11 @@ async function createManagedWorkflow(input: {
   }
   input.diagnostics.push(`Resolved Magica Request field: ${requestHandle}.`);
 
-  const imageSchema = await getSchemaForCandidate(input.imageCandidate);
-  const imageInputs = buildImageNodeInputs(imageSchema);
+  const imageInputs = buildImageNodeInputs(input.imageSchema);
   const imageNode = await addGalaxyAiWorkflowNode({
     workflowId: workflow.id,
     nodeType: input.imageCandidate.nodeType,
-    mode: input.imageCandidate.modeId,
+    mode: input.imageCandidate.executionMode,
     column: 1,
     row: 0,
     inputs: imageInputs,
@@ -589,12 +628,15 @@ async function createManagedWorkflow(input: {
       throw new Error("No suitable image-to-video Magica model was found.");
     }
 
-    const videoSchema = await getSchemaForCandidate(input.videoCandidate);
-    const videoInputs = buildVideoNodeInputs(videoSchema);
+    if (!input.videoSchema) {
+      throw new Error("Magica image-to-video schema was not available after preflight.");
+    }
+
+    const videoInputs = buildVideoNodeInputs(input.videoSchema);
     const videoNode = await addGalaxyAiWorkflowNode({
       workflowId: workflow.id,
       nodeType: input.videoCandidate.nodeType,
-      mode: input.videoCandidate.modeId,
+      mode: input.videoCandidate.executionMode,
       column: 2,
       row: 0,
       inputs: videoInputs,
@@ -639,7 +681,7 @@ async function createManagedWorkflow(input: {
 
     videoNodeId = videoNode.id;
     selectedVideoModel = input.videoCandidate.modelId;
-    selectedVideoMode = input.videoCandidate.modeId;
+    selectedVideoMode = input.videoCandidate.executionMode;
   } else {
     const responseHandle = responseInputHandle(responseNode);
     if (responseHandle) {
@@ -669,13 +711,13 @@ async function createManagedWorkflow(input: {
     imageNodeId: imageNode.id,
     videoNodeId,
     selectedImageModel: input.imageCandidate.modelId,
-    selectedImageMode: input.imageCandidate.modeId,
+    selectedImageMode: input.imageCandidate.executionMode,
     selectedVideoModel,
     selectedVideoMode,
     verificationStatus: "verified",
     lastVerifiedAt: new Date().toISOString(),
     createdBy: "marketing_vip",
-    templateVersion: "H1.10D",
+    templateVersion: "H1.10D2",
     createdAt: new Date().toISOString(),
     notes:
       input.kind === "vip_social_image_only"
@@ -713,16 +755,35 @@ export async function provisionVipGalaxyAiWorkflows(input?: {
   }
 
   diagnostics.push(
-    `Selected image model: ${imageCandidate.modelName}${imageCandidate.modeName ? ` / ${imageCandidate.modeName}` : ""}.`,
+    `Selected image model: ${imageCandidate.modelName}${imageCandidate.modeName ? ` / ${imageCandidate.modeName}` : ""}; nodeType=${imageCandidate.nodeType}; mode=${imageCandidate.executionMode}; schema=${imageCandidate.schemaId}.`,
   );
 
-  if (videoCandidate) {
-    diagnostics.push(
-      `Selected video model: ${videoCandidate.modelName}${videoCandidate.modeName ? ` / ${videoCandidate.modeName}` : ""}.`,
+  if (!videoCandidate) {
+    throw new Error(
+      "Could not find a Magica model whose live catalog mode is image-to-video. No workflow was created.",
     );
-  } else {
-    diagnostics.push("No image-to-video model was detected in the current Magica catalog.");
   }
+
+  diagnostics.push(
+    `Selected video model: ${videoCandidate.modelName}${videoCandidate.modeName ? ` / ${videoCandidate.modeName}` : ""}; nodeType=${videoCandidate.nodeType}; mode=${videoCandidate.executionMode}; schema=${videoCandidate.schemaId}.`,
+  );
+
+  // Complete live catalog/schema preflight before creating any remote workflow.
+  const imageSchema = await getSchemaForCandidate(imageCandidate);
+  if (!imageSchema.length) {
+    throw new Error(
+      `Magica preflight found ${imageCandidate.nodeType} in ${imageCandidate.executionMode} mode, but no input schema was returned for ${imageCandidate.schemaId}. No workflow was created.`,
+    );
+  }
+  diagnostics.push(`Image schema preflight passed with ${imageSchema.length} field(s).`);
+
+  const videoSchema = await getSchemaForCandidate(videoCandidate);
+  if (!videoSchema.length) {
+    throw new Error(
+      `Magica preflight found ${videoCandidate.nodeType} in ${videoCandidate.executionMode} mode, but no input schema was returned for ${videoCandidate.schemaId}. No workflow was created.`,
+    );
+  }
+  diagnostics.push(`Video schema preflight passed with ${videoSchema.length} field(s).`);
 
   const existingVipByKind = new Map<VipManagedGalaxyWorkflowKind, ExistingWorkflowRef>();
   for (const item of input?.existingWorkflows ?? []) {
@@ -777,7 +838,9 @@ export async function provisionVipGalaxyAiWorkflows(input?: {
       await createManagedWorkflow({
         kind,
         imageCandidate,
+        imageSchema,
         videoCandidate,
+        videoSchema,
         diagnostics,
       }),
     );
@@ -788,9 +851,7 @@ export async function provisionVipGalaxyAiWorkflows(input?: {
     reused,
     diagnostics,
     catalogCount: catalog.length,
-    imageNode: `${imageCandidate.modelName}${imageCandidate.modeName ? ` / ${imageCandidate.modeName}` : ""}`,
-    videoNode: videoCandidate
-      ? `${videoCandidate.modelName}${videoCandidate.modeName ? ` / ${videoCandidate.modeName}` : ""}`
-      : null,
+    imageNode: `${imageCandidate.modelName}${imageCandidate.modeName ? ` / ${imageCandidate.modeName}` : ""} (${imageCandidate.executionMode})`,
+    videoNode: `${videoCandidate.modelName}${videoCandidate.modeName ? ` / ${videoCandidate.modeName}` : ""} (${videoCandidate.executionMode})`,
   } satisfies GalaxyAiProvisioningResult;
 }
