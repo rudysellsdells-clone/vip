@@ -69,7 +69,7 @@ export type GalaxyAiRunDetails = {
 
 export type GalaxyAiMediaItem = {
   url: string;
-  type: string;
+  type?: string;
   nodeType?: string | null;
   nodeLabel?: string | null;
   nodeId?: string | null;

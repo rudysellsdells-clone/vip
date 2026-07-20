@@ -9,9 +9,9 @@ function clean(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function mediaType(value: unknown): string | undefined {
+function mediaType(value: unknown): string {
   const text = clean(value);
-  return text || undefined;
+  return text || "file";
 }
 
 function normalizeUrl(value: unknown) {
