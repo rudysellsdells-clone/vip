@@ -14,6 +14,10 @@ import {
   ONE_OFF_STRATEGY_GATE_VERSION,
   type OneOffStrategyGate,
 } from "@/lib/content-generation/one-off-strategy-gate";
+import {
+  computeApprovedMarketIntelligenceSignature,
+  getApprovedMarketIntelligenceSnapshot,
+} from "@/lib/market-intelligence/approved-market-intelligence";
 import { logActivity } from "@/lib/security/auditLog";
 import { getApprovedStrategyFoundation } from "@/lib/strategy/get-approved-strategy-foundation";
 import {
@@ -173,15 +177,25 @@ export async function POST(request: Request) {
     const sourceCampaign = buildOneOffCampaignSource(input);
     const campaignSourceSignature =
       computeOneOffStrategySourceSignature(sourceCampaign);
-    const foundation = await getApprovedStrategyFoundation({
-      supabase,
-      accountId: activeAccountId,
-    });
+    const [foundation, marketIntelligenceSnapshot] = await Promise.all([
+      getApprovedStrategyFoundation({
+        supabase,
+        accountId: activeAccountId,
+      }),
+      getApprovedMarketIntelligenceSnapshot({
+        supabase,
+        accountId: activeAccountId,
+      }),
+    ]);
     const foundationSignature =
       computeStrategyFoundationSignature(foundation);
+    const marketIntelligenceSignature = marketIntelligenceSnapshot
+      ? computeApprovedMarketIntelligenceSignature(marketIntelligenceSnapshot)
+      : null;
     const currentSourceSignature = computeStrategyApprovalSourceSignature({
       campaignSourceSignature,
       foundationSignature,
+      marketIntelligenceSignature,
     });
 
     if (
@@ -221,7 +235,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            "Campaign inputs or the approved Strategy Foundation changed after the Marketing Spine was generated. Regenerate and approve the strategy before creating the campaign.",
+            "Campaign inputs, the approved Strategy Foundation, or approved Market Intelligence changed after the Marketing Spine was generated. Regenerate and approve the strategy before creating the campaign.",
         },
         { status: 409 },
       );
@@ -288,6 +302,14 @@ export async function POST(request: Request) {
           sources: foundation.sources,
         },
       },
+      marketIntelligence: marketIntelligenceSnapshot
+        ? {
+            version: marketIntelligenceSnapshot.version,
+            signature: marketIntelligenceSignature,
+            capturedAt: now,
+            snapshot: marketIntelligenceSnapshot,
+          }
+        : null,
       strategyEngine: submittedStrategyEngine,
     };
 
@@ -335,6 +357,12 @@ export async function POST(request: Request) {
         strategyFoundationVersion: foundation.version,
         strategyFoundationSignature: foundationSignature,
         strategyFoundationReadinessScore: foundation.readiness.score,
+        marketIntelligenceVersion: marketIntelligenceSnapshot?.version ?? null,
+        marketIntelligenceSignature,
+        marketIntelligenceFindingCount:
+          marketIntelligenceSnapshot?.findings.length ?? 0,
+        marketIntelligenceSourceCount:
+          marketIntelligenceSnapshot?.sources.length ?? 0,
         strategyEngine: submittedStrategyEngine,
       }),
     });
@@ -348,6 +376,14 @@ export async function POST(request: Request) {
           signature: foundationSignature,
           readinessScore: foundation.readiness.score,
         },
+        marketIntelligence: marketIntelligenceSnapshot
+          ? {
+              version: marketIntelligenceSnapshot.version,
+              signature: marketIntelligenceSignature,
+              findingCount: marketIntelligenceSnapshot.findings.length,
+              sourceCount: marketIntelligenceSnapshot.sources.length,
+            }
+          : null,
       },
       { status: 201 },
     );
