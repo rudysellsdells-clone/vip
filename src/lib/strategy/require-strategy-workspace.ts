@@ -1,11 +1,12 @@
 import "server-only";
 
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { getUserAccountContext } from "@/lib/accounts/account-context";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
-export async function requireStrategyWorkspace() {
+export const requireStrategyWorkspace = cache(async () => {
   const supabase = untypedSupabase(await createClient());
   const {
     data: { user },
@@ -28,4 +29,4 @@ export async function requireStrategyWorkspace() {
     canManage: accountContext.canManageActiveAccount,
     isMaster: accountContext.isMaster,
   };
-}
+});
