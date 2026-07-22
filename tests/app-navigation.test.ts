@@ -46,7 +46,6 @@ const masterAccountRoutes = [
   "/approvals",
   "/archive",
   "/authority-content",
-  "/brand-voice",
   "/campaigns",
   "/content-calendar",
   "/content-calendar/monthly-review",
@@ -54,7 +53,6 @@ const masterAccountRoutes = [
   "/content-repurposing",
   "/dashboard",
   "/galaxyai",
-  "/knowledge",
   "/link-builder",
   "/opportunities",
   "/prospects",
@@ -89,11 +87,13 @@ test("normal users with an active account retain every account route without mas
   assert.ok(groupLabels.includes("Strategy"));
   assert.ok(groupLabels.includes("Campaigns"));
   assert.ok(groupLabels.includes("Analytics"));
-  assert.ok(itemLabels.includes("Strategy Foundation"));
+  assert.ok(itemLabels.includes("Strategy Workspace"));
   assert.ok(itemLabels.includes("Account Workspace"));
   assert.ok(itemLabels.includes("All Campaigns"));
   assert.ok(itemLabels.includes("Overview"));
   assert.ok(!itemLabels.includes("Accounts"));
+  assert.ok(!itemLabels.includes("Brand Voice"));
+  assert.ok(!itemLabels.includes("Knowledge"));
   assert.ok(!itemLabels.includes("Media Providers"));
   assert.ok(!itemLabels.includes("Settings"));
   assert.ok(!itemLabels.includes("Market Intelligence"));
@@ -114,11 +114,13 @@ test("master users retain every platform, workspace, and growth route", () => {
   assert.ok(groupLabels.includes("Strategy"));
   assert.ok(groupLabels.includes("Growth"));
   assert.ok(groupLabels.includes("Platform Administration"));
-  assert.ok(itemLabels.includes("Strategy Foundation"));
+  assert.ok(itemLabels.includes("Strategy Workspace"));
   assert.ok(itemLabels.includes("Accounts"));
   assert.ok(itemLabels.includes("Media Providers"));
   assert.ok(itemLabels.includes("Prospects"));
   assert.ok(itemLabels.includes("Settings"));
+  assert.ok(!itemLabels.includes("Brand Voice"));
+  assert.ok(!itemLabels.includes("Knowledge"));
   assert.ok(!itemLabels.includes("Account Workspace"));
 });
 
@@ -165,17 +167,26 @@ test("navigation feature environment values are parsed conservatively", () => {
   assert.equal(disabled.size, 0);
 });
 
-test("active path helpers support nested routes independent of group labels", () => {
+test("active path helpers support nested campaign and strategy routes", () => {
   assert.equal(isAppNavPathActive("/campaigns", "/campaigns"), true);
   assert.equal(isAppNavPathActive("/campaigns/123", "/campaigns"), true);
   assert.equal(isAppNavPathActive("/campaign-tools", "/campaigns"), false);
+  assert.equal(isAppNavPathActive("/strategy/brand-voice", "/strategy"), true);
 
-  const campaignsGroup = buildAppNavigation({
+  const groups = buildAppNavigation({
     activeAccountId: "account-123",
     canManageActiveAccount: false,
     isMaster: false,
-  }).find((group) => group.items.some((item) => item.href === "/campaigns"));
+  });
+  const campaignsGroup = groups.find((group) =>
+    group.items.some((item) => item.href === "/campaigns"),
+  );
+  const strategyGroup = groups.find((group) =>
+    group.items.some((item) => item.href === "/strategy"),
+  );
 
   assert.ok(campaignsGroup);
+  assert.ok(strategyGroup);
   assert.equal(isAppNavGroupActive("/campaigns/123", campaignsGroup), true);
+  assert.equal(isAppNavGroupActive("/strategy/knowledge", strategyGroup), true);
 });
