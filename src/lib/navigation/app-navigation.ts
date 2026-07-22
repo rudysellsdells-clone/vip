@@ -1,3 +1,5 @@
+import { NAVIGATION_FEATURES } from "@/lib/navigation/navigation-features";
+
 export type AppNavItem = {
   label: string;
   href: string;
@@ -74,6 +76,19 @@ export function buildAppNavigation({
       ],
     },
     {
+      label: "Research",
+      requiresAccount: true,
+      items: [
+        {
+          label: "Market Intelligence",
+          href: "/research",
+          description: "Research markets, competitors, demand, and opportunities.",
+          requiresAccount: true,
+          featureKey: NAVIGATION_FEATURES.marketIntelligence,
+        },
+      ],
+    },
+    {
       label: "Strategy",
       requiresAccount: true,
       items: [
@@ -130,6 +145,20 @@ export function buildAppNavigation({
           href: "/content-repurposing",
           description: "Turn source assets into channel-ready content.",
           requiresAccount: true,
+        },
+        {
+          label: "Ad Studio",
+          href: "/ad-studio",
+          description: "Build channel-ready ad packages from approved strategy.",
+          requiresAccount: true,
+          featureKey: NAVIGATION_FEATURES.adStudio,
+        },
+        {
+          label: "Video Studio",
+          href: "/video-studio",
+          description: "Create and manage campaign video workflows.",
+          requiresAccount: true,
+          featureKey: NAVIGATION_FEATURES.videoStudio,
         },
         {
           label: "What-If Stories",
