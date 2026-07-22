@@ -7,6 +7,7 @@ on:
   pull_request:
     branches:
       - h1-15-market-intelligence
+      - h1-16-campaign-workspace
   workflow_dispatch:
 
 jobs:
