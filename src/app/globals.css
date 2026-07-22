@@ -66,16 +66,13 @@ select {
 
   The padding rule intentionally uses :where() with zero specificity. Existing
   component and Tailwind padding continues to win, while an otherwise unpadded
-  semantic content surface receives a safe 5px floor. Exact CSS-module local
-  names are used so labels such as sectionTitle or metricLabel are not shifted.
+  rounded or explicitly named content surface receives a safe 5px floor.
 
   The radius rule is authoritative so legacy 12px–34px cards and pill controls
   render with the same compact 7px corner treatment.
 */
 :where(
-  main section,
-  main article,
-  main form,
+  main [class*="rounded"],
   main [class*="__card__"],
   main [class*="Card"],
   main [class*="__panel__"],
