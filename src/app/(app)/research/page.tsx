@@ -9,6 +9,7 @@ import {
 } from "@/components/website-ui/WebsitePage";
 import { getMarketIntelligenceWorkspace } from "@/lib/market-intelligence/get-market-intelligence-workspace";
 import { isMarketIntelligenceEnabled } from "@/lib/market-intelligence/feature";
+import { buildMarketIntelligenceWorkspace } from "@/lib/market-intelligence/market-intelligence";
 import { requireStrategyWorkspace } from "@/lib/strategy/require-strategy-workspace";
 
 function formatDate(value: string | null | undefined) {
@@ -25,10 +26,24 @@ export default async function MarketIntelligencePage() {
 
   const { supabase, accountId, accountName, canManage } =
     await requireStrategyWorkspace();
-  const workspace = await getMarketIntelligenceWorkspace({
-    supabase,
-    accountId,
+  let setupError: string | null = null;
+  let workspace = buildMarketIntelligenceWorkspace({
+    projects: [],
+    sources: [],
+    findings: [],
   });
+
+  try {
+    workspace = await getMarketIntelligenceWorkspace({
+      supabase,
+      accountId,
+    });
+  } catch (error) {
+    setupError =
+      error instanceof Error
+        ? error.message
+        : "Market Intelligence storage is not available yet.";
+  }
 
   return (
     <WebsitePage>
@@ -39,6 +54,18 @@ export default async function MarketIntelligencePage() {
         primaryAction={{ label: "Strategy Workspace", href: "/strategy" }}
         secondaryAction={{ label: "Create Campaign", href: "/campaigns" }}
       />
+
+      {setupError ? (
+        <div className="border border-amber-300 bg-amber-50 p-5 text-sm leading-6 text-amber-950 shadow-sm">
+          <p className="font-black">Research preview is enabled.</p>
+          <p className="mt-1">
+            The Market Intelligence interface is visible, but its database migration has not been applied to this environment yet. Research records cannot be saved until the three Market Intelligence tables are available.
+          </p>
+          <p className="mt-2 text-xs font-semibold text-amber-800">
+            Database response: {setupError}
+          </p>
+        </div>
+      ) : null}
 
       <section className={websiteStyles.metricsGrid}>
         <WebsiteMetric
@@ -82,7 +109,7 @@ export default async function MarketIntelligencePage() {
           projects={workspace.projects}
           sources={workspace.sources}
           findings={workspace.findings}
-          canManage={canManage}
+          canManage={canManage && !setupError}
         />
       </WebsiteSection>
 
