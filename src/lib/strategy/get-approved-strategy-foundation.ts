@@ -8,6 +8,17 @@ type SupabaseLike = {
   from: (table: string) => any;
 };
 
+function compact(value: unknown, maxLength = 1200) {
+  const text = String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!text) return "";
+  return text.length > maxLength
+    ? `${text.slice(0, maxLength).trim()}...`
+    : text;
+}
+
 export async function getApprovedStrategyFoundation({
   supabase,
   accountId,
@@ -68,6 +79,16 @@ export async function getApprovedStrategyFoundation({
     fetchAccountMarketProfile({ supabase, accountId }),
   ]);
 
+  const knowledgeSources = (
+    (knowledgeSourcesResult.data ?? []) as Array<Record<string, unknown>>
+  ).map((source) => ({
+    id: source.id,
+    title: source.title,
+    source_type: source.source_type,
+    summary: compact(source.summary || source.content),
+    updated_at: source.updated_at,
+  }));
+
   return buildApprovedStrategyFoundation({
     accountId,
     account: (accountResult.data ?? null) as Record<string, unknown> | null,
@@ -77,7 +98,7 @@ export async function getApprovedStrategyFoundation({
     serviceLines: marketProfile.serviceLines,
     audiences: marketProfile.audiences,
     offers: marketProfile.offers,
-    knowledgeSources: (knowledgeSourcesResult.data ?? []) as Array<Record<string, unknown>>,
+    knowledgeSources,
     approvedExamples: (approvedExamplesResult.data ?? []) as Array<Record<string, unknown>>,
   });
 }
