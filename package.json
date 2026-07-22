@@ -9,7 +9,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test:strategy": "node --experimental-strip-types --test tests/strategy-engine-v2.test.ts",
-    "test:galaxyai": "node --experimental-strip-types --test tests/galaxyai-run-recovery.test.ts"
+    "test:galaxyai": "node --experimental-strip-types --test tests/galaxyai-run-recovery.test.ts",
+    "test:navigation": "node --experimental-strip-types --test tests/app-navigation.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "latest",
