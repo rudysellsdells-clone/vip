@@ -5,6 +5,10 @@ import {
   isAppNavGroupActive,
   isAppNavPathActive,
 } from "../src/lib/navigation/app-navigation.ts";
+import {
+  getEnabledNavigationFeatures,
+  NAVIGATION_FEATURES,
+} from "../src/lib/navigation/navigation-features.ts";
 
 function labels(groups: ReturnType<typeof buildAppNavigation>) {
   return groups.flatMap((group) => group.items.map((item) => item.label));
@@ -88,6 +92,9 @@ test("normal users with an active account retain every account route without mas
   assert.ok(!itemLabels.includes("Accounts"));
   assert.ok(!itemLabels.includes("Media Providers"));
   assert.ok(!itemLabels.includes("Settings"));
+  assert.ok(!itemLabels.includes("Market Intelligence"));
+  assert.ok(!itemLabels.includes("Ad Studio"));
+  assert.ok(!itemLabels.includes("Video Studio"));
 });
 
 test("master users retain every platform, workspace, and growth route", () => {
@@ -110,20 +117,47 @@ test("master users retain every platform, workspace, and growth route", () => {
   assert.ok(!itemLabels.includes("Account Workspace"));
 });
 
-test("feature-gated items remain hidden unless explicitly enabled", () => {
-  const baseline = buildAppNavigation({
+test("feature-gated modules appear only when explicitly enabled", () => {
+  const enabledFeatures = new Set([
+    NAVIGATION_FEATURES.marketIntelligence,
+    NAVIGATION_FEATURES.adStudio,
+    NAVIGATION_FEATURES.videoStudio,
+  ]);
+  const groups = buildAppNavigation({
     activeAccountId: "account-123",
-    canManageActiveAccount: true,
-    isMaster: true,
+    canManageActiveAccount: false,
+    isMaster: false,
+    enabledFeatures,
   });
-  const withFeatures = buildAppNavigation({
-    activeAccountId: "account-123",
-    canManageActiveAccount: true,
-    isMaster: true,
-    enabledFeatures: new Set(["future-feature"]),
+  const itemLabels = labels(groups);
+
+  assert.ok(groups.some((group) => group.label === "Research"));
+  assert.ok(itemLabels.includes("Market Intelligence"));
+  assert.ok(itemLabels.includes("Ad Studio"));
+  assert.ok(itemLabels.includes("Video Studio"));
+});
+
+test("navigation feature environment values are parsed conservatively", () => {
+  const enabled = getEnabledNavigationFeatures({
+    marketIntelligence: "true",
+    adStudio: "1",
+    videoStudio: "yes",
+  });
+  const disabled = getEnabledNavigationFeatures({
+    marketIntelligence: "false",
+    adStudio: "0",
+    videoStudio: "off",
   });
 
-  assert.deepEqual(labels(withFeatures), labels(baseline));
+  assert.deepEqual(
+    [...enabled].sort(),
+    [
+      NAVIGATION_FEATURES.adStudio,
+      NAVIGATION_FEATURES.marketIntelligence,
+      NAVIGATION_FEATURES.videoStudio,
+    ].sort(),
+  );
+  assert.equal(disabled.size, 0);
 });
 
 test("active path helpers support nested routes independent of group labels", () => {
