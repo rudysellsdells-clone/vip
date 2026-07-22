@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AssetTitleLink } from "@/components/assets/AssetTitleLink";
 import { RemoveAssetButton } from "@/components/assets/RemoveAssetButton";
+import { CampaignWorkspaceProgress } from "@/components/campaigns/CampaignWorkspaceProgress";
 import { DeleteCampaignButton } from "@/components/campaigns/DeleteCampaignButton";
 import { OneOffStrategyApprovalPanel } from "@/components/campaigns/OneOffStrategyApprovalPanel";
 import { StartLumaYoutubeVideoButton } from "@/components/campaigns/StartLumaYoutubeVideoButton";
@@ -15,6 +16,7 @@ import {
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
 import { getAccountAccessForUser } from "@/lib/accounts/account-context";
+import { buildCampaignWorkspaceState } from "@/lib/campaigns/campaign-workspace";
 import {
   computeOneOffStrategySourceSignature,
   extractOneOffStrategyGate,
@@ -120,18 +122,35 @@ export default async function CampaignDetailPage({ params }: PageProps) {
       strategyGate.sourceSignature !== computeOneOffStrategySourceSignature(campaign),
   );
   const strategyApproved = Boolean(strategyGate?.status === "approved" && !strategyStale);
+  const campaignWorkspace = buildCampaignWorkspaceState({
+    strategyApproved,
+    strategyStale,
+    assetCount: assets.length,
+    needsReviewCount: needsReview,
+    approvedAssetCount: approved,
+    executedAssetCount: executed,
+  });
 
   return (
     <WebsitePage>
       <WebsiteHero
-        eyebrow="Campaign Detail"
+        eyebrow="Campaign Workspace"
         title={campaign.name}
         description={campaign.idea}
-        primaryAction={{ label: "Review Assets", href: "/approvals" }}
+        primaryAction={{
+          label: campaignWorkspace.nextAction.label,
+          href: campaignWorkspace.nextAction.href,
+        }}
         secondaryAction={{ label: "All Campaigns", href: "/campaigns" }}
       />
 
       <section className={websiteStyles.metricsGrid}>
+        <WebsiteMetric
+          label="Workspace Progress"
+          value={`${campaignWorkspace.progressPercent}%`}
+          description={`${campaignWorkspace.completedStageCount} of ${campaignWorkspace.stages.length} workflow stages complete.`}
+          dot={campaignWorkspace.progressPercent === 100 ? "green" : "blue"}
+        />
         <WebsiteMetric
           label="Assets"
           value={assets.length}
@@ -158,76 +177,83 @@ export default async function CampaignDetailPage({ params }: PageProps) {
         />
       </section>
 
-      <WebsiteSection
-        eyebrow="Marketing Spine"
-        title="Approve the campaign strategy before generating assets"
-        description="Review and approve the campaign strategy before generating assets. Approved strategy and verified facts guide every asset in this campaign."
-      >
-        <OneOffStrategyApprovalPanel
-          campaignId={campaign.id}
-          initialGate={strategyGate}
-          initialStale={strategyStale}
-          hasAssets={assets.length > 0}
-        />
-      </WebsiteSection>
+      <CampaignWorkspaceProgress workspace={campaignWorkspace} />
+
+      <div id="strategy" className="scroll-mt-24">
+        <WebsiteSection
+          eyebrow="Marketing Spine"
+          title="Approve the campaign strategy before generating assets"
+          description="Review and approve the campaign strategy before generating assets. Approved strategy and verified facts guide every asset in this campaign."
+        >
+          <OneOffStrategyApprovalPanel
+            campaignId={campaign.id}
+            initialGate={strategyGate}
+            initialStale={strategyStale}
+            hasAssets={assets.length > 0}
+          />
+        </WebsiteSection>
+      </div>
 
       <section className={websiteStyles.twoColumn}>
-        <WebsiteSection
-          eyebrow="One-Off Campaign Brief"
-          title="Campaign strategy inputs"
-          description="These original inputs inform the private strategy draft. After approval, public assets are generated from the approved Marketing Spine and verified facts rather than the raw settings fields."
-        >
-          <div className={websiteStyles.cardGrid}>
+        <div id="brief" className="scroll-mt-24">
+          <WebsiteSection
+            eyebrow="One-Off Campaign Brief"
+            title="Campaign strategy inputs"
+            description="These original inputs inform the private strategy draft. After approval, public assets are generated from the approved Marketing Spine and verified facts rather than the raw settings fields."
+          >
+            <div className={websiteStyles.cardGrid}>
+              <article className={websiteStyles.card}>
+                <h3 className={websiteStyles.cardTitle}>Buyer and audience</h3>
+                <p className={websiteStyles.cardText}>
+                  <strong>Buyer segment:</strong> {campaign.buyer_segment ?? "Not specified"}
+                </p>
+                <p className={websiteStyles.cardText}>
+                  <strong>Audience:</strong> {campaign.audience ?? "Not specified"}
+                </p>
+              </article>
+
+              <article className={websiteStyles.card}>
+                <h3 className={websiteStyles.cardTitle}>Goal and CTA</h3>
+                <p className={websiteStyles.cardText}>
+                  <strong>Goal:</strong> {campaign.goal ?? "Not specified"}
+                </p>
+                <p className={websiteStyles.cardText}>
+                  <strong>CTA:</strong> {campaign.cta ?? "Not specified"}
+                </p>
+              </article>
+            </div>
+          </WebsiteSection>
+        </div>
+
+        <div id="execution" className="scroll-mt-24">
+          <WebsiteSection
+            eyebrow="Status"
+            title="Campaign execution controls"
+            description="The approved Marketing Spine unlocks asset and video generation. Approved assets can then move into publishing, sending, or export workflows."
+          >
             <article className={websiteStyles.card}>
-              <h3 className={websiteStyles.cardTitle}>Buyer and audience</h3>
+              <WebsiteBadge status={campaign.status} />
               <p className={websiteStyles.cardText}>
-                <strong>Buyer segment:</strong> {campaign.buyer_segment ?? "Not specified"}
+                Created {formatDate(campaign.created_at)}. Updated {formatDate(campaign.updated_at)}.
               </p>
-              <p className={websiteStyles.cardText}>
-                <strong>Audience:</strong> {campaign.audience ?? "Not specified"}
-              </p>
+              {campaign.notes ? <p className={websiteStyles.cardText}>{campaign.notes}</p> : null}
             </article>
 
-            <article className={websiteStyles.card}>
-              <h3 className={websiteStyles.cardTitle}>Goal and CTA</h3>
-              <p className={websiteStyles.cardText}>
-                <strong>Goal:</strong> {campaign.goal ?? "Not specified"}
-              </p>
-              <p className={websiteStyles.cardText}>
-                <strong>CTA:</strong> {campaign.cta ?? "Not specified"}
-              </p>
-            </article>
-          </div>
-
-        </WebsiteSection>
-
-        <WebsiteSection
-          eyebrow="Status"
-          title="One-off campaign controls"
-          description="The approved Marketing Spine unlocks asset and video generation. You can also remove the campaign if it was created by mistake."
-        >
-          <article className={websiteStyles.card}>
-            <WebsiteBadge status={campaign.status} />
-            <p className={websiteStyles.cardText}>
-              Created {formatDate(campaign.created_at)}. Updated {formatDate(campaign.updated_at)}.
-            </p>
-            {campaign.notes ? <p className={websiteStyles.cardText}>{campaign.notes}</p> : null}
-          </article>
-
-          <div className={websiteStyles.actionRow}>
-            {strategyApproved ? (
-              <StartLumaYoutubeVideoButton campaignId={campaign.id} />
-            ) : (
-              <p className={websiteStyles.cardMeta}>
-                Approve the Marketing Spine before creating campaign video outputs.
-              </p>
-            )}
-            <DeleteCampaignButton
-              campaignId={campaign.id}
-              campaignName={campaign.name}
-            />
-          </div>
-        </WebsiteSection>
+            <div className={websiteStyles.actionRow}>
+              {strategyApproved ? (
+                <StartLumaYoutubeVideoButton campaignId={campaign.id} />
+              ) : (
+                <p className={websiteStyles.cardMeta}>
+                  Approve the Marketing Spine before creating campaign video outputs.
+                </p>
+              )}
+              <DeleteCampaignButton
+                campaignId={campaign.id}
+                campaignName={campaign.name}
+              />
+            </div>
+          </WebsiteSection>
+        </div>
       </section>
 
       <WebsiteSection
@@ -287,51 +313,53 @@ export default async function CampaignDetailPage({ params }: PageProps) {
         )}
       </WebsiteSection>
 
-      <WebsiteSection
-        eyebrow="Asset Pack"
-        title="Generated assets"
-        description="Open each asset by clicking its title, then review, revise, approve, and execute the version you trust."
-      >
-        {assets.length ? (
-          <div className={websiteStyles.cardGrid}>
-            {assets.map((asset) => (
-              <article key={asset.id} className={websiteStyles.card}>
-                <div className="flex flex-wrap items-center gap-2">
-                  <WebsiteBadge status={asset.status} />
-                  <span className={websiteStyles.badge}>{asset.asset_type}</span>
-                </div>
+      <div id="assets" className="scroll-mt-24">
+        <WebsiteSection
+          eyebrow="Asset Pack"
+          title="Generate, review, and activate campaign assets"
+          description="Open each asset by clicking its title, then review, revise, approve, and execute the version you trust."
+        >
+          {assets.length ? (
+            <div className={websiteStyles.cardGrid}>
+              {assets.map((asset) => (
+                <article key={asset.id} className={websiteStyles.card}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <WebsiteBadge status={asset.status} />
+                    <span className={websiteStyles.badge}>{asset.asset_type}</span>
+                  </div>
 
-                <h3 className={websiteStyles.cardTitle} style={{ marginTop: 16 }}>
-                  <AssetTitleLink
-                    assetId={asset.id}
-                    title={asset.title ?? asset.asset_type}
-                    className="text-slate-950 underline-offset-4 transition hover:text-[#0b4a7a] hover:underline"
-                  />
-                </h3>
+                  <h3 className={websiteStyles.cardTitle} style={{ marginTop: 16 }}>
+                    <AssetTitleLink
+                      assetId={asset.id}
+                      title={asset.title ?? asset.asset_type}
+                      className="text-slate-950 underline-offset-4 transition hover:text-[#0b4a7a] hover:underline"
+                    />
+                  </h3>
 
-                <p className={websiteStyles.cardMeta}>
-                  Version {asset.version} • {formatDate(asset.created_at)}
-                </p>
+                  <p className={websiteStyles.cardMeta}>
+                    Version {asset.version} • {formatDate(asset.created_at)}
+                  </p>
 
-                <p className={websiteStyles.cardText}>
-                  {String(asset.content).slice(0, 220)}...
-                </p>
+                  <p className={websiteStyles.cardText}>
+                    {String(asset.content).slice(0, 220)}...
+                  </p>
 
-                <div className={websiteStyles.actionRow}>
-                  <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
-                    Open asset →
-                  </Link>
-                  <RemoveAssetButton assetId={asset.id} assetTitle={asset.title} compact />
-                </div>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <div className={websiteStyles.empty}>
-            No assets generated yet. Use the Generate Asset Pack button above.
-          </div>
-        )}
-      </WebsiteSection>
+                  <div className={websiteStyles.actionRow}>
+                    <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
+                      Open asset →
+                    </Link>
+                    <RemoveAssetButton assetId={asset.id} assetTitle={asset.title} compact />
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className={websiteStyles.empty}>
+              No assets generated yet. Use the Generate Asset Pack button in the Marketing Spine section above.
+            </div>
+          )}
+        </WebsiteSection>
+      </div>
     </WebsitePage>
   );
 }
