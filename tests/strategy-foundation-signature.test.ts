@@ -113,3 +113,24 @@ test("approval signature changes for campaign or foundation edits", () => {
   assert.notEqual(baseline, changedCampaign);
   assert.notEqual(baseline, changedFoundation);
 });
+
+test("approval signature changes when approved market intelligence changes", () => {
+  const foundationSignature = computeStrategyFoundationSignature(foundation());
+  const baseline = computeStrategyApprovalSourceSignature({
+    campaignSourceSignature: "campaign-a",
+    foundationSignature,
+    marketIntelligenceSignature: "intelligence-a",
+  });
+  const changedIntelligence = computeStrategyApprovalSourceSignature({
+    campaignSourceSignature: "campaign-a",
+    foundationSignature,
+    marketIntelligenceSignature: "intelligence-b",
+  });
+  const intelligenceDisabled = computeStrategyApprovalSourceSignature({
+    campaignSourceSignature: "campaign-a",
+    foundationSignature,
+  });
+
+  assert.notEqual(baseline, changedIntelligence);
+  assert.notEqual(baseline, intelligenceDisabled);
+});
