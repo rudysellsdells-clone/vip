@@ -13,6 +13,8 @@ import {
   normalizeOneOffCampaignForPrompt,
   ONE_OFF_STRATEGY_GATE_VERSION,
 } from "@/lib/content-generation/one-off-strategy-gate";
+import { getApprovedStrategyFoundation } from "@/lib/strategy/get-approved-strategy-foundation";
+import { mergeStrategyFoundationIntoCloneContext } from "@/lib/strategy/strategy-foundation-clone-context";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 import { createCampaignSchema } from "@/lib/validation/campaignSchemas";
@@ -108,10 +110,17 @@ export async function POST(request: Request) {
     const normalizedCampaign = normalizeOneOffCampaignForPrompt(sourceCampaign);
     const sourceSignature =
       computeOneOffStrategySourceSignature(sourceCampaign);
-    const cloneContext = await loadDigitalCloneContext(
-      user.id,
-      activeAccountId,
-    );
+    const [foundation, legacyCloneContext] = await Promise.all([
+      getApprovedStrategyFoundation({
+        supabase,
+        accountId: activeAccountId,
+      }),
+      loadDigitalCloneContext(user.id, activeAccountId),
+    ]);
+    const cloneContext = mergeStrategyFoundationIntoCloneContext({
+      foundation,
+      cloneContext: legacyCloneContext,
+    });
     const intelligence = buildCampaignIntelligenceContext({
       campaign: normalizedCampaign,
       cloneContext,
@@ -132,6 +141,9 @@ export async function POST(request: Request) {
       generatedAt,
       intelligenceReadinessScore: intelligence.brief.readinessScore,
       intelligenceMissingElements: intelligence.brief.missingElements,
+      strategyFoundationVersion: foundation.version,
+      strategyFoundationReadinessScore: foundation.readiness.score,
+      strategyFoundationMissingElements: foundation.readiness.missing,
       strategyEngine: generated.diagnostics,
     });
   } catch (error) {
