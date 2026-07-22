@@ -46,12 +46,17 @@ export function computeStrategyFoundationSignature(
 export function computeStrategyApprovalSourceSignature({
   campaignSourceSignature,
   foundationSignature,
+  marketIntelligenceSignature,
 }: {
   campaignSourceSignature: string;
   foundationSignature: string;
+  marketIntelligenceSignature?: string | null;
 }) {
   return sha256({
     campaignSourceSignature,
     foundationSignature,
+    ...(marketIntelligenceSignature
+      ? { marketIntelligenceSignature }
+      : {}),
   });
 }
