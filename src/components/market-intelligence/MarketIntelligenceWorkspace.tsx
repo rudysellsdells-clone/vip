@@ -186,8 +186,10 @@ function FindingForm({
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
-    const payload = Object.fromEntries(data.entries());
-    payload.sourceIds = data.getAll("sourceIds");
+    const payload = {
+      ...Object.fromEntries(data.entries()),
+      sourceIds: data.getAll("sourceIds"),
+    };
     setMessage("Saving finding...");
 
     const response = await fetch("/api/market-intelligence/findings", {
