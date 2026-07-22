@@ -17,6 +17,12 @@ function stableValue(value: unknown): unknown {
   return value;
 }
 
+function sha256(value: unknown) {
+  return createHash("sha256")
+    .update(JSON.stringify(stableValue(value)))
+    .digest("hex");
+}
+
 export function strategyFoundationSignaturePayload(
   foundation: StrategyFoundation,
 ) {
@@ -34,9 +40,18 @@ export function strategyFoundationSignaturePayload(
 export function computeStrategyFoundationSignature(
   foundation: StrategyFoundation,
 ) {
-  const payload = stableValue(strategyFoundationSignaturePayload(foundation));
+  return sha256(strategyFoundationSignaturePayload(foundation));
+}
 
-  return createHash("sha256")
-    .update(JSON.stringify(payload))
-    .digest("hex");
+export function computeStrategyApprovalSourceSignature({
+  campaignSourceSignature,
+  foundationSignature,
+}: {
+  campaignSourceSignature: string;
+  foundationSignature: string;
+}) {
+  return sha256({
+    campaignSourceSignature,
+    foundationSignature,
+  });
 }
