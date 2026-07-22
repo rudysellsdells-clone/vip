@@ -1,9 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { getUserAccountContext } from "@/lib/accounts/account-context";
-import { getApprovedStrategyFoundation } from "@/lib/strategy/get-approved-strategy-foundation";
-import { createClient } from "@/lib/supabase/server";
-import { untypedSupabase } from "@/lib/supabase/untyped";
 import {
   WebsiteBadge,
   WebsiteHero,
@@ -12,88 +7,94 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
+import { getApprovedStrategyFoundation } from "@/lib/strategy/get-approved-strategy-foundation";
+import { requireStrategyWorkspace } from "@/lib/strategy/require-strategy-workspace";
 
-function display(value: string | null | undefined) {
-  return value?.trim() || "Not set";
-}
-
-function SummaryCard({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <article className={websiteStyles.card}>
-      <h3 className={websiteStyles.cardTitle}>{title}</h3>
-      <p className={websiteStyles.cardText}>{description}</p>
-      <div className="mt-4 space-y-3">{children}</div>
-    </article>
-  );
-}
-
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-      <p className="text-[0.68rem] font-black uppercase tracking-[0.14em] text-slate-500">
-        {label}
-      </p>
-      <p className="mt-1 whitespace-pre-line text-sm font-semibold leading-6 text-slate-900">
-        {display(value)}
-      </p>
-    </div>
-  );
-}
-
-function ItemList({ items, empty }: { items: string[]; empty: string }) {
-  if (!items.length) {
-    return <p className="text-sm text-slate-500">{empty}</p>;
+function missingItemHref(item: string) {
+  const normalized = item.toLowerCase();
+  if (normalized.includes("voice") || normalized.includes("rule")) {
+    return "/strategy/brand-voice";
   }
-
-  return (
-    <ul className="space-y-2">
-      {items.map((item) => (
-        <li
-          key={item}
-          className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800"
-        >
-          {item}
-        </li>
-      ))}
-    </ul>
-  );
+  if (normalized.includes("service") || normalized.includes("offer") || normalized.includes("differentiator")) {
+    return "/strategy/offerings";
+  }
+  if (normalized.includes("audience")) return "/strategy/audiences";
+  if (normalized.includes("knowledge") || normalized.includes("example")) {
+    return "/strategy/knowledge";
+  }
+  return "/strategy/business-truth";
 }
 
 export default async function StrategyFoundationPage() {
-  const supabase = untypedSupabase(await createClient());
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
-
-  const accountContext = await getUserAccountContext({ supabase, userId: user.id });
-  const activeAccountId = accountContext.activeAccountId;
-
-  if (!activeAccountId) redirect("/accounts");
-
+  const workspace = await requireStrategyWorkspace();
   const foundation = await getApprovedStrategyFoundation({
-    supabase,
-    accountId: activeAccountId,
+    supabase: workspace.supabase,
+    accountId: workspace.accountId,
   });
-  const accountWorkspaceUrl = `/accounts/${activeAccountId}`;
-  const sourceCount = foundation.sources.reduce((total, source) => total + source.count, 0);
+  const sourceCount = foundation.sources.reduce(
+    (total, source) => total + source.count,
+    0,
+  );
+
+  const areas = [
+    {
+      label: "Business Truth",
+      description: "Company identity, website, CTA, geography, logo, and durable business facts.",
+      value: foundation.businessTruth.companyName ? "Established" : "Needs work",
+      status: foundation.businessTruth.companyName ? "approved" : "needs_review",
+      href: "/strategy/business-truth",
+    },
+    {
+      label: "Brand Voice",
+      description: "Voice, business framing, audience understanding, offers, and sales outcomes.",
+      value: foundation.brandExpression.voiceSummary ? "Established" : "Needs work",
+      status: foundation.brandExpression.voiceSummary ? "approved" : "needs_review",
+      href: "/strategy/brand-voice",
+    },
+    {
+      label: "Offerings",
+      description: "Service lines, offers, outcomes, package notes, and calls-to-action.",
+      value: `${foundation.market.serviceLines.length} services · ${foundation.market.offers.length} offers`,
+      status: foundation.market.serviceLines.length && foundation.market.offers.length ? "approved" : "needs_review",
+      href: "/strategy/offerings",
+    },
+    {
+      label: "Audiences",
+      description: "Buyer groups, pain points, desired outcomes, and objections.",
+      value: `${foundation.market.audiences.length} active`,
+      status: foundation.market.audiences.length ? "approved" : "needs_review",
+      href: "/strategy/audiences",
+    },
+    {
+      label: "Messaging & Proof",
+      description: "Differentiators, proof context, sales outcomes, and approved evidence.",
+      value: foundation.campaignDefaults.proofPoints ? "Available" : "Needs work",
+      status: foundation.campaignDefaults.proofPoints ? "approved" : "needs_review",
+      href: "/strategy/messaging-proof",
+    },
+    {
+      label: "Brand Rules",
+      description: "Prioritized voice, behavior, positioning, and safety guardrails.",
+      value: `${foundation.brandExpression.rules.length} active`,
+      status: foundation.brandExpression.rules.length ? "approved" : "needs_review",
+      href: "/strategy/brand-rules",
+    },
+    {
+      label: "Knowledge",
+      description: "Documents, business sources, testimonials, and approved examples.",
+      value: `${foundation.evidence.knowledgeSources.length} sources · ${foundation.evidence.approvedExamples.length} examples`,
+      status: foundation.evidence.knowledgeSources.length || foundation.evidence.approvedExamples.length ? "approved" : "needs_review",
+      href: "/strategy/knowledge",
+    },
+  ] as const;
 
   return (
     <WebsitePage>
       <WebsiteHero
-        eyebrow="Strategy Foundation"
+        eyebrow="Strategy Workspace"
         title={`${foundation.accountName} strategy source of truth`}
-        description="This is the approved account-level foundation VIP should inherit before campaign-specific decisions are added. It composes existing account data without replacing or rewriting the original records."
-        primaryAction={{ label: "Manage Account Strategy", href: `${accountWorkspaceUrl}#strategy` }}
+        description="Manage the approved account-level information VIP should inherit before campaign-specific decisions are added."
+        primaryAction={{ label: "Edit Business Truth", href: "/strategy/business-truth" }}
         secondaryAction={{ label: "Create Campaign", href: "/campaigns" }}
       />
 
@@ -109,204 +110,103 @@ export default async function StrategyFoundationPage() {
           value={foundation.market.serviceLines.length}
           description="Active service lines available to campaigns."
           dot={foundation.market.serviceLines.length ? "green" : "red"}
-          href={`${accountWorkspaceUrl}#strategy`}
+          href="/strategy/offerings"
         />
         <WebsiteMetric
           label="Audiences"
           value={foundation.market.audiences.length}
-          description="Active buyer segments available to campaigns."
+          description="Active buyer groups available to campaigns."
           dot={foundation.market.audiences.length ? "green" : "red"}
-          href={`${accountWorkspaceUrl}#strategy`}
+          href="/strategy/audiences"
         />
         <WebsiteMetric
           label="Offers"
           value={foundation.market.offers.length}
           description="Active offers available to campaigns."
           dot={foundation.market.offers.length ? "green" : "red"}
-          href={`${accountWorkspaceUrl}#strategy`}
+          href="/strategy/offerings"
         />
         <WebsiteMetric
           label="Source Records"
           value={sourceCount}
           description="Current records contributing to this foundation."
           dot="blue"
+          href="/strategy/knowledge"
         />
       </section>
 
-      {!foundation.readiness.campaignReady || foundation.readiness.missing.length ? (
+      {foundation.readiness.missing.length ? (
         <WebsiteSection
           eyebrow="Foundation Gaps"
           title="Complete the missing source-of-truth fields"
-          description="VIP can continue using safe fallbacks, but completing these items gives campaign generation stronger, more specific guidance."
+          description="Open the corresponding Strategy tab to strengthen campaign defaults and generation context."
         >
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {foundation.readiness.missing.map((item) => (
-              <div
+              <Link
                 key={item}
-                className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm font-bold text-amber-950"
+                href={missingItemHref(item)}
+                className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm font-bold text-amber-950 no-underline hover:border-amber-300 hover:bg-amber-100"
               >
-                {item}
-              </div>
+                {item} →
+              </Link>
             ))}
-          </div>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Link href={`${accountWorkspaceUrl}#brand-profile`} className={websiteStyles.link}>
-              Update Brand Profile →
-            </Link>
-            <Link href={`${accountWorkspaceUrl}#strategy`} className={websiteStyles.link}>
-              Update Services, Audiences, and Offers →
-            </Link>
           </div>
         </WebsiteSection>
       ) : null}
 
       <WebsiteSection
-        eyebrow="Approved Foundation"
-        title="Business truth and brand expression"
-        description="These account-owned facts establish who the business is and how VIP should represent it."
+        eyebrow="Workspace Areas"
+        title="One home for account strategy"
+        description="Each area remains independently editable while contributing to the same approved foundation used by campaigns."
       >
         <div className={websiteStyles.cardGrid}>
-          <SummaryCard
-            title="Business Truth"
-            description="Stable company information that should not be silently overwritten by research or campaign prompts."
-          >
-            <Fact label="Company" value={foundation.businessTruth.companyName} />
-            <Fact label="Website" value={foundation.businessTruth.websiteUrl} />
-            <Fact label="Primary CTA" value={foundation.businessTruth.primaryCta} />
-            <Fact label="Phone" value={foundation.businessTruth.phone} />
-            <Fact
-              label="Service Areas"
-              value={foundation.businessTruth.serviceAreas.join(", ")}
-            />
-          </SummaryCard>
-
-          <SummaryCard
-            title="Brand Expression"
-            description="Voice, visual direction, and explicit rules used to shape audience-facing content."
-          >
-            <Fact label="Tone" value={foundation.brandExpression.tone} />
-            <Fact label="Voice Summary" value={foundation.brandExpression.voiceSummary} />
-            <Fact
-              label="Brand Colors"
-              value={foundation.brandExpression.brandColors.join(", ")}
-            />
-            <Fact
-              label="Approved Hashtags"
-              value={foundation.brandExpression.approvedHashtags.join(" ")}
-            />
-            <Fact label="Brand Notes" value={foundation.brandExpression.notes} />
-          </SummaryCard>
-
-          <SummaryCard
-            title="Brand Rules"
-            description="Active guardrails that generation and quality review should honor."
-          >
-            {foundation.brandExpression.rules.length ? (
-              foundation.brandExpression.rules.map((rule) => (
-                <div
-                  key={`${rule.category}-${rule.text}`}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-3"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <WebsiteBadge status={rule.category} />
-                    {rule.priority !== null ? (
-                      <span className="text-xs font-bold text-slate-500">
-                        Priority {rule.priority}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="mt-2 text-sm font-semibold leading-6 text-slate-800">
-                    {rule.text}
-                  </p>
-                </div>
-              ))
-            ) : (
-              <p className="text-sm text-slate-500">No active brand rules found.</p>
-            )}
-          </SummaryCard>
-        </div>
-      </WebsiteSection>
-
-      <WebsiteSection
-        eyebrow="Structured Market Strategy"
-        title="What the account sells and who it serves"
-        description="These structured records take priority over older comma-separated text when campaign dropdowns and defaults are created."
-      >
-        <div className={websiteStyles.cardGrid}>
-          <SummaryCard
-            title="Service Lines"
-            description="The active services VIP can build demand around."
-          >
-            <ItemList
-              items={foundation.market.serviceLines.map((item) =>
-                [item.name, item.primaryOutcome].filter(Boolean).join(" — "),
-              )}
-              empty="No structured service lines found."
-            />
-          </SummaryCard>
-          <SummaryCard
-            title="Audiences"
-            description="The active buyer groups VIP should write for."
-          >
-            <ItemList
-              items={foundation.market.audiences.map((item) =>
-                [item.name, item.description].filter(Boolean).join(" — "),
-              )}
-              empty="No structured audiences found."
-            />
-          </SummaryCard>
-          <SummaryCard
-            title="Offers"
-            description="The active offers and calls-to-action VIP can promote."
-          >
-            <ItemList
-              items={foundation.market.offers.map((item) =>
-                [item.name, item.primaryCta].filter(Boolean).join(" — "),
-              )}
-              empty="No structured offers found."
-            />
-          </SummaryCard>
+          {areas.map((area) => (
+            <article key={area.href} className={websiteStyles.card}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <WebsiteBadge status={area.status} />
+                <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">
+                  {area.value}
+                </span>
+              </div>
+              <h3 className={websiteStyles.cardTitle}>{area.label}</h3>
+              <p className={websiteStyles.cardText}>{area.description}</p>
+              <div className="mt-4">
+                <Link href={area.href} className={websiteStyles.link}>
+                  Open {area.label} →
+                </Link>
+              </div>
+            </article>
+          ))}
         </div>
       </WebsiteSection>
 
       <WebsiteSection
         eyebrow="Campaign Inheritance"
-        title="Defaults VIP will carry into a new campaign"
-        description="Campaign-specific decisions may refine these values, but the builder should start here instead of asking the user to recreate account strategy."
+        title="Defaults VIP carries into a new campaign"
+        description="Campaign-specific decisions may refine these values, but the builder starts from this approved account foundation."
       >
         <div className={websiteStyles.cardGrid}>
-          <SummaryCard
-            title="Audience and Offer"
-            description="The first active structured records are used as safe defaults until a campaign selection is made."
-          >
-            <Fact label="Default Audience" value={foundation.campaignDefaults.targetAudience} />
-            <Fact label="Default Offer" value={foundation.campaignDefaults.primaryOffer} />
-            <Fact label="Default CTA" value={foundation.campaignDefaults.callToAction} />
-          </SummaryCard>
-          <SummaryCard
-            title="Voice and Differentiation"
-            description="The approved account voice and strongest available outcome guide the campaign angle."
-          >
-            <Fact label="Tone" value={foundation.campaignDefaults.tone} />
-            <Fact
-              label="Differentiator"
-              value={foundation.campaignDefaults.differentiator}
-            />
-            <Fact label="Proof Context" value={foundation.campaignDefaults.proofPoints} />
-          </SummaryCard>
-          <SummaryCard
-            title="Business Context"
-            description="Private source context supplied to generation without being copied verbatim into public content."
-          >
-            <Fact label="Foundation Context" value={foundation.campaignDefaults.businessContext} />
-          </SummaryCard>
+          {[
+            ["Default Audience", foundation.campaignDefaults.targetAudience],
+            ["Default Offer", foundation.campaignDefaults.primaryOffer],
+            ["Default CTA", foundation.campaignDefaults.callToAction],
+            ["Tone", foundation.campaignDefaults.tone],
+            ["Differentiator", foundation.campaignDefaults.differentiator],
+            ["Proof Context", foundation.campaignDefaults.proofPoints],
+          ].map(([label, value]) => (
+            <article key={label} className={websiteStyles.card}>
+              <p className={websiteStyles.sectionEyebrow}>{label}</p>
+              <p className={websiteStyles.cardText}>{value || "Not established yet."}</p>
+            </article>
+          ))}
         </div>
       </WebsiteSection>
 
       <WebsiteSection
         eyebrow="Source Register"
         title="Where this strategy came from"
-        description="Every contributing source remains independently editable. The foundation composes them; it does not silently replace them."
+        description="The foundation composes account-owned records without silently replacing their source data."
       >
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {foundation.sources.map((source) => (
@@ -317,8 +217,8 @@ export default async function StrategyFoundationPage() {
                   {source.owner} owned
                 </span>
               </div>
-              <h3 className="mt-4 text-lg font-black text-slate-950">{source.label}</h3>
-              <p className="mt-2 text-sm text-slate-600">
+              <h3 className={websiteStyles.cardTitle}>{source.label}</h3>
+              <p className={websiteStyles.cardText}>
                 {source.count} contributing record{source.count === 1 ? "" : "s"}
               </p>
             </article>
