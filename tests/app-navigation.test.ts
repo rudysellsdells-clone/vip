@@ -35,6 +35,7 @@ const normalAccountRoutes = [
   "/content-repurposing",
   "/dashboard",
   "/publishing-schedule",
+  "/strategy",
 ].sort();
 
 const masterAccountRoutes = [
@@ -59,6 +60,7 @@ const masterAccountRoutes = [
   "/prospects",
   "/publishing-schedule",
   "/settings",
+  "/strategy",
   "/what-if-stories",
   "/zapier",
 ].sort();
@@ -84,8 +86,10 @@ test("normal users with an active account retain every account route without mas
   const groupLabels = groups.map((group) => group.label);
 
   assert.deepEqual(hrefs(groups), normalAccountRoutes);
+  assert.ok(groupLabels.includes("Strategy"));
   assert.ok(groupLabels.includes("Campaigns"));
   assert.ok(groupLabels.includes("Analytics"));
+  assert.ok(itemLabels.includes("Strategy Foundation"));
   assert.ok(itemLabels.includes("Account Workspace"));
   assert.ok(itemLabels.includes("All Campaigns"));
   assert.ok(itemLabels.includes("Overview"));
@@ -110,6 +114,7 @@ test("master users retain every platform, workspace, and growth route", () => {
   assert.ok(groupLabels.includes("Strategy"));
   assert.ok(groupLabels.includes("Growth"));
   assert.ok(groupLabels.includes("Platform Administration"));
+  assert.ok(itemLabels.includes("Strategy Foundation"));
   assert.ok(itemLabels.includes("Accounts"));
   assert.ok(itemLabels.includes("Media Providers"));
   assert.ok(itemLabels.includes("Prospects"));
