@@ -1,4 +1,4 @@
-import { NAVIGATION_FEATURES } from "@/lib/navigation/navigation-features";
+import { NAVIGATION_FEATURES } from "./navigation-features";
 
 export type AppNavItem = {
   label: string;
