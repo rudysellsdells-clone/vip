@@ -13,6 +13,8 @@
   --vip-gold: #f5b642;
   --vip-line: #dbe5ef;
   --vip-bg: #f6f9fc;
+  --vip-surface-radius: 7px;
+  --vip-surface-padding-min: 5px;
 }
 
 * {
@@ -57,6 +59,73 @@ input,
 textarea,
 select {
   font-size: 16px;
+}
+
+/*
+  Shared UI surface standard.
+
+  The padding rule intentionally uses :where() with zero specificity. Existing
+  component or Tailwind padding continues to win, while unpadded content boxes
+  receive a safe 5px floor. The radius rule is authoritative so legacy 12px–34px
+  cards and pill controls render with the same compact 7px corner treatment.
+*/
+:where(
+  main [class*="card"],
+  main [class*="Card"],
+  main [class*="panel"],
+  main [class*="Panel"],
+  main [class*="box"],
+  main [class*="Box"],
+  main [class*="tile"],
+  main [class*="Tile"],
+  main [class*="metric"],
+  main [class*="Metric"],
+  main [class*="section"],
+  main [class*="Section"],
+  main [class*="hero"],
+  main [class*="Hero"],
+  main [class*="frame"],
+  main [class*="Frame"],
+  main [class*="form"],
+  main [class*="Form"]
+) {
+  padding: var(--vip-surface-padding-min);
+}
+
+:where(
+  button,
+  input,
+  textarea,
+  select,
+  [class*="rounded"],
+  [class*="card"],
+  [class*="Card"],
+  [class*="panel"],
+  [class*="Panel"],
+  [class*="box"],
+  [class*="Box"],
+  [class*="tile"],
+  [class*="Tile"],
+  [class*="metric"],
+  [class*="Metric"],
+  [class*="section"],
+  [class*="Section"],
+  [class*="hero"],
+  [class*="Hero"],
+  [class*="frame"],
+  [class*="Frame"],
+  [class*="form"],
+  [class*="Form"],
+  [class*="badge"],
+  [class*="Badge"],
+  [class*="button"],
+  [class*="Button"],
+  [class*="chip"],
+  [class*="Chip"],
+  [class*="pill"],
+  [class*="Pill"]
+):not([class*="overlay"]):not([class*="Overlay"]) {
+  border-radius: var(--vip-surface-radius) !important;
 }
 
 ::selection {
