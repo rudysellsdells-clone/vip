@@ -65,29 +65,32 @@ select {
   Shared UI surface standard.
 
   The padding rule intentionally uses :where() with zero specificity. Existing
-  component or Tailwind padding continues to win, while unpadded content boxes
-  receive a safe 5px floor. The radius rule is authoritative so legacy 12px–34px
-  cards and pill controls render with the same compact 7px corner treatment.
+  component and Tailwind padding continues to win, while an otherwise unpadded
+  semantic content surface receives a safe 5px floor. Exact CSS-module local
+  names are used so labels such as sectionTitle or metricLabel are not shifted.
+
+  The radius rule is authoritative so legacy 12px–34px cards and pill controls
+  render with the same compact 7px corner treatment.
 */
 :where(
-  main [class*="card"],
+  main section,
+  main article,
+  main form,
+  main [class*="__card__"],
   main [class*="Card"],
-  main [class*="panel"],
+  main [class*="__panel__"],
   main [class*="Panel"],
-  main [class*="box"],
+  main [class*="__box__"],
   main [class*="Box"],
-  main [class*="tile"],
+  main [class*="__tile__"],
   main [class*="Tile"],
-  main [class*="metric"],
-  main [class*="Metric"],
-  main [class*="section"],
-  main [class*="Section"],
-  main [class*="hero"],
-  main [class*="Hero"],
-  main [class*="frame"],
+  main [class*="__metric__"],
+  main [class*="__hero__"],
+  main [class*="__section__"],
+  main [class*="__frame__"],
   main [class*="Frame"],
-  main [class*="form"],
-  main [class*="Form"]
+  main [class*="__empty__"],
+  main [class*="__logList__"]
 ) {
   padding: var(--vip-surface-padding-min);
 }
