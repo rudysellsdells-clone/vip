@@ -2,23 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  isStrategyWorkspacePathActive,
+  STRATEGY_WORKSPACE_TABS,
+} from "@/lib/strategy/strategy-workspace-navigation";
 import styles from "./StrategyWorkspaceNav.module.css";
-
-const tabs = [
-  { label: "Overview", href: "/strategy" },
-  { label: "Business Truth", href: "/strategy/business-truth" },
-  { label: "Brand Voice", href: "/strategy/brand-voice" },
-  { label: "Offerings", href: "/strategy/offerings" },
-  { label: "Audiences", href: "/strategy/audiences" },
-  { label: "Messaging & Proof", href: "/strategy/messaging-proof" },
-  { label: "Brand Rules", href: "/strategy/brand-rules" },
-  { label: "Knowledge", href: "/strategy/knowledge" },
-] as const;
-
-function isActive(pathname: string, href: string) {
-  if (href === "/strategy") return pathname === href;
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
 
 export function StrategyWorkspaceNav({ accountName }: { accountName: string }) {
   const pathname = usePathname();
@@ -30,8 +18,8 @@ export function StrategyWorkspaceNav({ accountName }: { accountName: string }) {
         <strong className={styles.accountName}>{accountName}</strong>
       </div>
       <nav className={styles.tabs} aria-label="Strategy workspace sections">
-        {tabs.map((tab) => {
-          const active = isActive(pathname, tab.href);
+        {STRATEGY_WORKSPACE_TABS.map((tab) => {
+          const active = isStrategyWorkspacePathActive(pathname, tab.href);
           return (
             <Link
               key={tab.href}
