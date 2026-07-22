@@ -11,6 +11,7 @@ import {
   isAppNavGroupActive,
   isAppNavPathActive,
 } from "@/lib/navigation/app-navigation";
+import { getEnabledNavigationFeatures } from "@/lib/navigation/navigation-features";
 import styles from "./SidebarNav.module.css";
 
 function Logo() {
@@ -46,14 +47,16 @@ export function SidebarNav({
 }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const enabledFeatures = useMemo(() => getEnabledNavigationFeatures(), []);
   const navGroups = useMemo(
     () =>
       buildAppNavigation({
         activeAccountId,
         canManageActiveAccount,
         isMaster,
+        enabledFeatures,
       }),
-    [activeAccountId, canManageActiveAccount, isMaster],
+    [activeAccountId, canManageActiveAccount, enabledFeatures, isMaster],
   );
   const roleLabel = isMaster
     ? "MASTER"
