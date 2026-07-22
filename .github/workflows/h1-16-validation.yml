@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - h1-16-campaign-workspace
+  pull_request:
+    branches:
+      - h1-15-market-intelligence
   workflow_dispatch:
 
 jobs:
