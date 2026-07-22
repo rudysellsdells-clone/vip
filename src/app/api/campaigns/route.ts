@@ -15,6 +15,11 @@ import {
   type OneOffStrategyGate,
 } from "@/lib/content-generation/one-off-strategy-gate";
 import { logActivity } from "@/lib/security/auditLog";
+import { getApprovedStrategyFoundation } from "@/lib/strategy/get-approved-strategy-foundation";
+import {
+  computeStrategyApprovalSourceSignature,
+  computeStrategyFoundationSignature,
+} from "@/lib/strategy/strategy-foundation-signature";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 import { createCampaignSchema } from "@/lib/validation/campaignSchemas";
@@ -38,10 +43,14 @@ function strategyEngineResolution(value: unknown) {
     offerSource: cleanText(record.offerSource, 100),
     offerCategory: cleanText(record.offerCategory, 100),
     selectedAccountOffer: cleanText(record.selectedAccountOffer, 500) || null,
-    ignoredOffers: Array.isArray(record.ignoredOffers) ? record.ignoredOffers.map((item) => cleanText(item, 500)).filter(Boolean) : [],
+    ignoredOffers: Array.isArray(record.ignoredOffers)
+      ? record.ignoredOffers.map((item) => cleanText(item, 500)).filter(Boolean)
+      : [],
     conflicts: Array.isArray(record.conflicts)
       ? record.conflicts
-          .filter((item) => item && typeof item === "object" && !Array.isArray(item))
+          .filter(
+            (item) => item && typeof item === "object" && !Array.isArray(item),
+          )
           .map((item) => {
             const conflict = item as Record<string, unknown>;
             return {
@@ -54,9 +63,13 @@ function strategyEngineResolution(value: unknown) {
           })
           .filter((item) => item.code && item.message)
       : [],
-    validationIssueCount: Math.max(0, Number(record.validationIssueCount) || 0),
+    validationIssueCount: Math.max(
+      0,
+      Number(record.validationIssueCount) || 0,
+    ),
     repairPassUsed: record.repairPassUsed === true,
-    deterministicSafeguardsUsed: record.deterministicSafeguardsUsed === true,
+    deterministicSafeguardsUsed:
+      record.deterministicSafeguardsUsed === true,
   };
 }
 
@@ -158,8 +171,18 @@ export async function POST(request: Request) {
       200,
     );
     const sourceCampaign = buildOneOffCampaignSource(input);
-    const currentSourceSignature =
+    const campaignSourceSignature =
       computeOneOffStrategySourceSignature(sourceCampaign);
+    const foundation = await getApprovedStrategyFoundation({
+      supabase,
+      accountId: activeAccountId,
+    });
+    const foundationSignature =
+      computeStrategyFoundationSignature(foundation);
+    const currentSourceSignature = computeStrategyApprovalSourceSignature({
+      campaignSourceSignature,
+      foundationSignature,
+    });
 
     if (
       !approvalConfirmed ||
@@ -198,7 +221,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            "Campaign inputs changed after the strategy was generated. Regenerate and approve the Marketing Spine before creating the campaign.",
+            "Campaign inputs or the approved Strategy Foundation changed after the Marketing Spine was generated. Regenerate and approve the strategy before creating the campaign.",
         },
         { status: 409 },
       );
@@ -244,9 +267,27 @@ export async function POST(request: Request) {
       intelligenceReadinessScore,
       intelligenceMissingElements,
     };
-    const submittedStrategyEngine = strategyEngineResolution(rawBody.strategyEngine);
+    const submittedStrategyEngine = strategyEngineResolution(
+      rawBody.strategyEngine,
+    );
     const oneOffCampaignStrategy = {
       ...buildOneOffCampaignStoredStrategy(input),
+      strategyFoundation: {
+        version: foundation.version,
+        signature: foundationSignature,
+        capturedAt: now,
+        snapshot: {
+          accountId: foundation.accountId,
+          accountName: foundation.accountName,
+          businessTruth: foundation.businessTruth,
+          brandExpression: foundation.brandExpression,
+          market: foundation.market,
+          evidence: foundation.evidence,
+          campaignDefaults: foundation.campaignDefaults,
+          readiness: foundation.readiness,
+          sources: foundation.sources,
+        },
+      },
       strategyEngine: submittedStrategyEngine,
     };
 
@@ -291,11 +332,25 @@ export async function POST(request: Request) {
         strategyStatus: gate.status,
         strategySourceSignature: gate.sourceSignature,
         strategyGenerator: gate.generator,
+        strategyFoundationVersion: foundation.version,
+        strategyFoundationSignature: foundationSignature,
+        strategyFoundationReadinessScore: foundation.readiness.score,
         strategyEngine: submittedStrategyEngine,
       }),
     });
 
-    return NextResponse.json({ campaign, strategyGate: gate }, { status: 201 });
+    return NextResponse.json(
+      {
+        campaign,
+        strategyGate: gate,
+        strategyFoundation: {
+          version: foundation.version,
+          signature: foundationSignature,
+          readinessScore: foundation.readiness.score,
+        },
+      },
+      { status: 201 },
+    );
   } catch (error) {
     if (error instanceof Error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
@@ -314,14 +369,17 @@ export async function GET() {
 
     const {
       data: { user },
-      error: userError
+      error: userError,
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const accountContext = await getUserAccountContext({ supabase, userId: user.id });
+    const accountContext = await getUserAccountContext({
+      supabase,
+      userId: user.id,
+    });
     const activeAccountId = accountContext.activeAccountId;
 
     if (!activeAccountId) {
@@ -347,7 +405,7 @@ export async function GET() {
 
     return NextResponse.json(
       { error: "Unexpected error loading campaigns." },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
