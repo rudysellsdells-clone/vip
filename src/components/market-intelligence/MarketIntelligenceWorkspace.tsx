@@ -17,23 +17,26 @@ export function MarketIntelligenceWorkspace({
   sources,
   findings,
   canManage,
+  accountName,
+  defaultGeography,
 }: {
   projects: MarketResearchProject[];
   sources: MarketResearchSource[];
   findings: MarketResearchFinding[];
   canManage: boolean;
+  accountName: string;
+  defaultGeography: string;
 }) {
   return (
     <div className="space-y-6">
       {canManage ? (
-        <div className="grid gap-5 xl:grid-cols-3">
-          <ProjectForm />
-          <SourceForm projects={projects} />
-          <FindingForm projects={projects} sources={sources} />
-        </div>
+        <AutomatedResearchForm
+          accountName={accountName}
+          defaultGeography={defaultGeography}
+        />
       ) : (
         <div className="border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-600">
-          You can review market intelligence, but only account owners and admins can add or approve research.
+          You can review market intelligence, but only account owners and admins can run or approve research.
         </div>
       )}
 
@@ -44,10 +47,10 @@ export function MarketIntelligenceWorkspace({
               Findings Queue
             </p>
             <h2 className="mt-2 text-2xl font-black text-slate-950">
-              Review market intelligence
+              Review automated market intelligence
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              Draft findings remain private research. Only approved findings are eligible to influence Strategy and campaign planning.
+              Automated scans create draft findings with cited sources. Approve only the findings that should influence Strategy and campaign planning.
             </p>
           </div>
           <span className="text-sm font-bold text-slate-500">
@@ -62,12 +65,131 @@ export function MarketIntelligenceWorkspace({
             ))
           ) : (
             <div className="border border-dashed border-slate-200 bg-slate-50 p-5 text-sm font-semibold text-slate-500 lg:col-span-2">
-              No findings yet. Start a project, add evidence, and record the first market insight.
+              No findings yet. Run an automated market scan to discover competitors, positioning gaps, search demand, and market opportunities.
             </div>
           )}
         </div>
       </section>
+
+      {canManage ? (
+        <details className="border border-slate-200 bg-white p-5 shadow-sm">
+          <summary className="cursor-pointer text-base font-black text-slate-900">
+            Advanced: add or correct research manually
+          </summary>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+            Use these tools only to add private evidence, interviews, analytics, or corrections that automated web research could not capture.
+          </p>
+          <div className="mt-5 grid gap-5 xl:grid-cols-3">
+            <ProjectForm />
+            <SourceForm projects={projects} />
+            <FindingForm projects={projects} sources={sources} />
+          </div>
+        </details>
+      ) : null}
     </div>
+  );
+}
+
+function AutomatedResearchForm({
+  accountName,
+  defaultGeography,
+}: {
+  accountName: string;
+  defaultGeography: string;
+}) {
+  const router = useRouter();
+  const [running, setRunning] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    setRunning(true);
+    setError("");
+    setMessage("Researching the web and building the market-position report...");
+
+    try {
+      const response = await fetch("/api/market-intelligence/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(Object.fromEntries(data.entries())),
+      });
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(result.error ?? "Unable to complete the market scan.");
+      }
+
+      setMessage(
+        `Market scan complete: ${result.sourceCount ?? 0} cited sources and ${result.findingCount ?? 0} reviewable findings.`,
+      );
+      router.refresh();
+    } catch (caught) {
+      setMessage("");
+      setError(caught instanceof Error ? caught.message : "Unable to complete the market scan.");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <section className="border border-blue-200 bg-[linear-gradient(135deg,#eff6ff,#ffffff_58%,#f0fdf4)] p-6 shadow-sm">
+      <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr] xl:items-start">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-700">
+            Automated Web Intelligence
+          </p>
+          <h2 className="mt-2 text-3xl font-black text-slate-950">
+            Discover where {accountName} stands in the market.
+          </h2>
+          <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-700">
+            VIP will inspect the account website, discover direct competitors, compare positioning and offers, identify search and content openings, and produce a cited report showing practical gaps this account could fill.
+          </p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            {[
+              ["1", "Discover competitors"],
+              ["2", "Compare market position"],
+              ["3", "Recommend fillable gaps"],
+            ].map(([number, label]) => (
+              <div key={number} className="border border-blue-100 bg-white/80 p-3">
+                <span className="text-xs font-black text-blue-700">STEP {number}</span>
+                <p className="mt-1 text-sm font-bold text-slate-800">{label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <form onSubmit={submit} className="space-y-4 border border-slate-200 bg-white p-5">
+          <TextArea
+            name="objective"
+            label="Research objective"
+            placeholder="Find direct competitors, market-position gaps, unmet demand, and realistic growth opportunities."
+          />
+          <Field
+            name="geography"
+            label="Target geography"
+            defaultValue={defaultGeography}
+            placeholder="Wisconsin, Midwest, United States..."
+          />
+          <TextArea
+            name="knownCompetitors"
+            label="Known competitors (optional)"
+            placeholder="Add names or websites, one per line. VIP will also discover competitors automatically."
+          />
+          <button
+            type="submit"
+            disabled={running}
+            className="w-full bg-slate-950 px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {running ? "Running Market Scan..." : "Run Automated Market Scan"}
+          </button>
+          {message ? <p className="text-xs font-semibold leading-5 text-blue-700">{message}</p> : null}
+          {error ? <p className="text-xs font-semibold leading-5 text-red-700">{error}</p> : null}
+        </form>
+      </div>
+    </section>
   );
 }
 
@@ -100,7 +222,7 @@ function ProjectForm() {
   }
 
   return (
-    <FormShell title="New research project" description="Define the market question, geography, and industry scope.">
+    <FormShell title="Manual research project" description="Define a private research scope that will not run an automated web scan.">
       <form onSubmit={submit} className="space-y-3">
         <Field name="title" label="Project title" required />
         <TextArea name="objective" label="Research objective" />
@@ -148,7 +270,7 @@ function SourceForm({ projects }: { projects: MarketResearchProject[] }) {
   }
 
   return (
-    <FormShell title="Add cited source" description="Capture where the evidence came from and when it was retrieved.">
+    <FormShell title="Add supplemental source" description="Capture private evidence, interviews, analytics, or a source the automated scan missed.">
       <form onSubmit={submit} className="space-y-3">
         <ProjectSelect projects={projects} />
         <label className="grid gap-1 text-sm font-bold text-slate-700">
@@ -210,7 +332,7 @@ function FindingForm({
   }
 
   return (
-    <FormShell title="Record a finding" description="Turn cited evidence into a typed insight that can be reviewed and approved.">
+    <FormShell title="Add or correct a finding" description="Create a supplemental insight that still requires approval before downstream use.">
       <form onSubmit={submit} className="space-y-3">
         <ProjectSelect projects={projects} />
         <label className="grid gap-1 text-sm font-bold text-slate-700">
@@ -287,7 +409,7 @@ function FindingCard({
       </div>
       <p className="mt-3 text-sm leading-6 text-slate-700">{finding.summary}</p>
       {finding.evidence ? (
-        <p className="mt-3 border-l-2 border-blue-200 pl-3 text-xs leading-5 text-slate-600">
+        <p className="mt-3 whitespace-pre-line border-l-2 border-blue-200 pl-3 text-xs leading-5 text-slate-600">
           {finding.evidence}
         </p>
       ) : null}
@@ -348,6 +470,7 @@ function Field({
   type = "text",
   min,
   max,
+  defaultValue,
 }: {
   name: string;
   label: string;
@@ -356,6 +479,7 @@ function Field({
   type?: string;
   min?: string;
   max?: string;
+  defaultValue?: string;
 }) {
   return (
     <label className="grid gap-1 text-sm font-bold text-slate-700">
@@ -367,6 +491,7 @@ function Field({
         type={type}
         min={min}
         max={max}
+        defaultValue={defaultValue}
         className="border border-slate-300 bg-white px-3 py-2"
       />
     </label>
@@ -377,15 +502,23 @@ function TextArea({
   name,
   label,
   required,
+  placeholder,
 }: {
   name: string;
   label: string;
   required?: boolean;
+  placeholder?: string;
 }) {
   return (
     <label className="grid gap-1 text-sm font-bold text-slate-700">
       {label}
-      <textarea name={name} required={required} rows={3} className="border border-slate-300 bg-white px-3 py-2" />
+      <textarea
+        name={name}
+        required={required}
+        rows={3}
+        placeholder={placeholder}
+        className="border border-slate-300 bg-white px-3 py-2"
+      />
     </label>
   );
 }
