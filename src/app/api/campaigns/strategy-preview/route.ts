@@ -15,6 +15,7 @@ import {
 } from "@/lib/content-generation/one-off-strategy-gate";
 import { getApprovedStrategyFoundation } from "@/lib/strategy/get-approved-strategy-foundation";
 import { mergeStrategyFoundationIntoCloneContext } from "@/lib/strategy/strategy-foundation-clone-context";
+import { computeStrategyFoundationSignature } from "@/lib/strategy/strategy-foundation-signature";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 import { createCampaignSchema } from "@/lib/validation/campaignSchemas";
@@ -117,6 +118,8 @@ export async function POST(request: Request) {
       }),
       loadDigitalCloneContext(user.id, activeAccountId),
     ]);
+    const strategyFoundationSignature =
+      computeStrategyFoundationSignature(foundation);
     const cloneContext = mergeStrategyFoundationIntoCloneContext({
       foundation,
       cloneContext: legacyCloneContext,
@@ -142,6 +145,8 @@ export async function POST(request: Request) {
       intelligenceReadinessScore: intelligence.brief.readinessScore,
       intelligenceMissingElements: intelligence.brief.missingElements,
       strategyFoundationVersion: foundation.version,
+      strategyFoundationSignature,
+      strategyFoundationGeneratedAt: foundation.generatedAt,
       strategyFoundationReadinessScore: foundation.readiness.score,
       strategyFoundationMissingElements: foundation.readiness.missing,
       strategyEngine: generated.diagnostics,
