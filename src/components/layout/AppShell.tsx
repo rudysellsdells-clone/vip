@@ -34,8 +34,8 @@ export function AppShell({
         platformRole={platformRole}
         isMaster={isMaster}
       />
-      <main className="mx-auto min-h-screen w-full max-w-[1540px] px-3 pb-12 pt-4 sm:px-5 lg:px-6">
-        {children}
+      <main className="min-h-screen w-full px-3 pb-12 pt-4 sm:px-5 lg:ml-[276px] lg:w-[calc(100%-276px)] lg:px-6">
+        <div className="mx-auto w-full max-w-[1540px]">{children}</div>
       </main>
     </div>
   );
