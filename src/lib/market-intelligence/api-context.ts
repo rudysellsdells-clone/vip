@@ -53,3 +53,57 @@ export async function requireMarketIntelligenceApiContext() {
     accountName: workspace.activeAccountName,
   };
 }
+
+export async function assertResearchProjectForAccount({
+  supabase,
+  accountId,
+  projectId,
+}: {
+  supabase: any;
+  accountId: string;
+  projectId: string | null;
+}) {
+  if (!projectId) return;
+
+  const { data, error } = await supabase
+    .from("market_research_projects")
+    .select("id")
+    .eq("id", projectId)
+    .eq("account_id", accountId)
+    .neq("status", "archived")
+    .maybeSingle();
+
+  if (error || !data?.id) {
+    throw new MarketIntelligenceApiError(
+      "The selected research project does not belong to the active workspace.",
+      400,
+    );
+  }
+}
+
+export async function assertResearchSourcesForAccount({
+  supabase,
+  accountId,
+  sourceIds,
+}: {
+  supabase: any;
+  accountId: string;
+  sourceIds: string[];
+}) {
+  const uniqueIds = [...new Set(sourceIds)];
+  if (!uniqueIds.length) return;
+
+  const { data, error } = await supabase
+    .from("market_research_sources")
+    .select("id")
+    .eq("account_id", accountId)
+    .eq("active", true)
+    .in("id", uniqueIds);
+
+  if (error || (data ?? []).length !== uniqueIds.length) {
+    throw new MarketIntelligenceApiError(
+      "One or more cited sources do not belong to the active workspace.",
+      400,
+    );
+  }
+}
