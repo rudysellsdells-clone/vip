@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import {
+  assertResearchProjectForAccount,
+  assertResearchSourcesForAccount,
   MarketIntelligenceApiError,
   requireMarketIntelligenceApiContext,
 } from "@/lib/market-intelligence/api-context";
@@ -32,6 +34,8 @@ export async function POST(request: Request) {
     const title = clean(body.title);
     const summary = clean(body.summary);
     const findingType = clean(body.findingType);
+    const projectId = clean(body.projectId) || null;
+    const sourceIds = stringArray(body.sourceIds);
 
     if (!title || !summary) {
       return NextResponse.json(
@@ -40,15 +44,20 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!MARKET_RESEARCH_FINDING_TYPES.includes(findingType as never)) {
+    if (!(MARKET_RESEARCH_FINDING_TYPES as readonly string[]).includes(findingType)) {
       return NextResponse.json({ error: "Invalid finding type." }, { status: 400 });
     }
+
+    await Promise.all([
+      assertResearchProjectForAccount({ supabase, accountId, projectId }),
+      assertResearchSourcesForAccount({ supabase, accountId, sourceIds }),
+    ]);
 
     const { data: finding, error } = await supabase
       .from("market_research_findings")
       .insert({
         account_id: accountId,
-        project_id: clean(body.projectId) || null,
+        project_id: projectId,
         created_by_user_id: user.id,
         finding_type: findingType,
         title,
@@ -56,7 +65,7 @@ export async function POST(request: Request) {
         evidence: clean(body.evidence) || null,
         geography: clean(body.geography) || null,
         confidence_score: score(body.confidenceScore),
-        source_ids: stringArray(body.sourceIds),
+        source_ids: sourceIds,
         status: "draft",
       })
       .select("*")
@@ -91,7 +100,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Finding ID is required." }, { status: 400 });
     }
 
-    if (!MARKET_RESEARCH_FINDING_STATUSES.includes(status as never)) {
+    if (!(MARKET_RESEARCH_FINDING_STATUSES as readonly string[]).includes(status)) {
       return NextResponse.json({ error: "Invalid finding status." }, { status: 400 });
     }
 
