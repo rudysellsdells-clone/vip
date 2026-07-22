@@ -82,8 +82,18 @@ export async function getMarketIntelligenceWorkspace({
       report: AutomatedMarketReport;
     }>;
 
+  const failedProjectIds = projectRows
+    .filter((row) => {
+      const metadata = object(row.metadata);
+      const automation = object(metadata.automation);
+      return String(automation.status ?? "") === "failed";
+    })
+    .map((row) => String(row.id ?? ""))
+    .filter(Boolean);
+
   return {
     ...workspace,
     automatedReports,
+    failedProjectIds,
   };
 }
