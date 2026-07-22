@@ -123,7 +123,19 @@ select {
   [class*="chip"],
   [class*="Chip"],
   [class*="pill"],
-  [class*="Pill"]
+  [class*="Pill"],
+  [class*="link"],
+  [class*="Link"],
+  [class*="icon"],
+  [class*="Icon"],
+  [class*="header"],
+  [class*="Header"],
+  [class*="empty"],
+  [class*="Empty"],
+  [class*="list"],
+  [class*="List"],
+  [class*="wrap"],
+  [class*="Wrap"]
 ):not([class*="overlay"]):not([class*="Overlay"]) {
   border-radius: var(--vip-surface-radius) !important;
 }
