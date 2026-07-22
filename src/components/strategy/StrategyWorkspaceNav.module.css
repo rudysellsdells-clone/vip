@@ -1,0 +1,97 @@
+.shell {
+  position: sticky;
+  top: 72px;
+  z-index: 35;
+  display: grid;
+  gap: 12px;
+  margin: 0 auto 18px;
+  max-width: 1480px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+  padding: 12px;
+  backdrop-filter: blur(16px);
+}
+
+.context {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 10px;
+  padding: 0 4px;
+}
+
+.eyebrow {
+  color: #0b4a7a;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.accountName {
+  overflow: hidden;
+  color: #0f172a;
+  font-family: var(--vip-heading-font);
+  font-size: 0.95rem;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px;
+  scrollbar-width: thin;
+}
+
+.tab {
+  flex: 0 0 auto;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: #475569;
+  font-size: 0.78rem;
+  font-weight: 850;
+  padding: 9px 11px;
+  text-decoration: none;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.tab:hover {
+  border-color: #dbe5ef;
+  background: #f8fafc;
+  color: #0b4a7a;
+}
+
+.tabActive {
+  border-color: rgba(11, 74, 122, 0.18);
+  background: rgba(11, 74, 122, 0.09);
+  color: #0b4a7a;
+}
+
+@media (max-width: 1080px) {
+  .shell {
+    top: 64px;
+  }
+}
+
+@media (max-width: 640px) {
+  .shell {
+    gap: 9px;
+    margin-bottom: 12px;
+    padding: 9px;
+  }
+
+  .context {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .tab {
+    padding: 8px 10px;
+  }
+}
