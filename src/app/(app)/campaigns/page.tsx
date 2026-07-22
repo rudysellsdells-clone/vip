@@ -23,6 +23,30 @@ import {
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
 
+type CampaignWorkspaceRow = {
+  id: string;
+  name: string;
+  idea: string;
+  buyer_segment: string | null;
+  audience: string | null;
+  goal: string | null;
+  platforms: string[] | null;
+  tone: string | null;
+  cta: string | null;
+  promoted_offer?: string | null;
+  notes: string | null;
+  strategy?: unknown;
+  service_line_id?: string | null;
+  offer_id?: string | null;
+  status: string | null;
+  updated_at: string | null;
+};
+
+type CampaignAssetStatusRow = {
+  campaign_id: string | null;
+  status: string | null;
+};
+
 function formatDate(value: string | null) {
   if (!value) return "No date";
   return new Intl.DateTimeFormat("en-US", {
@@ -70,8 +94,8 @@ export default async function CampaignsPage() {
         .is("archived_at", null),
     ]);
 
-  const campaigns = (campaignsResult.data ?? []) as Array<Record<string, any>>;
-  const assetRows = (assetsResult.data ?? []) as Array<Record<string, any>>;
+  const campaigns = (campaignsResult.data ?? []) as CampaignWorkspaceRow[];
+  const assetRows = (assetsResult.data ?? []) as CampaignAssetStatusRow[];
   const serviceLines = foundation.market.serviceLines;
   const buyerSegments = foundation.market.audiences;
   const offers = foundation.market.offers;
@@ -101,7 +125,7 @@ export default async function CampaignsPage() {
     ),
   ];
 
-  const assetsByCampaignId = new Map<string, Array<Record<string, any>>>();
+  const assetsByCampaignId = new Map<string, CampaignAssetStatusRow[]>();
   for (const asset of assetRows) {
     const campaignId = String(asset.campaign_id ?? "");
     if (!campaignId) continue;
@@ -111,7 +135,7 @@ export default async function CampaignsPage() {
   }
 
   const campaignWorkspaces = campaigns.map((campaign) => {
-    const campaignAssets = assetsByCampaignId.get(String(campaign.id)) ?? [];
+    const campaignAssets = assetsByCampaignId.get(campaign.id) ?? [];
     const needsReviewCount = campaignAssets.filter(
       (asset) => asset.status === "needs_review",
     ).length;
@@ -119,7 +143,7 @@ export default async function CampaignsPage() {
       (asset) => asset.status === "approved",
     ).length;
     const executedAssetCount = campaignAssets.filter((asset) =>
-      ["published", "sent"].includes(asset.status),
+      ["published", "sent"].includes(asset.status ?? ""),
     ).length;
     const strategyGate = extractOneOffStrategyGate(campaign.strategy);
     const strategyStale = Boolean(
