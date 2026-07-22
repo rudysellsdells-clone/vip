@@ -15,7 +15,10 @@ import {
 } from "@/lib/content-generation/one-off-strategy-gate";
 import { getApprovedStrategyFoundation } from "@/lib/strategy/get-approved-strategy-foundation";
 import { mergeStrategyFoundationIntoCloneContext } from "@/lib/strategy/strategy-foundation-clone-context";
-import { computeStrategyFoundationSignature } from "@/lib/strategy/strategy-foundation-signature";
+import {
+  computeStrategyApprovalSourceSignature,
+  computeStrategyFoundationSignature,
+} from "@/lib/strategy/strategy-foundation-signature";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 import { createCampaignSchema } from "@/lib/validation/campaignSchemas";
@@ -109,7 +112,7 @@ export async function POST(request: Request) {
 
     const sourceCampaign = buildOneOffCampaignSource(input);
     const normalizedCampaign = normalizeOneOffCampaignForPrompt(sourceCampaign);
-    const sourceSignature =
+    const campaignSourceSignature =
       computeOneOffStrategySourceSignature(sourceCampaign);
     const [foundation, legacyCloneContext] = await Promise.all([
       getApprovedStrategyFoundation({
@@ -120,6 +123,10 @@ export async function POST(request: Request) {
     ]);
     const strategyFoundationSignature =
       computeStrategyFoundationSignature(foundation);
+    const sourceSignature = computeStrategyApprovalSourceSignature({
+      campaignSourceSignature,
+      foundationSignature: strategyFoundationSignature,
+    });
     const cloneContext = mergeStrategyFoundationIntoCloneContext({
       foundation,
       cloneContext: legacyCloneContext,
