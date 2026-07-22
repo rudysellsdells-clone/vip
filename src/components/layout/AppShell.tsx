@@ -1,5 +1,6 @@
 import { SidebarNav } from "@/components/layout/SidebarNav";
 import type { AccountContextAccount } from "@/lib/accounts/account-context";
+import { getEnabledNavigationFeatures } from "@/lib/navigation/navigation-features";
 
 export function AppShell({
   children,
@@ -22,6 +23,8 @@ export function AppShell({
   platformRole: string;
   isMaster: boolean;
 }) {
+  const enabledFeatures = [...getEnabledNavigationFeatures()];
+
   return (
     <div className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top_left,rgba(11,74,122,0.07),transparent_32rem),linear-gradient(180deg,#f8fbff,#eef4f8)]">
       <SidebarNav
@@ -33,6 +36,7 @@ export function AppShell({
         canManageActiveAccount={canManageActiveAccount}
         platformRole={platformRole}
         isMaster={isMaster}
+        enabledFeatureKeys={enabledFeatures}
       />
       <main className="min-h-screen w-full px-3 pb-12 pt-4 sm:px-5 min-[1081px]:ml-[276px] min-[1081px]:w-[calc(100%_-_276px)] min-[1081px]:px-6">
         <div className="mx-auto w-full max-w-[1540px]">{children}</div>
