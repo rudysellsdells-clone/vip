@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  assertResearchProjectForAccount,
   MarketIntelligenceApiError,
   requireMarketIntelligenceApiContext,
 } from "@/lib/market-intelligence/api-context";
@@ -22,20 +23,23 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const title = clean(body.title);
     const sourceType = clean(body.sourceType) || "web";
+    const projectId = clean(body.projectId) || null;
 
     if (!title) {
       return NextResponse.json({ error: "Source title is required." }, { status: 400 });
     }
 
-    if (!MARKET_RESEARCH_SOURCE_TYPES.includes(sourceType as never)) {
+    if (!(MARKET_RESEARCH_SOURCE_TYPES as readonly string[]).includes(sourceType)) {
       return NextResponse.json({ error: "Invalid source type." }, { status: 400 });
     }
+
+    await assertResearchProjectForAccount({ supabase, accountId, projectId });
 
     const { data: source, error } = await supabase
       .from("market_research_sources")
       .insert({
         account_id: accountId,
-        project_id: clean(body.projectId) || null,
+        project_id: projectId,
         created_by_user_id: user.id,
         source_type: sourceType,
         title,
