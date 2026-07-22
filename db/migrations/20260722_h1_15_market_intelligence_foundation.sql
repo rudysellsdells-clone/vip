@@ -18,13 +18,15 @@ create table if not exists public.market_research_projects (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint market_research_projects_status_check
-    check (status in ('draft', 'active', 'complete', 'archived'))
+    check (status in ('draft', 'active', 'complete', 'archived')),
+  constraint market_research_projects_id_account_unique
+    unique (id, account_id)
 );
 
 create table if not exists public.market_research_sources (
   id uuid primary key default gen_random_uuid(),
   account_id uuid not null references public.accounts(id) on delete cascade,
-  project_id uuid references public.market_research_projects(id) on delete cascade,
+  project_id uuid,
   created_by_user_id uuid references public.profiles(id) on delete set null,
   source_type text not null default 'web',
   title text not null,
@@ -39,6 +41,10 @@ create table if not exists public.market_research_sources (
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  constraint market_research_sources_project_account_fk
+    foreign key (project_id, account_id)
+    references public.market_research_projects(id, account_id)
+    on delete cascade,
   constraint market_research_sources_type_check
     check (source_type in ('web', 'document', 'interview', 'analytics', 'manual')),
   constraint market_research_sources_credibility_check
@@ -48,7 +54,7 @@ create table if not exists public.market_research_sources (
 create table if not exists public.market_research_findings (
   id uuid primary key default gen_random_uuid(),
   account_id uuid not null references public.accounts(id) on delete cascade,
-  project_id uuid references public.market_research_projects(id) on delete cascade,
+  project_id uuid,
   created_by_user_id uuid references public.profiles(id) on delete set null,
   approved_by_user_id uuid references public.profiles(id) on delete set null,
   finding_type text not null,
@@ -64,6 +70,10 @@ create table if not exists public.market_research_findings (
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  constraint market_research_findings_project_account_fk
+    foreign key (project_id, account_id)
+    references public.market_research_projects(id, account_id)
+    on delete cascade,
   constraint market_research_findings_type_check
     check (finding_type in (
       'competitor',
