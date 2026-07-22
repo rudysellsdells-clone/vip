@@ -10,6 +10,55 @@ function labels(groups: ReturnType<typeof buildAppNavigation>) {
   return groups.flatMap((group) => group.items.map((item) => item.label));
 }
 
+function hrefs(groups: ReturnType<typeof buildAppNavigation>) {
+  return groups
+    .flatMap((group) => group.items.map((item) => item.href))
+    .sort();
+}
+
+const normalAccountRoutes = [
+  "/accounts/account-123",
+  "/actions",
+  "/analytics",
+  "/analytics/taxonomy",
+  "/approvals",
+  "/archive",
+  "/authority-content",
+  "/campaigns",
+  "/content-calendar",
+  "/content-calendar/monthly-review",
+  "/content-quality",
+  "/content-repurposing",
+  "/dashboard",
+  "/publishing-schedule",
+].sort();
+
+const masterAccountRoutes = [
+  "/accounts",
+  "/actions",
+  "/analytics",
+  "/analytics/taxonomy",
+  "/approvals",
+  "/archive",
+  "/authority-content",
+  "/brand-voice",
+  "/campaigns",
+  "/content-calendar",
+  "/content-calendar/monthly-review",
+  "/content-quality",
+  "/content-repurposing",
+  "/dashboard",
+  "/galaxyai",
+  "/knowledge",
+  "/link-builder",
+  "/opportunities",
+  "/prospects",
+  "/publishing-schedule",
+  "/settings",
+  "/what-if-stories",
+  "/zapier",
+].sort();
+
 test("normal users without an active account only see account-independent navigation", () => {
   const groups = buildAppNavigation({
     activeAccountId: null,
@@ -21,7 +70,7 @@ test("normal users without an active account only see account-independent naviga
   assert.deepEqual(labels(groups), ["Dashboard"]);
 });
 
-test("normal users with an active account see workspace navigation without master tools", () => {
+test("normal users with an active account retain every account route without master tools", () => {
   const groups = buildAppNavigation({
     activeAccountId: "account-123",
     canManageActiveAccount: false,
@@ -29,6 +78,7 @@ test("normal users with an active account see workspace navigation without maste
   });
   const itemLabels = labels(groups);
 
+  assert.deepEqual(hrefs(groups), normalAccountRoutes);
   assert.ok(itemLabels.includes("Account Workspace"));
   assert.ok(itemLabels.includes("Campaigns"));
   assert.ok(itemLabels.includes("Analytics"));
@@ -37,7 +87,7 @@ test("normal users with an active account see workspace navigation without maste
   assert.ok(!itemLabels.includes("Settings"));
 });
 
-test("master users retain platform and growth tools", () => {
+test("master users retain every platform, workspace, and growth route", () => {
   const groups = buildAppNavigation({
     activeAccountId: "account-123",
     canManageActiveAccount: true,
@@ -45,6 +95,7 @@ test("master users retain platform and growth tools", () => {
   });
   const itemLabels = labels(groups);
 
+  assert.deepEqual(hrefs(groups), masterAccountRoutes);
   assert.ok(itemLabels.includes("Accounts"));
   assert.ok(itemLabels.includes("GalaxyAI"));
   assert.ok(itemLabels.includes("Prospects"));
@@ -68,7 +119,7 @@ test("feature-gated items remain hidden unless explicitly enabled", () => {
   assert.deepEqual(labels(withFeatures), labels(baseline));
 });
 
-test("active path helpers support nested routes", () => {
+test("active path helpers support nested routes independent of group labels", () => {
   assert.equal(isAppNavPathActive("/campaigns", "/campaigns"), true);
   assert.equal(isAppNavPathActive("/campaigns/123", "/campaigns"), true);
   assert.equal(isAppNavPathActive("/campaign-tools", "/campaigns"), false);
@@ -77,7 +128,7 @@ test("active path helpers support nested routes", () => {
     activeAccountId: "account-123",
     canManageActiveAccount: false,
     isMaster: false,
-  }).find((group) => group.label === "Plan");
+  }).find((group) => group.items.some((item) => item.href === "/campaigns"));
 
   assert.ok(campaignsGroup);
   assert.equal(isAppNavGroupActive("/campaigns/123", campaignsGroup), true);
