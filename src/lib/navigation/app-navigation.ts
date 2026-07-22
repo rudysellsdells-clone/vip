@@ -93,6 +93,12 @@ export function buildAppNavigation({
       requiresAccount: true,
       items: [
         {
+          label: "Strategy Foundation",
+          href: "/strategy",
+          description: "Review the approved account strategy and campaign defaults.",
+          requiresAccount: true,
+        },
+        {
           label: "Brand Voice",
           href: "/brand-voice",
           description: "Control voice, tone, positioning, and brand rules.",
