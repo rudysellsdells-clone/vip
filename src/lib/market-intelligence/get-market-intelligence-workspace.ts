@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { AutomatedMarketReport } from "./automated-market-research";
 import {
   buildMarketIntelligenceWorkspace,
   normalizeMarketResearchFinding,
@@ -10,6 +11,12 @@ import {
 type SupabaseLike = {
   from: (table: string) => any;
 };
+
+function object(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
 
 export async function getMarketIntelligenceWorkspace({
   supabase,
@@ -44,10 +51,9 @@ export async function getMarketIntelligenceWorkspace({
     throw new Error(error.message ?? "Unable to load market intelligence.");
   }
 
-  return buildMarketIntelligenceWorkspace({
-    projects: ((projectsResult.data ?? []) as Record<string, unknown>[]).map(
-      normalizeMarketResearchProject,
-    ),
+  const projectRows = (projectsResult.data ?? []) as Record<string, unknown>[];
+  const workspace = buildMarketIntelligenceWorkspace({
+    projects: projectRows.map(normalizeMarketResearchProject),
     sources: ((sourcesResult.data ?? []) as Record<string, unknown>[]).map(
       normalizeMarketResearchSource,
     ),
@@ -55,4 +61,29 @@ export async function getMarketIntelligenceWorkspace({
       normalizeMarketResearchFinding,
     ),
   });
+
+  const automatedReports = projectRows
+    .map((row) => {
+      const metadata = object(row.metadata);
+      const report = object(metadata.automated_market_report);
+      if (!Object.keys(report).length) return null;
+
+      return {
+        projectId: String(row.id ?? ""),
+        projectTitle: String(row.title ?? "Automated market report"),
+        completedAt: row.completed_at ? String(row.completed_at) : null,
+        report: report as unknown as AutomatedMarketReport,
+      };
+    })
+    .filter(Boolean) as Array<{
+      projectId: string;
+      projectTitle: string;
+      completedAt: string | null;
+      report: AutomatedMarketReport;
+    }>;
+
+  return {
+    ...workspace,
+    automatedReports,
+  };
 }
