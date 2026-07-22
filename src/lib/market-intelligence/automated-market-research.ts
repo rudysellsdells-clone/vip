@@ -211,12 +211,9 @@ function score(value: unknown) {
 function safeUrl(value: unknown) {
   const candidate = text(value, 2000);
   if (!candidate) return "";
-
   try {
     const url = new URL(candidate);
-    return url.protocol === "http:" || url.protocol === "https:"
-      ? url.toString()
-      : "";
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : "";
   } catch {
     return "";
   }
@@ -234,7 +231,6 @@ function canonicalUrl(value: string) {
 
 function extractOutputText(responseJson: any) {
   if (typeof responseJson?.output_text === "string") return responseJson.output_text;
-
   const output = Array.isArray(responseJson?.output) ? responseJson.output : [];
   return output
     .flatMap((item: any) => (Array.isArray(item?.content) ? item.content : []))
@@ -256,9 +252,9 @@ function extractResponseSources(responseJson: any): AutomatedMarketSource[] {
         const url = safeUrl(source?.url);
         if (url) {
           sources.push({
-            title: "Web research source",
+            title: text(source?.title, 500) || "Web research source",
             url,
-            publisher: "",
+            publisher: text(source?.publisher, 300),
             summary: "",
           });
         }
@@ -311,6 +307,17 @@ function normalizeReport(
     });
   }
 
+  const allowedGapCategories = new Set([
+    "messaging",
+    "service",
+    "offer",
+    "content",
+    "search",
+    "proof",
+    "audience",
+    "geography",
+  ]);
+
   return {
     version: "1.0",
     reportTitle: text(raw?.reportTitle, 500) || "Automated market-position report",
@@ -324,25 +331,14 @@ function normalizeReport(
         strengths: list(competitor?.strengths, 6),
         weaknesses: list(competitor?.weaknesses, 6),
         notableOffers: list(competitor?.notableOffers, 6),
-        sourceUrls: list(competitor?.sourceUrls, 8)
-          .map(safeUrl)
-          .filter(Boolean),
+        sourceUrls: list(competitor?.sourceUrls, 8).map(safeUrl).filter(Boolean),
       }))
       .filter((competitor: AutomatedCompetitorAnalysis) => competitor.name)
       .slice(0, 5),
     gaps: (Array.isArray(raw?.gaps) ? raw.gaps : [])
       .map((gap: any) => ({
         title: text(gap?.title, 400),
-        category: [
-          "messaging",
-          "service",
-          "offer",
-          "content",
-          "search",
-          "proof",
-          "audience",
-          "geography",
-        ].includes(gap?.category)
+        category: allowedGapCategories.has(gap?.category)
           ? gap.category
           : "messaging",
         description: text(gap?.description, 1800),
@@ -388,13 +384,9 @@ function buildResearchPrompt({
   geography: string;
   knownCompetitors: string;
 }) {
-  const services = foundation.market.serviceLines
-    .map((item) => item.name)
-    .join(", ");
+  const services = foundation.market.serviceLines.map((item) => item.name).join(", ");
   const offers = foundation.market.offers.map((item) => item.name).join(", ");
-  const audiences = foundation.market.audiences
-    .map((item) => item.name)
-    .join(", ");
+  const audiences = foundation.market.audiences.map((item) => item.name).join(", ");
 
   return [
     "Run a concise live web study for this customer account.",
@@ -403,7 +395,7 @@ function buildResearchPrompt({
     "Return 4-8 realistic gaps the customer could fill within 3-12 months, 3-6 search-demand opportunities, and 2-4 risks.",
     "Distinguish observed facts from inference. Do not invent prices, rankings, traffic, market share, or sentiment.",
     "Use first-party company websites where possible and include supporting URLs on every competitor, gap, search item, and risk.",
-    "Keep the report executive-friendly and concise so the scan can complete quickly.",
+    "Keep the report executive-friendly and concise.",
     "",
     `Account: ${foundation.accountName}`,
     `Customer website: ${foundation.businessTruth.websiteUrl || "Not provided"}`,
@@ -431,11 +423,10 @@ function buildResearchPrompt({
 }
 
 function parseReportJson(outputText: string) {
-  const trimmed = outputText.trim();
-  const withoutFence = trimmed
+  const withoutFence = outputText
+    .trim()
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```$/, "");
-
   try {
     return JSON.parse(withoutFence);
   } catch (error) {
@@ -468,9 +459,9 @@ export async function runAutomatedMarketResearch({
   const model =
     process.env.MARKET_INTELLIGENCE_MODEL ||
     process.env.OPENAI_RESEARCH_MODEL ||
-    "gpt-4.1-mini";
+    "gpt-5-mini";
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 52_000);
+  const timeout = setTimeout(() => controller.abort(), 270_000);
 
   let response: Response;
   try {
@@ -517,7 +508,7 @@ export async function runAutomatedMarketResearch({
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error(
-        "The web scan exceeded the preview execution window. Try again with a narrower geography or add one or two known competitors.",
+        "The web scan did not finish within the five-minute research window. Try a narrower geography or add one or two known competitors.",
       );
     }
     throw error;
@@ -562,9 +553,7 @@ export async function runAutomatedMarketResearch({
   );
 
   if (!report.competitors.length && !report.gaps.length) {
-    throw new Error(
-      "Web research completed but did not produce competitors or market gaps. Add a narrower geography or one known competitor and retry.",
-    );
+    throw new Error("Web research did not produce competitors or market gaps.");
   }
 
   return {
