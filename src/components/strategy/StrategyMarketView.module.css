@@ -1,0 +1,8 @@
+.offerings > div > :nth-child(3) {
+  display: none;
+}
+
+.audiences > div > :nth-child(2),
+.audiences > div > :nth-child(4) {
+  display: none;
+}
