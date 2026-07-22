@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { DeleteFailedResearchRunButton } from "@/components/market-intelligence/DeleteFailedResearchRunButton";
 import { MarketIntelligenceWorkspace } from "@/components/market-intelligence/MarketIntelligenceWorkspace";
 import {
   WebsiteHero,
@@ -38,6 +39,7 @@ export default async function MarketIntelligencePage() {
       findings: [],
     }),
     automatedReports: [],
+    failedProjectIds: [],
   } as Awaited<ReturnType<typeof getMarketIntelligenceWorkspace>>;
 
   try {
@@ -55,6 +57,7 @@ export default async function MarketIntelligencePage() {
   const reportByProjectId = new Map(
     workspace.automatedReports.map((item) => [item.projectId, item]),
   );
+  const failedProjectIdSet = new Set(workspace.failedProjectIds);
 
   return (
     <WebsitePage>
@@ -129,25 +132,30 @@ export default async function MarketIntelligencePage() {
       <WebsiteSection
         eyebrow="Market Position Reports"
         title="Saved reports and scan attempts"
-        description="Every scan now has a permanent detail page. Completed scans open the full report; failed attempts show the exact error and any evidence saved before failure."
+        description="Every scan has a permanent detail page. Completed scans open the full report; failed attempts can be reviewed or removed."
       >
         <div className={websiteStyles.cardGrid}>
           {workspace.projects.length ? (
             workspace.projects.map((project) => {
               const savedReport = reportByProjectId.get(project.id);
+              const isFailed = failedProjectIdSet.has(project.id);
               return (
                 <article key={project.id} className={websiteStyles.card}>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className={websiteStyles.sectionEyebrow}>
-                        {savedReport ? "Completed Web Report" : "Research Scan Record"}
+                        {savedReport
+                          ? "Completed Web Report"
+                          : isFailed
+                            ? "Failed Research Run"
+                            : "Research Scan Record"}
                       </p>
                       <h3 className={websiteStyles.cardTitle}>
                         {savedReport?.report.reportTitle || project.title}
                       </h3>
                     </div>
                     <span className="border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-black uppercase tracking-[0.1em] text-slate-600">
-                      {project.status}
+                      {isFailed ? "failed" : project.status}
                     </span>
                   </div>
 
@@ -169,13 +177,16 @@ export default async function MarketIntelligencePage() {
                       .join(" • ")}
                   </p>
 
-                  <div className="mt-4">
+                  <div className="mt-4 flex flex-wrap items-start gap-3">
                     <Link
                       href={`/research/${project.id}`}
                       className="inline-flex items-center bg-slate-950 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800"
                     >
                       {savedReport ? "View Full Report" : "View Scan Details"} →
                     </Link>
+                    {canManage && isFailed ? (
+                      <DeleteFailedResearchRunButton projectId={project.id} />
+                    ) : null}
                   </div>
                 </article>
               );
