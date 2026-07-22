@@ -77,13 +77,16 @@ test("normal users with an active account retain every account route without mas
     isMaster: false,
   });
   const itemLabels = labels(groups);
+  const groupLabels = groups.map((group) => group.label);
 
   assert.deepEqual(hrefs(groups), normalAccountRoutes);
+  assert.ok(groupLabels.includes("Campaigns"));
+  assert.ok(groupLabels.includes("Analytics"));
   assert.ok(itemLabels.includes("Account Workspace"));
-  assert.ok(itemLabels.includes("Campaigns"));
-  assert.ok(itemLabels.includes("Analytics"));
+  assert.ok(itemLabels.includes("All Campaigns"));
+  assert.ok(itemLabels.includes("Overview"));
   assert.ok(!itemLabels.includes("Accounts"));
-  assert.ok(!itemLabels.includes("GalaxyAI"));
+  assert.ok(!itemLabels.includes("Media Providers"));
   assert.ok(!itemLabels.includes("Settings"));
 });
 
@@ -94,10 +97,14 @@ test("master users retain every platform, workspace, and growth route", () => {
     isMaster: true,
   });
   const itemLabels = labels(groups);
+  const groupLabels = groups.map((group) => group.label);
 
   assert.deepEqual(hrefs(groups), masterAccountRoutes);
+  assert.ok(groupLabels.includes("Strategy"));
+  assert.ok(groupLabels.includes("Growth"));
+  assert.ok(groupLabels.includes("Platform Administration"));
   assert.ok(itemLabels.includes("Accounts"));
-  assert.ok(itemLabels.includes("GalaxyAI"));
+  assert.ok(itemLabels.includes("Media Providers"));
   assert.ok(itemLabels.includes("Prospects"));
   assert.ok(itemLabels.includes("Settings"));
   assert.ok(!itemLabels.includes("Account Workspace"));
