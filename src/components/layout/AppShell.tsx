@@ -23,7 +23,7 @@ export function AppShell({
   isMaster: boolean;
 }) {
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(11,74,122,0.07),transparent_32rem),linear-gradient(180deg,#f8fbff,#eef4f8)]">
+    <div className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top_left,rgba(11,74,122,0.07),transparent_32rem),linear-gradient(180deg,#f8fbff,#eef4f8)]">
       <SidebarNav
         userEmail={userEmail}
         accounts={accounts}
@@ -34,8 +34,8 @@ export function AppShell({
         platformRole={platformRole}
         isMaster={isMaster}
       />
-      <main className="mx-auto min-h-screen w-full max-w-[1540px] px-3 pb-12 pt-4 sm:px-5 lg:px-6">
-        {children}
+      <main className="min-h-screen w-full px-3 pb-12 pt-4 sm:px-5 min-[1081px]:ml-[276px] min-[1081px]:w-[calc(100%_-_276px)] min-[1081px]:px-6">
+        <div className="mx-auto w-full max-w-[1540px]">{children}</div>
       </main>
     </div>
   );

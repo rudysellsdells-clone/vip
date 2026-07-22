@@ -13,6 +13,8 @@
   --vip-gold: #f5b642;
   --vip-line: #dbe5ef;
   --vip-bg: #f6f9fc;
+  --vip-surface-radius: 7px;
+  --vip-surface-padding-min: 5px;
 }
 
 * {
@@ -57,6 +59,85 @@ input,
 textarea,
 select {
   font-size: 16px;
+}
+
+/*
+  Shared UI surface standard.
+
+  The padding rule intentionally uses :where() with zero specificity. Existing
+  component and Tailwind padding continues to win, while an otherwise unpadded
+  rounded or explicitly named content surface receives a safe 5px floor.
+
+  The radius rule is authoritative so legacy 12px–34px cards and pill controls
+  render with the same compact 7px corner treatment.
+*/
+:where(
+  main [class*="rounded"],
+  main [class*="__card__"],
+  main [class*="Card"],
+  main [class*="__panel__"],
+  main [class*="Panel"],
+  main [class*="__box__"],
+  main [class*="Box"],
+  main [class*="__tile__"],
+  main [class*="Tile"],
+  main [class*="__metric__"],
+  main [class*="__hero__"],
+  main [class*="__section__"],
+  main [class*="__frame__"],
+  main [class*="Frame"],
+  main [class*="__empty__"],
+  main [class*="__logList__"]
+) {
+  padding: var(--vip-surface-padding-min);
+}
+
+:where(
+  button,
+  input,
+  textarea,
+  select,
+  [class*="rounded"],
+  [class*="card"],
+  [class*="Card"],
+  [class*="panel"],
+  [class*="Panel"],
+  [class*="box"],
+  [class*="Box"],
+  [class*="tile"],
+  [class*="Tile"],
+  [class*="metric"],
+  [class*="Metric"],
+  [class*="section"],
+  [class*="Section"],
+  [class*="hero"],
+  [class*="Hero"],
+  [class*="frame"],
+  [class*="Frame"],
+  [class*="form"],
+  [class*="Form"],
+  [class*="badge"],
+  [class*="Badge"],
+  [class*="button"],
+  [class*="Button"],
+  [class*="chip"],
+  [class*="Chip"],
+  [class*="pill"],
+  [class*="Pill"],
+  [class*="link"],
+  [class*="Link"],
+  [class*="icon"],
+  [class*="Icon"],
+  [class*="header"],
+  [class*="Header"],
+  [class*="empty"],
+  [class*="Empty"],
+  [class*="list"],
+  [class*="List"],
+  [class*="wrap"],
+  [class*="Wrap"]
+):not([class*="overlay"]):not([class*="Overlay"]) {
+  border-radius: var(--vip-surface-radius) !important;
 }
 
 ::selection {
