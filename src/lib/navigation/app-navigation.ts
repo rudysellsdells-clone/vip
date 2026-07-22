@@ -74,11 +74,29 @@ export function buildAppNavigation({
       ],
     },
     {
-      label: "Plan",
+      label: "Strategy",
       requiresAccount: true,
       items: [
         {
-          label: "Campaigns",
+          label: "Brand Voice",
+          href: "/brand-voice",
+          description: "Control voice, tone, positioning, and brand rules.",
+          masterOnly: true,
+        },
+        {
+          label: "Knowledge",
+          href: "/knowledge",
+          description: "Manage reusable business knowledge and source material.",
+          masterOnly: true,
+        },
+      ],
+    },
+    {
+      label: "Campaigns",
+      requiresAccount: true,
+      items: [
+        {
+          label: "All Campaigns",
           href: "/campaigns",
           description: "Create and manage campaign asset packs.",
           requiresAccount: true,
@@ -126,19 +144,19 @@ export function buildAppNavigation({
       requiresAccount: true,
       items: [
         {
-          label: "Quality Review",
+          label: "Quality Issues",
           href: "/content-quality",
           description: "Review quality scores and improvement notes.",
           requiresAccount: true,
         },
         {
-          label: "Approvals",
+          label: "Needs Review",
           href: "/approvals",
           description: "Review, revise, and approve assets.",
           requiresAccount: true,
         },
         {
-          label: "Archive",
+          label: "Archived",
           href: "/archive",
           description: "Review archived campaigns and assets.",
           requiresAccount: true,
@@ -150,7 +168,7 @@ export function buildAppNavigation({
       requiresAccount: true,
       items: [
         {
-          label: "Publish Center",
+          label: "Ready to Publish",
           href: "/publishing-schedule",
           description: "Approved content ready to schedule, send, or publish.",
           requiresAccount: true,
@@ -161,40 +179,28 @@ export function buildAppNavigation({
           description: "Publishing, draft, and automation history.",
           requiresAccount: true,
         },
-        {
-          label: "Integrations",
-          href: "/zapier",
-          description: "ZapierMCP diagnostics and provider execution records.",
-          masterOnly: true,
-        },
-        {
-          label: "GalaxyAI",
-          href: "/galaxyai",
-          description: "Manage creative media generation workflows.",
-          masterOnly: true,
-        },
       ],
     },
     {
-      label: "Measure",
+      label: "Analytics",
       requiresAccount: true,
       items: [
         {
-          label: "Analytics",
+          label: "Overview",
           href: "/analytics",
           description: "Connect traffic, engagement, leads, conversions, and revenue.",
           requiresAccount: true,
         },
         {
-          label: "UTM Taxonomy",
+          label: "Attribution Settings",
           href: "/analytics/taxonomy",
-          description: "Control campaign naming, source/medium rules, and attributed links.",
+          description: "Control campaign naming, source and medium rules, and attributed links.",
           requiresAccount: true,
         },
       ],
     },
     {
-      label: "Grow",
+      label: "Growth",
       masterOnly: true,
       items: [
         {
@@ -208,7 +214,7 @@ export function buildAppNavigation({
           description: "Manage revenue pipeline opportunities.",
         },
         {
-          label: "Link Builder",
+          label: "Link Building",
           href: "/link-builder",
           description: "Find, prepare, and verify directory backlinks.",
         },
@@ -225,22 +231,28 @@ export function buildAppNavigation({
             : "Manage this account's profile, strategy, team, and publishing settings.",
           requiresAccount: !isMaster,
         },
+      ],
+    },
+    {
+      label: "Platform Administration",
+      masterOnly: true,
+      items: [
         {
-          label: "Brand Voice",
-          href: "/brand-voice",
-          description: "Control voice, tone, and brand rules.",
+          label: "Integrations",
+          href: "/zapier",
+          description: "Review ZapierMCP diagnostics and provider execution records.",
           masterOnly: true,
         },
         {
-          label: "Knowledge",
-          href: "/knowledge",
-          description: "Manage reusable business knowledge.",
+          label: "Media Providers",
+          href: "/galaxyai",
+          description: "Manage creative media generation workflows.",
           masterOnly: true,
         },
         {
           label: "Settings",
           href: "/settings",
-          description: "Manage thresholds and setup controls.",
+          description: "Manage thresholds and platform setup controls.",
           masterOnly: true,
         },
       ],
