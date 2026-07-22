@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildApprovedStrategyFoundation } from "../src/lib/strategy/strategy-foundation.ts";
-import { computeStrategyFoundationSignature } from "../src/lib/strategy/strategy-foundation-signature.ts";
+import {
+  computeStrategyApprovalSourceSignature,
+  computeStrategyFoundationSignature,
+} from "../src/lib/strategy/strategy-foundation-signature.ts";
 
 function foundation(overrides: Record<string, unknown> = {}) {
   return buildApprovedStrategyFoundation({
@@ -84,4 +87,29 @@ test("foundation signature changes when approved strategy truth changes", () => 
     computeStrategyFoundationSignature(first),
     computeStrategyFoundationSignature(second),
   );
+});
+
+test("approval signature changes for campaign or foundation edits", () => {
+  const foundationSignature = computeStrategyFoundationSignature(foundation());
+  const baseline = computeStrategyApprovalSourceSignature({
+    campaignSourceSignature: "campaign-a",
+    foundationSignature,
+  });
+  const changedCampaign = computeStrategyApprovalSourceSignature({
+    campaignSourceSignature: "campaign-b",
+    foundationSignature,
+  });
+  const changedFoundation = computeStrategyApprovalSourceSignature({
+    campaignSourceSignature: "campaign-a",
+    foundationSignature: computeStrategyFoundationSignature(
+      foundation({
+        brandRules: [
+          { rule_text: "Avoid jargon.", category: "voice", priority: 1 },
+        ],
+      }),
+    ),
+  });
+
+  assert.notEqual(baseline, changedCampaign);
+  assert.notEqual(baseline, changedFoundation);
 });
