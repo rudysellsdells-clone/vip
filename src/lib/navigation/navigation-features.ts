@@ -1,3 +1,5 @@
+import { isAdStudioEnabled } from "../ad-studio/feature";
+
 export const NAVIGATION_FEATURES = {
   marketIntelligence: "market-intelligence",
   adStudio: "ad-studio",
@@ -19,15 +21,15 @@ function isEnabled(value: string | undefined) {
 }
 
 function defaultFeatureEnvironment(): NavigationFeatureEnvironment {
-  const isMarketIntelligencePreview =
-    process.env.VERCEL_GIT_COMMIT_REF === "h1-15-market-intelligence";
-
   return {
     marketIntelligence:
+      process.env.ENABLE_MARKET_INTELLIGENCE ??
       process.env.NEXT_PUBLIC_ENABLE_MARKET_INTELLIGENCE ??
-      (isMarketIntelligencePreview ? "true" : undefined),
-    adStudio: process.env.NEXT_PUBLIC_ENABLE_AD_STUDIO,
-    videoStudio: process.env.NEXT_PUBLIC_ENABLE_VIDEO_STUDIO,
+      "true",
+    adStudio: isAdStudioEnabled() ? "true" : undefined,
+    videoStudio:
+      process.env.ENABLE_VIDEO_STUDIO ??
+      process.env.NEXT_PUBLIC_ENABLE_VIDEO_STUDIO,
   };
 }
 
