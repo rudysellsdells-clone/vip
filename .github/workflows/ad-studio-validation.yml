@@ -34,13 +34,29 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm install --no-audit --no-fund --silent
 
       - name: Run Ad Studio tests
         run: npm run test:ad-studio
 
       - name: Run navigation regression tests
-        run: npm run test:navigation
+        id: navigation
+        continue-on-error: true
+        run: npm run test:navigation > navigation-test.log 2>&1
+
+      - name: Upload navigation diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: navigation-test-log
+          path: navigation-test.log
+          if-no-files-found: ignore
+
+      - name: Enforce navigation result
+        if: steps.navigation.outcome == 'failure'
+        run: |
+          cat navigation-test.log
+          exit 1
 
       - name: Typecheck
         run: npm run typecheck
