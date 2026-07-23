@@ -15,11 +15,6 @@ import {
   computeStrategyFoundationSignature,
 } from "@/lib/strategy/strategy-foundation-signature";
 import {
-  campaignStrategyValidationMessage,
-  readStoredCampaignApprovalSignatures,
-  validateCampaignStrategySignatures,
-} from "./campaign-strategy-validation";
-import {
   createAdPackageDraft,
   resolveAdChannelDefinition,
   type AdPackageChannel,
@@ -32,10 +27,18 @@ type CampaignRow = Record<string, any> & {
   strategy: unknown;
 };
 
-function recordValue(value: unknown): Record<string, unknown> {
+function recordValue(value: unknown): Record<string, any> {
   return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
+    ? (value as Record<string, any>)
     : {};
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function hasRecordValues(value: Record<string, any>) {
+  return Object.keys(value).length > 0;
 }
 
 function combineOffer(explanation: string, deliverables: string) {
@@ -61,7 +64,15 @@ export async function buildCampaignAdPackageDraft({
     );
   }
 
-  const [foundation, marketIntelligenceSnapshot] = await Promise.all([
+  const storedStrategy = recordValue(campaign.strategy);
+  const storedFoundationContainer = recordValue(storedStrategy.strategyFoundation);
+  const storedFoundationSnapshot = recordValue(storedFoundationContainer.snapshot);
+  const storedFoundationSignature = stringValue(storedFoundationContainer.signature);
+  const storedMarketContainer = recordValue(storedStrategy.marketIntelligence);
+  const storedMarketSnapshot = recordValue(storedMarketContainer.snapshot);
+  const storedMarketSignature = stringValue(storedMarketContainer.signature);
+
+  const [currentFoundation, currentMarketIntelligenceSnapshot] = await Promise.all([
     getApprovedStrategyFoundation({
       supabase,
       accountId: String(campaign.account_id),
@@ -71,41 +82,70 @@ export async function buildCampaignAdPackageDraft({
       accountId: String(campaign.account_id),
     }),
   ]);
-  const campaignSourceSignature =
-    computeOneOffStrategySourceSignature(campaign as any);
-  const foundationSignature = computeStrategyFoundationSignature(foundation);
-  const marketIntelligenceSignature = marketIntelligenceSnapshot
-    ? computeApprovedMarketIntelligenceSignature(marketIntelligenceSnapshot)
+
+  const campaignSourceSignature = computeOneOffStrategySourceSignature(
+    campaign as any,
+  );
+  const currentFoundationSignature =
+    computeStrategyFoundationSignature(currentFoundation);
+  const currentMarketIntelligenceSignature = currentMarketIntelligenceSnapshot
+    ? computeApprovedMarketIntelligenceSignature(
+        currentMarketIntelligenceSnapshot,
+      )
     : null;
   const combinedApprovalSignature = computeStrategyApprovalSourceSignature({
     campaignSourceSignature,
-    foundationSignature,
-    marketIntelligenceSignature,
-  });
-  const storedApprovalSignatures = readStoredCampaignApprovalSignatures(
-    campaign.strategy,
-  );
-  const signatureValidation = validateCampaignStrategySignatures({
-    gateSourceSignature: gate.sourceSignature,
-    campaignSourceSignature,
-    combinedApprovalSignature,
-    storedFoundationSignature:
-      storedApprovalSignatures.foundationSignature,
-    currentFoundationSignature: foundationSignature,
-    storedMarketIntelligenceSignature:
-      storedApprovalSignatures.marketIntelligenceSignature,
-    currentMarketIntelligenceSignature: marketIntelligenceSignature,
+    foundationSignature: currentFoundationSignature,
+    marketIntelligenceSignature: currentMarketIntelligenceSignature,
   });
 
-  if (!signatureValidation.valid) {
-    throw new Error(campaignStrategyValidationMessage(signatureValidation));
+  const usesCampaignSnapshot = gate.sourceSignature === campaignSourceSignature;
+  const usesCurrentCombinedApproval =
+    gate.sourceSignature === combinedApprovalSignature;
+
+  if (!usesCampaignSnapshot && !usesCurrentCombinedApproval) {
+    throw new Error(
+      "Campaign inputs changed after the Marketing Spine was approved. Regenerate and approve the Marketing Spine before creating ads.",
+    );
   }
 
-  const storedStrategy = recordValue(campaign.strategy);
+  // Campaign Workspace approvals intentionally freeze the Strategy Foundation and
+  // Market Intelligence snapshots captured with the campaign. Generating from those
+  // stored snapshots keeps approved strategy stable even when the live account
+  // strategy or research workspace changes later.
+  const foundation =
+    usesCampaignSnapshot && hasRecordValues(storedFoundationSnapshot)
+      ? storedFoundationSnapshot
+      : currentFoundation;
+  const foundationSignature =
+    usesCampaignSnapshot && storedFoundationSignature
+      ? storedFoundationSignature
+      : currentFoundationSignature;
+  const marketIntelligenceSnapshot =
+    usesCampaignSnapshot && hasRecordValues(storedMarketSnapshot)
+      ? storedMarketSnapshot
+      : currentMarketIntelligenceSnapshot;
+  const marketIntelligenceSignature =
+    usesCampaignSnapshot && storedMarketSignature
+      ? storedMarketSignature
+      : currentMarketIntelligenceSignature;
   const sourceIds = marketIntelligenceSnapshot
-    ? [...new Set(marketIntelligenceSnapshot.findings.flatMap((item) => item.sourceIds))]
+    ? [
+        ...new Set(
+          (Array.isArray(marketIntelligenceSnapshot.findings)
+            ? marketIntelligenceSnapshot.findings
+            : []
+          ).flatMap((item: Record<string, any>) =>
+            Array.isArray(item.sourceIds) ? item.sourceIds : [],
+          ),
+        ),
+      ]
     : [];
-  const campaignSlug = normalizeUtmToken(campaign.name, "vip-campaign", 100);
+  const campaignSlug = normalizeUtmToken(
+    campaign.name,
+    "vip-campaign",
+    100,
+  );
 
   return createAdPackageDraft({
     accountId: String(campaign.account_id),
@@ -154,15 +194,23 @@ export async function buildCampaignAdPackageDraft({
       workflowVersion: "h1.17b",
       strategyGateVersion: gate.version,
       strategyApprovedAt: gate.approvedAt,
-      strategySignatureFormat: signatureValidation.format,
+      strategySignatureFormat: usesCampaignSnapshot
+        ? "campaign_inputs_with_stored_context"
+        : "combined_approval",
+      strategyContextSource: usesCampaignSnapshot
+        ? "campaign_snapshot"
+        : "current_approved_context",
       campaignSourceSignature,
       combinedApprovalSignature,
       foundationVersion: foundation.version,
       foundationSignature,
       marketIntelligenceVersion: marketIntelligenceSnapshot?.version ?? null,
       marketIntelligenceSignature,
-      marketIntelligenceFindingCount:
-        marketIntelligenceSnapshot?.findings.length ?? 0,
+      marketIntelligenceFindingCount: Array.isArray(
+        marketIntelligenceSnapshot?.findings,
+      )
+        ? marketIntelligenceSnapshot.findings.length
+        : 0,
       evidenceSourceCount: sourceIds.length,
     },
   });
