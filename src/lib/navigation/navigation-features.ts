@@ -18,12 +18,21 @@ function isEnabled(value: string | undefined) {
   return normalized === "1" || normalized === "true" || normalized === "yes";
 }
 
-export function getEnabledNavigationFeatures(
-  environment: NavigationFeatureEnvironment = {
-    marketIntelligence: process.env.NEXT_PUBLIC_ENABLE_MARKET_INTELLIGENCE,
+function defaultFeatureEnvironment(): NavigationFeatureEnvironment {
+  const isMarketIntelligencePreview =
+    process.env.VERCEL_GIT_COMMIT_REF === "h1-15-market-intelligence";
+
+  return {
+    marketIntelligence:
+      process.env.NEXT_PUBLIC_ENABLE_MARKET_INTELLIGENCE ??
+      (isMarketIntelligencePreview ? "true" : undefined),
     adStudio: process.env.NEXT_PUBLIC_ENABLE_AD_STUDIO,
     videoStudio: process.env.NEXT_PUBLIC_ENABLE_VIDEO_STUDIO,
-  },
+  };
+}
+
+export function getEnabledNavigationFeatures(
+  environment: NavigationFeatureEnvironment = defaultFeatureEnvironment(),
 ): ReadonlySet<NavigationFeature> {
   const enabled = new Set<NavigationFeature>();
 

@@ -11,7 +11,8 @@
     "test:strategy": "node --experimental-strip-types --test tests/strategy-engine-v2.test.ts",
     "test:galaxyai": "node --experimental-strip-types --test tests/galaxyai-run-recovery.test.ts",
     "test:navigation": "node --experimental-strip-types --test tests/app-navigation.test.ts tests/strategy-workspace-navigation.test.ts",
-    "test:strategy-foundation": "node --experimental-strip-types --test tests/strategy-foundation.test.ts tests/strategy-foundation-signature.test.ts"
+    "test:strategy-foundation": "node --experimental-strip-types --test tests/strategy-foundation.test.ts tests/strategy-foundation-signature.test.ts",
+    "test:market-intelligence": "node --experimental-strip-types --test tests/market-intelligence.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "latest",

@@ -13,6 +13,11 @@ import {
   normalizeOneOffCampaignForPrompt,
   ONE_OFF_STRATEGY_GATE_VERSION,
 } from "@/lib/content-generation/one-off-strategy-gate";
+import {
+  appendApprovedMarketIntelligenceToCloneContext,
+  computeApprovedMarketIntelligenceSignature,
+  getApprovedMarketIntelligenceSnapshot,
+} from "@/lib/market-intelligence/approved-market-intelligence";
 import { getApprovedStrategyFoundation } from "@/lib/strategy/get-approved-strategy-foundation";
 import { mergeStrategyFoundationIntoCloneContext } from "@/lib/strategy/strategy-foundation-clone-context";
 import {
@@ -114,22 +119,35 @@ export async function POST(request: Request) {
     const normalizedCampaign = normalizeOneOffCampaignForPrompt(sourceCampaign);
     const campaignSourceSignature =
       computeOneOffStrategySourceSignature(sourceCampaign);
-    const [foundation, legacyCloneContext] = await Promise.all([
-      getApprovedStrategyFoundation({
-        supabase,
-        accountId: activeAccountId,
-      }),
-      loadDigitalCloneContext(user.id, activeAccountId),
-    ]);
+    const [foundation, legacyCloneContext, marketIntelligenceSnapshot] =
+      await Promise.all([
+        getApprovedStrategyFoundation({
+          supabase,
+          accountId: activeAccountId,
+        }),
+        loadDigitalCloneContext(user.id, activeAccountId),
+        getApprovedMarketIntelligenceSnapshot({
+          supabase,
+          accountId: activeAccountId,
+        }),
+      ]);
     const strategyFoundationSignature =
       computeStrategyFoundationSignature(foundation);
+    const marketIntelligenceSignature = marketIntelligenceSnapshot
+      ? computeApprovedMarketIntelligenceSignature(marketIntelligenceSnapshot)
+      : null;
     const sourceSignature = computeStrategyApprovalSourceSignature({
       campaignSourceSignature,
       foundationSignature: strategyFoundationSignature,
+      marketIntelligenceSignature,
     });
-    const cloneContext = mergeStrategyFoundationIntoCloneContext({
+    const foundationCloneContext = mergeStrategyFoundationIntoCloneContext({
       foundation,
       cloneContext: legacyCloneContext,
+    });
+    const cloneContext = appendApprovedMarketIntelligenceToCloneContext({
+      cloneContext: foundationCloneContext,
+      snapshot: marketIntelligenceSnapshot,
     });
     const intelligence = buildCampaignIntelligenceContext({
       campaign: normalizedCampaign,
@@ -156,6 +174,12 @@ export async function POST(request: Request) {
       strategyFoundationGeneratedAt: foundation.generatedAt,
       strategyFoundationReadinessScore: foundation.readiness.score,
       strategyFoundationMissingElements: foundation.readiness.missing,
+      marketIntelligenceVersion: marketIntelligenceSnapshot?.version ?? null,
+      marketIntelligenceSignature,
+      marketIntelligenceFindingCount:
+        marketIntelligenceSnapshot?.findings.length ?? 0,
+      marketIntelligenceSourceCount:
+        marketIntelligenceSnapshot?.sources.length ?? 0,
       strategyEngine: generated.diagnostics,
     });
   } catch (error) {

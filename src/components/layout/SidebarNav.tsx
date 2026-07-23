@@ -11,7 +11,6 @@ import {
   isAppNavGroupActive,
   isAppNavPathActive,
 } from "@/lib/navigation/app-navigation";
-import { getEnabledNavigationFeatures } from "@/lib/navigation/navigation-features";
 import styles from "./SidebarNav.module.css";
 
 function Logo() {
@@ -35,6 +34,7 @@ export function SidebarNav({
   canManageActiveAccount,
   platformRole,
   isMaster,
+  enabledFeatureKeys,
 }: {
   userEmail: string;
   accounts: AccountContextAccount[];
@@ -44,10 +44,14 @@ export function SidebarNav({
   canManageActiveAccount: boolean;
   platformRole: string;
   isMaster: boolean;
+  enabledFeatureKeys: string[];
 }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const enabledFeatures = useMemo(() => getEnabledNavigationFeatures(), []);
+  const enabledFeatures = useMemo(
+    () => new Set(enabledFeatureKeys),
+    [enabledFeatureKeys],
+  );
   const navGroups = useMemo(
     () =>
       buildAppNavigation({
