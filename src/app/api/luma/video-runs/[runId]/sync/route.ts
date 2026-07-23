@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isLumaYoutubeLaneEnabled } from "@/lib/config/media-providers";
+import { isVideoStudioEnabled } from "@/lib/video-studio/feature";
 import {
   createLumaGeneration,
   getLumaGeneration,
@@ -36,11 +37,11 @@ function asArray(value: unknown) {
 }
 
 export async function POST(_request: Request, context: RouteContext) {
-  if (!isLumaYoutubeLaneEnabled()) {
+  if (!isLumaYoutubeLaneEnabled() && !isVideoStudioEnabled()) {
     return NextResponse.json(
       {
         error:
-          "Luma YouTube lane is disabled. GalaxyAI remains the active media provider.",
+          "Luma rendering is disabled for both the legacy campaign lane and Video Studio.",
       },
       { status: 403 }
     );
