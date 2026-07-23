@@ -2,19 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { resolveAdStudioEnabled } from "../src/lib/ad-studio/feature.ts";
 
-test("Ad Studio is enabled on the H1.17 preview branch", () => {
+test("Ad Studio is enabled by default after the H1.17 production release", () => {
   assert.equal(
     resolveAdStudioEnabled({ gitRef: "h1-17-ad-studio" }),
     true,
   );
+  assert.equal(resolveAdStudioEnabled({ gitRef: "main" }), true);
+  assert.equal(resolveAdStudioEnabled({}), true);
 });
 
-test("Ad Studio remains disabled by default outside the preview branch", () => {
-  assert.equal(resolveAdStudioEnabled({ gitRef: "main" }), false);
-  assert.equal(resolveAdStudioEnabled({}), false);
-});
-
-test("explicit feature values override branch defaults", () => {
+test("explicit feature values override release defaults", () => {
   assert.equal(
     resolveAdStudioEnabled({
       serverValue: "false",
