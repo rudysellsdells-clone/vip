@@ -10,10 +10,11 @@
     "typecheck": "tsc --noEmit",
     "test:strategy": "node --experimental-strip-types --test tests/strategy-engine-v2.test.ts",
     "test:galaxyai": "node --experimental-strip-types --test tests/galaxyai-run-recovery.test.ts",
-    "test:navigation": "node --experimental-strip-types --test tests/app-navigation.test.ts tests/strategy-workspace-navigation.test.ts",
+    "test:navigation": "tsx --test tests/app-navigation.test.ts tests/strategy-workspace-navigation.test.ts",
     "test:strategy-foundation": "node --experimental-strip-types --test tests/strategy-foundation.test.ts tests/strategy-foundation-signature.test.ts",
     "test:market-intelligence": "node --experimental-strip-types --test tests/market-intelligence.test.ts",
-    "test:campaign-workspace": "node --experimental-strip-types --test tests/campaign-workspace.test.ts"
+    "test:campaign-workspace": "node --experimental-strip-types --test tests/campaign-workspace.test.ts",
+    "test:ad-studio": "node --experimental-strip-types --test tests/ad-studio-feature.test.ts tests/ad-studio-package.test.ts tests/ad-studio-google-search.test.ts tests/ad-studio-paid-social.test.ts tests/ad-studio-scoring.test.ts tests/ad-studio-campaign-readiness.test.ts tests/ad-studio-strategy-validation.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "latest",
@@ -33,6 +34,7 @@
     "eslint": "latest",
     "eslint-config-next": "latest",
     "tailwindcss": "latest",
+    "tsx": "latest",
     "typescript": "latest"
   }
 }
