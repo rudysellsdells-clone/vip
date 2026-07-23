@@ -15,6 +15,11 @@ import {
   computeStrategyFoundationSignature,
 } from "@/lib/strategy/strategy-foundation-signature";
 import {
+  campaignStrategyValidationMessage,
+  readStoredCampaignApprovalSignatures,
+  validateCampaignStrategySignatures,
+} from "./campaign-strategy-validation";
+import {
   createAdPackageDraft,
   resolveAdChannelDefinition,
   type AdPackageChannel,
@@ -66,20 +71,34 @@ export async function buildCampaignAdPackageDraft({
       accountId: String(campaign.account_id),
     }),
   ]);
+  const campaignSourceSignature =
+    computeOneOffStrategySourceSignature(campaign as any);
   const foundationSignature = computeStrategyFoundationSignature(foundation);
   const marketIntelligenceSignature = marketIntelligenceSnapshot
     ? computeApprovedMarketIntelligenceSignature(marketIntelligenceSnapshot)
     : null;
-  const currentSourceSignature = computeStrategyApprovalSourceSignature({
-    campaignSourceSignature: computeOneOffStrategySourceSignature(campaign as any),
+  const combinedApprovalSignature = computeStrategyApprovalSourceSignature({
+    campaignSourceSignature,
     foundationSignature,
     marketIntelligenceSignature,
   });
+  const storedApprovalSignatures = readStoredCampaignApprovalSignatures(
+    campaign.strategy,
+  );
+  const signatureValidation = validateCampaignStrategySignatures({
+    gateSourceSignature: gate.sourceSignature,
+    campaignSourceSignature,
+    combinedApprovalSignature,
+    storedFoundationSignature:
+      storedApprovalSignatures.foundationSignature,
+    currentFoundationSignature: foundationSignature,
+    storedMarketIntelligenceSignature:
+      storedApprovalSignatures.marketIntelligenceSignature,
+    currentMarketIntelligenceSignature: marketIntelligenceSignature,
+  });
 
-  if (gate.sourceSignature !== currentSourceSignature) {
-    throw new Error(
-      "Campaign inputs, Strategy Foundation, or approved Market Intelligence changed after approval. Regenerate and approve the Marketing Spine before creating ads.",
-    );
+  if (!signatureValidation.valid) {
+    throw new Error(campaignStrategyValidationMessage(signatureValidation));
   }
 
   const storedStrategy = recordValue(campaign.strategy);
@@ -135,6 +154,9 @@ export async function buildCampaignAdPackageDraft({
       workflowVersion: "h1.17b",
       strategyGateVersion: gate.version,
       strategyApprovedAt: gate.approvedAt,
+      strategySignatureFormat: signatureValidation.format,
+      campaignSourceSignature,
+      combinedApprovalSignature,
       foundationVersion: foundation.version,
       foundationSignature,
       marketIntelligenceVersion: marketIntelligenceSnapshot?.version ?? null,
