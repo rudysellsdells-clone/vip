@@ -1,0 +1,49 @@
+name: Video Studio Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "src/app/(app)/video-studio/**"
+      - "src/app/(app)/campaigns/[campaignId]/**"
+      - "src/app/api/video-studio/**"
+      - "src/components/video-studio/**"
+      - "src/lib/video-studio/**"
+      - "src/lib/navigation/**"
+      - "tests/video-studio-*.test.ts"
+      - "tests/app-navigation.test.ts"
+      - "package.json"
+      - ".github/workflows/video-studio-validation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Run Video Studio tests
+        run: npm run test:video-studio
+
+      - name: Run navigation regression tests
+        run: npm run test:navigation
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build production application
+        run: npm run build
