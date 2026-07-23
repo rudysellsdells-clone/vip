@@ -8,11 +8,13 @@ export function UseAccountWorkspaceButton({
   accountName,
   className,
   label = "Use Workspace",
+  redirectHref,
 }: {
   accountId: string;
   accountName: string;
   className?: string;
   label?: string;
+  redirectHref?: string;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -37,7 +39,13 @@ export function UseAccountWorkspaceButton({
     }
 
     setMessage(`Now using ${result.accountName ?? accountName}.`);
-    startTransition(() => router.refresh());
+    startTransition(() => {
+      if (redirectHref) {
+        router.push(redirectHref);
+        return;
+      }
+      router.refresh();
+    });
   }
 
   return (

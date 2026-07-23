@@ -8,15 +8,14 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
-import { AccountBrandProfileForm } from "@/components/accounts/AccountBrandProfileForm";
 import { AccountPublishingSettingsForm } from "@/components/accounts/AccountPublishingSettingsForm";
-import { AccountMarketProfileManager } from "@/components/accounts/AccountMarketProfileManager";
 import { ArchiveAccountButton } from "@/components/accounts/ArchiveAccountButton";
 import { InviteAccountMemberForm } from "@/components/accounts/InviteAccountMemberForm";
 import { RemoveAccountMemberButton } from "@/components/accounts/RemoveAccountMemberButton";
 import { UseAccountWorkspaceButton } from "@/components/accounts/UseAccountWorkspaceButton";
 import accountStyles from "@/components/accounts/AccountForms.module.css";
 import { getAccountAccessForUser } from "@/lib/accounts/account-context";
+import { getApprovedStrategyFoundation } from "@/lib/strategy/get-approved-strategy-foundation";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 
@@ -33,6 +32,44 @@ function compactValue(value: string | null | undefined) {
   return value && value.trim() ? value : "Not set";
 }
 
+const strategyAreas = [
+  {
+    label: "Business Truth",
+    description: "Company identity, website, CTA, service areas, logo, and durable business facts.",
+    href: "/strategy/business-truth",
+  },
+  {
+    label: "Brand Voice",
+    description: "Voice, business framing, audience understanding, offers, and sales outcomes.",
+    href: "/strategy/brand-voice",
+  },
+  {
+    label: "Offerings",
+    description: "Service lines, offers, outcomes, package notes, and campaign calls-to-action.",
+    href: "/strategy/offerings",
+  },
+  {
+    label: "Audiences",
+    description: "Buyer groups, pain points, desired outcomes, decision context, and objections.",
+    href: "/strategy/audiences",
+  },
+  {
+    label: "Messaging & Proof",
+    description: "Differentiators, proof context, business outcomes, and approved messaging sources.",
+    href: "/strategy/messaging-proof",
+  },
+  {
+    label: "Brand Rules",
+    description: "Prioritized voice, behavior, positioning, safety, and compliance guardrails.",
+    href: "/strategy/brand-rules",
+  },
+  {
+    label: "Knowledge",
+    description: "Documents, source material, approved examples, testimonials, and business memory.",
+    href: "/strategy/knowledge",
+  },
+] as const;
+
 export default async function AccountDetailPage({
   params,
 }: {
@@ -45,9 +82,7 @@ export default async function AccountDetailPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    redirect("/login");
-  }
+  if (!user) redirect("/login");
 
   const accountAccess = await getAccountAccessForUser({
     supabase,
@@ -55,18 +90,12 @@ export default async function AccountDetailPage({
     userId: user.id,
   });
 
-  if (!accountAccess.canView) {
-    redirect("/accounts");
-  }
+  if (!accountAccess.canView) redirect("/accounts");
 
   const [
     { data: account },
     { data: memberships },
-    { data: brandProfile },
     { data: publishingSettings },
-    { data: serviceLines },
-    { data: audiences },
-    { data: offers },
     { count: campaignCount },
     { count: assetCount },
   ] = await Promise.all([
@@ -77,28 +106,11 @@ export default async function AccountDetailPage({
       .eq("account_id", accountId)
       .is("removed_at", null)
       .order("created_at", { ascending: true }),
-    supabase.from("account_brand_profiles").select("*").eq("account_id", accountId).maybeSingle(),
-    supabase.from("account_publishing_settings").select("*").eq("account_id", accountId).maybeSingle(),
     supabase
-      .from("service_lines")
-      .select("id,name,short_name,description,primary_outcome")
+      .from("account_publishing_settings")
+      .select("*")
       .eq("account_id", accountId)
-      .eq("active", true)
-      .order("sort_order", { ascending: true })
-      .order("name", { ascending: true }),
-    supabase
-      .from("buyer_segments")
-      .select("id,name,description,common_pains,desired_outcomes,objections")
-      .eq("account_id", accountId)
-      .eq("active", true)
-      .order("sort_order", { ascending: true })
-      .order("name", { ascending: true }),
-    supabase
-      .from("offers")
-      .select("id,service_line_id,name,description,offer_type,primary_cta,outcome,price_notes,target_buyer_segments")
-      .eq("account_id", accountId)
-      .eq("active", true)
-      .order("name", { ascending: true }),
+      .maybeSingle(),
     supabase
       .from("campaigns")
       .select("id", { count: "exact", head: true })
@@ -109,10 +121,12 @@ export default async function AccountDetailPage({
       .eq("account_id", accountId),
   ]);
 
-  if (!account || account.status === "archived") {
-    redirect("/accounts");
-  }
+  if (!account || account.status === "archived") redirect("/accounts");
 
+  const foundation = await getApprovedStrategyFoundation({
+    supabase,
+    accountId,
+  });
   const memberRows = (memberships ?? []) as Array<{
     id: string;
     user_id: string | null;
@@ -122,40 +136,13 @@ export default async function AccountDetailPage({
     status: string;
     invited_at: string;
   }>;
-  const serviceLineRows = (serviceLines ?? []) as Array<{
-    id: string;
-    name: string;
-    short_name: string | null;
-    description: string | null;
-    primary_outcome: string | null;
-  }>;
-  const audienceRows = (audiences ?? []) as Array<{
-    id: string;
-    name: string;
-    description: string | null;
-    common_pains: string[] | null;
-    desired_outcomes: string[] | null;
-    objections: string[] | null;
-  }>;
-  const offerRows = (offers ?? []) as Array<{
-    id: string;
-    service_line_id: string | null;
-    name: string;
-    description: string | null;
-    offer_type: string | null;
-    primary_cta: string | null;
-    outcome: string | null;
-    price_notes: string | null;
-    target_buyer_segments: string[] | null;
-  }>;
-  const activeMembers = memberRows.filter((membership) => membership.status === "active").length;
-  const pendingMembers = memberRows.filter((membership) => membership.status === "pending").length;
+  const activeMembers = memberRows.filter(
+    (membership) => membership.status === "active",
+  ).length;
+  const pendingMembers = memberRows.filter(
+    (membership) => membership.status === "pending",
+  ).length;
   const canManage = accountAccess.canManage;
-  const brandProfileRecord = (brandProfile ?? {}) as Record<string, any>;
-  const brandColors = Array.isArray(brandProfileRecord.brand_colors)
-    ? brandProfileRecord.brand_colors.filter(Boolean)
-    : [];
-
   const configuredChannels = [
     publishingSettings?.linkedin_enabled ? "LinkedIn" : null,
     publishingSettings?.facebook_enabled ? "Facebook" : null,
@@ -165,255 +152,224 @@ export default async function AccountDetailPage({
   return (
     <WebsitePage>
       <div className={accountStyles.accountPage}>
-      <WebsiteHero
-        eyebrow="Account Workspace"
-        title={account.name}
-        description="Manage this client or brand workspace from one cleaner control panel: overview, brand memory, market strategy, publishing settings, team access, and account removal."
-        primaryAction={{ label: "Back to Accounts", href: "/accounts" }}
-        secondaryAction={{ label: "Dashboard", href: "/dashboard" }}
-      />
+        <WebsiteHero
+          eyebrow="Account Administration"
+          title={account.name}
+          description="Manage workspace status, publishing, seats, access, and account lifecycle here. Business and market strategy now live in the dedicated Strategy Workspace."
+          primaryAction={{ label: "Back to Accounts", href: "/accounts" }}
+          secondaryAction={{ label: "Dashboard", href: "/dashboard" }}
+        />
 
-      <section className={websiteStyles.metricsGrid}>
-        <WebsiteMetric label="Status" value={account.status} description="Current account state." dot="blue" />
-        <WebsiteMetric label="Campaigns" value={campaignCount ?? 0} description="Campaigns tied to this account." dot="green" />
-        <WebsiteMetric label="Assets" value={assetCount ?? 0} description="Generated assets tied to this account." dot="purple" />
-        <WebsiteMetric label="Seats" value={`${activeMembers} active`} description={`${pendingMembers} pending invitation${pendingMembers === 1 ? "" : "s"}.`} dot="gold" />
-        <WebsiteMetric label="Market Strategy" value={`${serviceLineRows.length}/${audienceRows.length}/${offerRows.length}`} description="Services, audiences, and offers." dot="blue" />
-      </section>
+        <section className={websiteStyles.metricsGrid}>
+          <WebsiteMetric label="Status" value={account.status} description="Current account state." dot="blue" />
+          <WebsiteMetric label="Campaigns" value={campaignCount ?? 0} description="Campaigns tied to this account." dot="green" />
+          <WebsiteMetric label="Assets" value={assetCount ?? 0} description="Generated assets tied to this account." dot="purple" />
+          <WebsiteMetric label="Seats" value={`${activeMembers} active`} description={`${pendingMembers} pending invitation${pendingMembers === 1 ? "" : "s"}.`} dot="gold" />
+          <WebsiteMetric label="Strategy Readiness" value={`${foundation.readiness.score}%`} description={`${foundation.readiness.completedChecks} of ${foundation.readiness.totalChecks} foundation checks complete.`} dot={foundation.readiness.campaignReady ? "green" : "gold"} />
+        </section>
 
-      <WebsiteSection
-        eyebrow="Control Panel"
-        title="Account setup"
-        description="Each section below handles one part of the workspace. Use the quick links to jump directly to the area you need."
-      >
-        <div className={accountStyles.accountSetupGrid}>
-          <aside className="xl:sticky xl:top-28 xl:self-start">
-            <div className={accountStyles.accountMenuCard}>
-              <p className={accountStyles.accountMenuEyebrow}>
-                Account Menu
-              </p>
-              <nav className={accountStyles.accountMenuNav}>
-                {[
-                  ["Overview", "#overview"],
-                  ["Brand Profile", "#brand-profile"],
-                  ["Market Strategy", "#strategy"],
-                  ["Publishing", "#publishing"],
-                  ["Team", "#team"],
-                  ["Danger Zone", "#danger-zone"],
-                ].map(([label, href]) => (
-                  <a
-                    key={href}
-                    href={href}
-                    className={accountStyles.accountMenuLink}
-                  >
-                    {label}
-                  </a>
-                ))}
-              </nav>
-              <div className={accountStyles.accountWorkspaceBox}>
-                <p className="font-semibold text-slate-900">Use this workspace</p>
-                <p className="mt-1">{account.name}</p>
-                <UseAccountWorkspaceButton
-                  accountId={account.id}
-                  accountName={account.name}
-                  label="Set Active Workspace"
-                  className="mt-3 rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800 hover:border-blue-300 hover:bg-blue-100"
-                />
-                <p className="mt-3 text-xs uppercase tracking-[0.14em] text-slate-400">Slug</p>
-                <p className="font-mono text-xs text-slate-700">{account.slug}</p>
-              </div>
-            </div>
-          </aside>
-
-          <div className={accountStyles.accountContentStack}>
-            <section id="overview" className={`scroll-mt-28 ${accountStyles.accountSectionCard}`}>
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-700">Overview</p>
-                  <h2 className="mt-2 text-2xl font-black text-slate-950">Workspace snapshot</h2>
-                  <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-                    Use this summary to confirm the account identity before generating campaigns, approving assets, or publishing to connected channels.
-                  </p>
+        <WebsiteSection
+          eyebrow="Control Panel"
+          title="Account administration"
+          description="Use Account Administration for operational controls and Strategy Workspace for business, audience, offer, messaging, rule, and knowledge management."
+        >
+          <div className={accountStyles.accountSetupGrid}>
+            <aside className="xl:sticky xl:top-28 xl:self-start">
+              <div className={accountStyles.accountMenuCard}>
+                <p className={accountStyles.accountMenuEyebrow}>Account Menu</p>
+                <nav className={accountStyles.accountMenuNav}>
+                  {[
+                    ["Overview", "#overview"],
+                    ["Strategy Workspace", "#strategy-workspace"],
+                    ["Publishing", "#publishing"],
+                    ["Team", "#team"],
+                    ["Danger Zone", "#danger-zone"],
+                  ].map(([label, href]) => (
+                    <a key={href} href={href} className={accountStyles.accountMenuLink}>
+                      {label}
+                    </a>
+                  ))}
+                </nav>
+                <div className={accountStyles.accountWorkspaceBox}>
+                  <p className="font-semibold text-slate-900">Use this workspace</p>
+                  <p className="mt-1">{account.name}</p>
+                  <UseAccountWorkspaceButton
+                    accountId={account.id}
+                    accountName={account.name}
+                    label="Set Active Workspace"
+                    className="mt-3 rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800 hover:border-blue-300 hover:bg-blue-100"
+                  />
+                  <p className="mt-3 text-xs uppercase tracking-[0.14em] text-slate-400">Slug</p>
+                  <p className="font-mono text-xs text-slate-700">{account.slug}</p>
                 </div>
-                <WebsiteBadge status={account.status} />
               </div>
+            </aside>
 
-              <div className={accountStyles.infoGrid}>
-                <InfoTile label="Website" value={compactValue(account.website_url)} />
-                <InfoTile label="Primary CTA" value={compactValue(account.primary_cta)} />
-                <InfoTile label="Created" value={formatDate(account.created_at)} />
-                <InfoTile label="Publishing channels" value={configuredChannels.length ? configuredChannels.join(", ") : "Not configured"} />
-              </div>
-            </section>
-
-            <section id="brand-profile" className={`scroll-mt-28 ${accountStyles.accountSectionCard}`}>
-              <SectionHeading
-                eyebrow="Brand Profile"
-                title="Account-specific brand memory"
-                description="Define the voice, offer, audience, CTA, and positioning VIP should use for this account."
-              />
-              <div className="mt-6 space-y-5">
-                {brandProfileRecord.logo_url || brandColors.length ? (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                    <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-                      {brandProfileRecord.logo_url ? (
-                        <div className="flex items-center gap-4">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={brandProfileRecord.logo_url}
-                            alt={`${account.name} logo`}
-                            className="max-h-20 max-w-52 rounded-xl bg-white object-contain p-3 shadow-sm"
-                          />
-                          <div>
-                            <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Brand Logo</p>
-                            <p className="text-sm font-bold text-slate-900">{brandProfileRecord.logo_file_name ?? "Logo uploaded"}</p>
-                          </div>
-                        </div>
-                      ) : null}
-                      {brandColors.length ? (
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Brand Colors</p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {brandColors.map((color: string) => (
-                              <span key={color} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-700 shadow-sm">
-                                {color}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
+            <div className={accountStyles.accountContentStack}>
+              <section id="overview" className={`scroll-mt-28 ${accountStyles.accountSectionCard}`}>
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-700">Overview</p>
+                    <h2 className="mt-2 text-2xl font-black text-slate-950">Workspace snapshot</h2>
+                    <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                      Confirm the account identity and operating status before generating campaigns, approving assets, or publishing to connected channels.
+                    </p>
                   </div>
-                ) : null}
-                {canManage ? (
-                  <AccountBrandProfileForm accountId={account.id} profile={brandProfile} />
-                ) : (
-                  <p className={websiteStyles.cardText}>You can view this account, but only owners and admins can edit the brand profile.</p>
-                )}
-              </div>
-            </section>
+                  <WebsiteBadge status={account.status} />
+                </div>
 
-            <section id="strategy" className={`scroll-mt-28 ${accountStyles.accountSectionCard}`}>
-              <SectionHeading
-                eyebrow="Market Strategy"
-                title="Services, audiences, and offers"
-                description="Define what this account sells and who it sells to so VIP generates account-specific campaigns instead of default marketing-agency content."
-              />
-              <div className="mt-6">
-                <AccountMarketProfileManager
-                  accountId={account.id}
-                  canManage={canManage}
-                  serviceLines={serviceLineRows}
-                  audiences={audienceRows}
-                  offers={offerRows}
-                />
-              </div>
-            </section>
+                <div className={accountStyles.infoGrid}>
+                  <InfoTile label="Website" value={compactValue(account.website_url)} />
+                  <InfoTile label="Primary CTA" value={compactValue(account.primary_cta)} />
+                  <InfoTile label="Created" value={formatDate(account.created_at)} />
+                  <InfoTile label="Publishing channels" value={configuredChannels.length ? configuredChannels.join(", ") : "Not configured"} />
+                </div>
+              </section>
 
-            <section id="publishing" className={`scroll-mt-28 ${accountStyles.accountSectionCard}`}>
-              <SectionHeading
-                eyebrow="Publishing"
-                title="Account publishing settings"
-                description="Keep LinkedIn, Facebook, GalaxyAI, and default CTA settings separate for each client or brand account."
-              />
-              <div className="mt-6">
-                {canManage ? (
-                  <AccountPublishingSettingsForm accountId={account.id} settings={publishingSettings} />
-                ) : (
-                  <p className={websiteStyles.cardText}>You can view this account, but only owners and admins can edit publishing settings.</p>
-                )}
-              </div>
-            </section>
+              <section id="strategy-workspace" className={`scroll-mt-28 ${accountStyles.accountSectionCard}`}>
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <SectionHeading
+                    eyebrow="Strategy Workspace"
+                    title="Business and market strategy"
+                    description="Strategy editing has moved into one account-level workspace so campaigns inherit the same approved source of truth."
+                  />
+                  <WebsiteBadge status={foundation.readiness.campaignReady ? "approved" : "needs_review"} />
+                </div>
 
-            <section id="team" className={`scroll-mt-28 ${accountStyles.accountSectionCard}`}>
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="mt-6 grid gap-4 md:grid-cols-2">
+                  {strategyAreas.map((area) => (
+                    <article key={area.href} className={websiteStyles.card}>
+                      <h3 className={websiteStyles.cardTitle}>{area.label}</h3>
+                      <p className={websiteStyles.cardText}>{area.description}</p>
+                      <div className="mt-4">
+                        <UseAccountWorkspaceButton
+                          accountId={account.id}
+                          accountName={account.name}
+                          label={`Open ${area.label}`}
+                          redirectHref={area.href}
+                          className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                        />
+                      </div>
+                    </article>
+                  ))}
+                </div>
+
+                <div className="mt-5 flex flex-wrap items-center gap-3">
+                  <UseAccountWorkspaceButton
+                    accountId={account.id}
+                    accountName={account.name}
+                    label="Open Strategy Overview"
+                    redirectHref="/strategy"
+                    className="rounded-full bg-blue-700 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-800"
+                  />
+                  <Link href="/campaigns" className={websiteStyles.link}>Go to Campaigns →</Link>
+                </div>
+              </section>
+
+              <section id="publishing" className={`scroll-mt-28 ${accountStyles.accountSectionCard}`}>
                 <SectionHeading
-                  eyebrow="Team"
-                  title="Seats and account access"
-                  description="Invite reviewers, editors, admins, or viewers to this account. Removing a seat removes access but preserves history."
+                  eyebrow="Publishing"
+                  title="Account publishing settings"
+                  description="Keep LinkedIn, Facebook, GalaxyAI, and default CTA settings separate for each client or brand account."
                 />
-                <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                  <span className="font-semibold text-slate-900">{activeMembers}</span> active · <span className="font-semibold text-slate-900">{pendingMembers}</span> pending
+                <div className="mt-6">
+                  {canManage ? (
+                    <AccountPublishingSettingsForm accountId={account.id} settings={publishingSettings} />
+                  ) : (
+                    <p className={websiteStyles.cardText}>You can view this account, but only owners and admins can edit publishing settings.</p>
+                  )}
                 </div>
-              </div>
+              </section>
 
-              <div className="mt-6 space-y-5">
-                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 text-xs uppercase tracking-[0.14em] text-slate-500">
-                      <tr>
-                        <th className="px-4 py-3">Member</th>
-                        <th className="px-4 py-3">Role</th>
-                        <th className="px-4 py-3">Status</th>
-                        <th className="px-4 py-3">Invited</th>
-                        <th className="px-4 py-3 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white">
-                      {memberRows.length ? (
-                        memberRows.map((membership) => (
-                          <tr key={membership.id} className="align-top">
-                            <td className="px-4 py-4">
-                              <p className="font-semibold text-slate-900">{membership.full_name || membership.email}</p>
-                              <p className="text-xs text-slate-500">{membership.email}</p>
-                            </td>
-                            <td className="px-4 py-4 capitalize text-slate-700">{membership.role}</td>
-                            <td className="px-4 py-4"><WebsiteBadge status={membership.status} /></td>
-                            <td className="px-4 py-4 text-slate-600">{formatDate(membership.invited_at)}</td>
-                            <td className="px-4 py-4">
-                              <div className="flex justify-end">
-                                {canManage ? (
-                                  <RemoveAccountMemberButton
-                                    accountId={account.id}
-                                    membershipId={membership.id}
-                                    memberLabel={membership.full_name || membership.email}
-                                    disabledReason={
-                                      membership.user_id === user.id
-                                        ? "You cannot remove your own access from this account."
-                                        : membership.user_id && membership.user_id === account.owner_user_id
-                                          ? "The primary account owner cannot be removed from this screen."
-                                          : null
-                                    }
-                                  />
-                                ) : (
-                                  <span className="text-xs text-slate-400">—</span>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td className="px-4 py-4 text-slate-500" colSpan={5}>No members recorded yet.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {canManage ? (
-                  <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50/70 p-5">
-                    <InviteAccountMemberForm accountId={account.id} />
+              <section id="team" className={`scroll-mt-28 ${accountStyles.accountSectionCard}`}>
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <SectionHeading
+                    eyebrow="Team"
+                    title="Seats and account access"
+                    description="Invite reviewers, editors, admins, or viewers to this account. Removing a seat removes access but preserves history."
+                  />
+                  <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    <span className="font-semibold text-slate-900">{activeMembers}</span> active · <span className="font-semibold text-slate-900">{pendingMembers}</span> pending
                   </div>
-                ) : null}
-              </div>
-            </section>
-
-            <section id="danger-zone" className={`scroll-mt-28 ${accountStyles.accountDangerCard}`}>
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-red-700">Danger Zone</p>
-                  <h2 className="mt-2 text-2xl font-black text-slate-950">Archive this account</h2>
-                  <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-700">
-                    Archiving removes this account from active workspaces while keeping campaigns, assets, members, and history intact.
-                  </p>
                 </div>
-                {canManage ? <ArchiveAccountButton accountId={account.id} accountName={account.name} /> : null}
-              </div>
-            </section>
+
+                <div className="mt-6 space-y-5">
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-slate-50 text-xs uppercase tracking-[0.14em] text-slate-500">
+                        <tr>
+                          <th className="px-4 py-3">Member</th>
+                          <th className="px-4 py-3">Role</th>
+                          <th className="px-4 py-3">Status</th>
+                          <th className="px-4 py-3">Invited</th>
+                          <th className="px-4 py-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        {memberRows.length ? (
+                          memberRows.map((membership) => (
+                            <tr key={membership.id} className="align-top">
+                              <td className="px-4 py-4">
+                                <p className="font-semibold text-slate-900">{membership.full_name || membership.email}</p>
+                                <p className="text-xs text-slate-500">{membership.email}</p>
+                              </td>
+                              <td className="px-4 py-4 capitalize text-slate-700">{membership.role}</td>
+                              <td className="px-4 py-4"><WebsiteBadge status={membership.status} /></td>
+                              <td className="px-4 py-4 text-slate-600">{formatDate(membership.invited_at)}</td>
+                              <td className="px-4 py-4">
+                                <div className="flex justify-end">
+                                  {canManage ? (
+                                    <RemoveAccountMemberButton
+                                      accountId={account.id}
+                                      membershipId={membership.id}
+                                      memberLabel={membership.full_name || membership.email}
+                                      disabledReason={
+                                        membership.user_id === user.id
+                                          ? "You cannot remove your own access from this account."
+                                          : membership.user_id && membership.user_id === account.owner_user_id
+                                            ? "The primary account owner cannot be removed from this screen."
+                                            : null
+                                      }
+                                    />
+                                  ) : (
+                                    <span className="text-xs text-slate-400">—</span>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td className="px-4 py-4 text-slate-500" colSpan={5}>No members recorded yet.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {canManage ? (
+                    <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50/70 p-5">
+                      <InviteAccountMemberForm accountId={account.id} />
+                    </div>
+                  ) : null}
+                </div>
+              </section>
+
+              <section id="danger-zone" className={`scroll-mt-28 ${accountStyles.accountDangerCard}`}>
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-red-700">Danger Zone</p>
+                    <h2 className="mt-2 text-2xl font-black text-slate-950">Archive this account</h2>
+                    <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-700">
+                      Archiving removes this account from active workspaces while keeping campaigns, assets, members, and history intact.
+                    </p>
+                  </div>
+                  {canManage ? <ArchiveAccountButton accountId={account.id} accountName={account.name} /> : null}
+                </div>
+              </section>
+            </div>
           </div>
-        </div>
-      </WebsiteSection>
+        </WebsiteSection>
       </div>
     </WebsitePage>
   );

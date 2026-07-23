@@ -93,22 +93,10 @@ export function buildAppNavigation({
       requiresAccount: true,
       items: [
         {
-          label: "Strategy Foundation",
+          label: "Strategy Workspace",
           href: "/strategy",
-          description: "Review the approved account strategy and campaign defaults.",
+          description: "Manage business truth, voice, offerings, audiences, proof, rules, and knowledge.",
           requiresAccount: true,
-        },
-        {
-          label: "Brand Voice",
-          href: "/brand-voice",
-          description: "Control voice, tone, positioning, and brand rules.",
-          masterOnly: true,
-        },
-        {
-          label: "Knowledge",
-          href: "/knowledge",
-          description: "Manage reusable business knowledge and source material.",
-          masterOnly: true,
         },
       ],
     },
