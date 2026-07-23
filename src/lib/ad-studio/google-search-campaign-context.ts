@@ -14,7 +14,11 @@ import {
   computeStrategyApprovalSourceSignature,
   computeStrategyFoundationSignature,
 } from "@/lib/strategy/strategy-foundation-signature";
-import { createAdPackageDraft } from "./ad-package";
+import {
+  createAdPackageDraft,
+  resolveAdChannelDefinition,
+  type AdPackageChannel,
+} from "./ad-package";
 
 type CampaignRow = Record<string, any> & {
   id: string;
@@ -33,19 +37,22 @@ function combineOffer(explanation: string, deliverables: string) {
   return [explanation.trim(), deliverables.trim()].filter(Boolean).join(" — ");
 }
 
-export async function buildGoogleSearchPackageDraft({
+export async function buildCampaignAdPackageDraft({
   supabase,
   campaign,
   destinationUrl,
+  channel,
 }: {
   supabase: any;
   campaign: CampaignRow;
   destinationUrl: string;
+  channel: AdPackageChannel;
 }) {
+  const definition = resolveAdChannelDefinition(channel);
   const gate = extractOneOffStrategyGate(campaign.strategy);
   if (!gate || gate.status !== "approved") {
     throw new Error(
-      "Approve the campaign Marketing Spine before generating Google Search ads.",
+      `Approve the campaign Marketing Spine before generating ${definition.label} ads.`,
     );
   }
 
@@ -85,8 +92,8 @@ export async function buildGoogleSearchPackageDraft({
     accountId: String(campaign.account_id),
     campaignId: String(campaign.id),
     campaignName: String(campaign.name),
-    title: `${campaign.name} — Google Search Ads`,
-    channel: "google_search",
+    title: `${campaign.name} — ${definition.label} Ads`,
+    channel,
     objective: gate.strategy.campaignObjective,
     audience: gate.strategy.targetAudience,
     offer: combineOffer(
@@ -121,7 +128,7 @@ export async function buildGoogleSearchPackageDraft({
       evidenceSourceIds: sourceIds,
     },
     attributionCampaign: campaignSlug,
-    attributionContent: "google-search-package",
+    attributionContent: `${definition.channel}-package`,
     attributionTerm: null,
     metadata: {
       generatedBy: "ad_studio",
@@ -136,5 +143,22 @@ export async function buildGoogleSearchPackageDraft({
         marketIntelligenceSnapshot?.findings.length ?? 0,
       evidenceSourceCount: sourceIds.length,
     },
+  });
+}
+
+export async function buildGoogleSearchPackageDraft({
+  supabase,
+  campaign,
+  destinationUrl,
+}: {
+  supabase: any;
+  campaign: CampaignRow;
+  destinationUrl: string;
+}) {
+  return buildCampaignAdPackageDraft({
+    supabase,
+    campaign,
+    destinationUrl,
+    channel: "google_search",
   });
 }
