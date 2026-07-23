@@ -13,7 +13,8 @@
     "test:navigation": "node --experimental-strip-types --test tests/app-navigation.test.ts tests/strategy-workspace-navigation.test.ts",
     "test:strategy-foundation": "node --experimental-strip-types --test tests/strategy-foundation.test.ts tests/strategy-foundation-signature.test.ts",
     "test:market-intelligence": "node --experimental-strip-types --test tests/market-intelligence.test.ts",
-    "test:campaign-workspace": "node --experimental-strip-types --test tests/campaign-workspace.test.ts"
+    "test:campaign-workspace": "node --experimental-strip-types --test tests/campaign-workspace.test.ts",
+    "test:ad-studio": "node --experimental-strip-types --test tests/ad-studio-feature.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "latest",
