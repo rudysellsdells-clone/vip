@@ -16,12 +16,11 @@ function parseFeatureFlag(value: string | undefined) {
 export function resolveAdStudioEnabled({
   serverValue,
   publicValue,
-  gitRef,
 }: AdStudioFeatureEnvironment) {
   const explicitValue = parseFeatureFlag(serverValue ?? publicValue);
   if (explicitValue !== null) return explicitValue;
 
-  return gitRef === "h1-17-ad-studio";
+  return true;
 }
 
 export function isAdStudioEnabled() {
