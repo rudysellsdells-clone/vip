@@ -52,7 +52,7 @@ export default async function AdStudioPage() {
         title="Ad Studio foundation"
         description="The workspace boundary is active on the H1.17 preview branch. Generation, scoring, approvals, exports, and campaign handoff will be added in controlled commits."
       >
-        <div className={websiteStyles.metricGrid}>
+        <div className={websiteStyles.metricsGrid}>
           <WebsiteMetric
             label="Package types"
             value="2"
@@ -90,7 +90,7 @@ export default async function AdStudioPage() {
             <article key={item.title} className={websiteStyles.card}>
               <p className={websiteStyles.sectionEyebrow}>{item.status}</p>
               <h3 className={websiteStyles.cardTitle}>{item.title}</h3>
-              <p className={websiteStyles.cardDescription}>{item.description}</p>
+              <p className={websiteStyles.cardText}>{item.description}</p>
             </article>
           ))}
         </div>
