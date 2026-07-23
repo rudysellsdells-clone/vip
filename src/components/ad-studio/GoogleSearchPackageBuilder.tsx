@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 export type SearchCampaignOption = {
@@ -28,7 +28,13 @@ export function GoogleSearchPackageBuilder({
   canManage: boolean;
 }) {
   const router = useRouter();
-  const [campaignId, setCampaignId] = useState(campaigns[0]?.id ?? "");
+  const searchParams = useSearchParams();
+  const requestedCampaignId = searchParams.get("campaignId");
+  const initialCampaignId =
+    campaigns.find((campaign) => campaign.id === requestedCampaignId)?.id ??
+    campaigns[0]?.id ??
+    "";
+  const [campaignId, setCampaignId] = useState(initialCampaignId);
   const [destinationUrl, setDestinationUrl] = useState(defaultDestinationUrl);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
