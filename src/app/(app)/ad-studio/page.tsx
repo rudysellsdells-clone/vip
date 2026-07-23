@@ -13,6 +13,8 @@ import {
   WebsiteSection,
   websiteStyles,
 } from "@/components/website-ui/WebsitePage";
+import type { AdPackage } from "@/lib/ad-studio/ad-package";
+import { scoreAdPackage } from "@/lib/ad-studio/ad-package-scoring";
 import { isAdStudioEnabled } from "@/lib/ad-studio/feature";
 import { extractOneOffStrategyGate } from "@/lib/content-generation/one-off-strategy-gate";
 import { requireStrategyWorkspace } from "@/lib/strategy/require-strategy-workspace";
@@ -41,6 +43,26 @@ function recordValue(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function text(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function adPackageFromMetadata(value: unknown): AdPackage | null {
+  const metadata = recordValue(value);
+  const candidate = recordValue(metadata.adPackage);
+  if (
+    metadata.generatedBy !== "ad_studio" ||
+    candidate.version !== "h1.17" ||
+    !text(candidate.accountId) ||
+    !text(candidate.campaignId) ||
+    !text(candidate.channel) ||
+    !Array.isArray(candidate.variants)
+  ) {
+    return null;
+  }
+  return candidate as unknown as AdPackage;
+}
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
@@ -66,8 +88,7 @@ function campaignOption(campaign: CampaignRow): SearchCampaignOption | null {
 }
 
 function isAdStudioAsset(asset: AdAssetRow) {
-  const metadata = recordValue(asset.metadata);
-  return metadata.generatedBy === "ad_studio";
+  return Boolean(adPackageFromMetadata(asset.metadata));
 }
 
 function platformLabel(asset: AdAssetRow) {
@@ -76,6 +97,12 @@ function platformLabel(asset: AdAssetRow) {
   if (metadata.channel === "linkedin") return "LinkedIn";
   if (metadata.channel === "meta") return "Meta";
   return asset.asset_type === "linkedin_post" ? "LinkedIn" : "Meta";
+}
+
+function scoreStyle(rating: string) {
+  if (rating === "excellent") return "border-emerald-200 bg-emerald-50 text-emerald-900";
+  if (rating === "ready") return "border-blue-200 bg-blue-50 text-blue-900";
+  return "border-amber-200 bg-amber-50 text-amber-900";
 }
 
 export default async function AdStudioPage() {
@@ -110,6 +137,14 @@ export default async function AdStudioPage() {
   const assets = ((assetResult.data ?? []) as AdAssetRow[])
     .filter(isAdStudioAsset)
     .slice(0, 16);
+  const scoredAssets = assets.map((asset) => {
+    const adPackage = adPackageFromMetadata(asset.metadata);
+    return {
+      asset,
+      adPackage,
+      score: adPackage ? scoreAdPackage(adPackage) : null,
+    };
+  });
   const searchAssets = assets.filter((asset) => asset.asset_type === "search_ad");
   const socialAssets = assets.filter((asset) => asset.asset_type !== "search_ad");
   const account = (accountResult.data ?? {}) as Record<string, unknown>;
@@ -122,6 +157,12 @@ export default async function AdStudioPage() {
     campaigns.map((campaign) => [campaign.id, campaign.name]),
   );
   const needsReview = assets.filter((asset) => asset.status === "needs_review").length;
+  const scoreValues = scoredAssets
+    .map((item) => item.score?.total)
+    .filter((value): value is number => typeof value === "number");
+  const averageScore = scoreValues.length
+    ? Math.round(scoreValues.reduce((sum, value) => sum + value, 0) / scoreValues.length)
+    : 0;
 
   return (
     <WebsitePage>
@@ -160,7 +201,7 @@ export default async function AdStudioPage() {
       <WebsiteSection
         eyebrow="Ad operations"
         title="Current advertising workspace"
-        description="All generated packages enter the existing asset review workflow. Automated scoring, structured exports, campaign-stage completion, and provider publishing remain controlled follow-on releases."
+        description="Every package receives a deterministic readiness score and enters the existing asset review workflow. JSON and CSV downloads unlock only after approval."
       >
         <div className={websiteStyles.metricsGrid}>
           <WebsiteMetric
@@ -182,10 +223,9 @@ export default async function AdStudioPage() {
             dot="purple"
           />
           <WebsiteMetric
-            label="Needs review"
-            value={needsReview}
-            description="Generated ad packages awaiting explicit approval."
-            href="/approvals"
+            label="Average readiness"
+            value={scoreValues.length ? `${averageScore}/100` : "—"}
+            description="Deterministic package completeness, fit, traceability, and attribution score."
             dot="gold"
           />
         </div>
@@ -194,11 +234,11 @@ export default async function AdStudioPage() {
       <WebsiteSection
         eyebrow="Recent work"
         title="Advertising packages"
-        description="Open any package in the existing asset workspace to review, edit, approve, reject, or track its history."
+        description="Review packages in the existing asset workspace. Approved packages can be downloaded as complete JSON records or practical CSV files."
       >
         <div className={websiteStyles.cardGrid}>
-          {assets.length ? (
-            assets.map((asset) => (
+          {scoredAssets.length ? (
+            scoredAssets.map(({ asset, score }) => (
               <article key={asset.id} className={websiteStyles.card}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -211,16 +251,53 @@ export default async function AdStudioPage() {
                   </div>
                   <WebsiteBadge status={asset.status} />
                 </div>
-                <p className={websiteStyles.cardMeta}>
-                  Generated {formatDate(asset.created_at)}
-                </p>
-                <div className="mt-4">
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  {score ? (
+                    <span
+                      className={`inline-flex border px-3 py-1 text-xs font-black uppercase tracking-[0.08em] ${scoreStyle(score.rating)}`}
+                    >
+                      {score.total}/100 • {score.rating.replaceAll("_", " ")}
+                    </span>
+                  ) : null}
+                  <span className={websiteStyles.cardMeta}>
+                    Generated {formatDate(asset.created_at)}
+                  </span>
+                </div>
+                {score?.issues.length ? (
+                  <p className="mt-3 text-sm leading-6 text-amber-800">
+                    Review: {score.issues.join(" ")}
+                  </p>
+                ) : null}
+                <div className="mt-4 flex flex-wrap gap-3">
                   <Link
                     href={`/assets/${asset.id}`}
                     className="inline-flex bg-slate-950 px-4 py-2 text-sm font-black text-white hover:bg-slate-800"
                   >
                     Open Ad Package →
                   </Link>
+                  {asset.status === "approved" ? (
+                    <>
+                      <a
+                        href={`/api/ad-studio/assets/${asset.id}/export?format=csv`}
+                        className="inline-flex border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-900 hover:bg-slate-50"
+                      >
+                        Download CSV
+                      </a>
+                      <a
+                        href={`/api/ad-studio/assets/${asset.id}/export?format=json`}
+                        className="inline-flex border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-900 hover:bg-slate-50"
+                      >
+                        Download JSON
+                      </a>
+                    </>
+                  ) : (
+                    <Link
+                      href="/approvals"
+                      className="inline-flex border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-black text-amber-900 hover:bg-amber-100"
+                    >
+                      Approve to Export
+                    </Link>
+                  )}
                 </div>
               </article>
             ))
@@ -234,20 +311,20 @@ export default async function AdStudioPage() {
 
       <WebsiteSection
         eyebrow="Next controlled release"
-        title="Scoring, export, and campaign handoff"
-        description="The next Ad Studio block will evaluate platform fit, clarity, brand alignment, evidence use, CTA strength, destination readiness, and attribution before producing structured export packages."
+        title="Campaign handoff and final release validation"
+        description="The remaining H1.17 work is connecting Ad Studio readiness into each Campaign Workspace, then completing cross-account, mobile, runtime, and release validation."
       >
         <div className="grid gap-4 md:grid-cols-2">
           <div className="border border-slate-200 bg-white p-5">
             <h3 className="text-base font-black text-slate-950">Included now</h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Google Search, Meta, and LinkedIn generation; approved campaign inheritance; research traceability; character guardrails; final destinations; CPC and paid-social metadata; and approval-gated asset storage.
+              Search, Meta, and LinkedIn generation; approved campaign inheritance; research traceability; character guardrails; readiness scoring; tracked URLs; approval-gated JSON and CSV exports; and standard asset review.
             </p>
           </div>
           <div className="border border-slate-200 bg-white p-5">
             <h3 className="text-base font-black text-slate-950">Still protected</h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Automated ad scoring, downloadable platform files, campaign Ads-stage completion, budget planning, audience targeting exports, and direct advertising-provider publishing.
+              Campaign Ads-stage completion, budget planning, audience targeting exports, direct advertising-provider publishing, and production activation.
             </p>
           </div>
         </div>
