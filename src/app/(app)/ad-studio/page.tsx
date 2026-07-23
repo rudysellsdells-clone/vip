@@ -4,6 +4,7 @@ import {
   GoogleSearchPackageBuilder,
   type SearchCampaignOption,
 } from "@/components/ad-studio/GoogleSearchPackageBuilder";
+import { PaidSocialPackageBuilder } from "@/components/ad-studio/PaidSocialPackageBuilder";
 import {
   WebsiteBadge,
   WebsiteHero,
@@ -24,13 +25,21 @@ type CampaignRow = {
   strategy: unknown;
 };
 
-type SearchAssetRow = {
+type AdAssetRow = {
   id: string;
   campaign_id: string | null;
+  asset_type: string;
   title: string;
   status: string | null;
+  metadata: unknown;
   created_at: string;
 };
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -56,6 +65,19 @@ function campaignOption(campaign: CampaignRow): SearchCampaignOption | null {
   };
 }
 
+function isAdStudioAsset(asset: AdAssetRow) {
+  const metadata = recordValue(asset.metadata);
+  return metadata.generatedBy === "ad_studio";
+}
+
+function platformLabel(asset: AdAssetRow) {
+  if (asset.asset_type === "search_ad") return "Google Search";
+  const metadata = recordValue(asset.metadata);
+  if (metadata.channel === "linkedin") return "LinkedIn";
+  if (metadata.channel === "meta") return "Meta";
+  return asset.asset_type === "linkedin_post" ? "LinkedIn" : "Meta";
+}
+
 export default async function AdStudioPage() {
   if (!isAdStudioEnabled()) notFound();
 
@@ -70,11 +92,11 @@ export default async function AdStudioPage() {
       .order("created_at", { ascending: false }),
     supabase
       .from("generated_assets")
-      .select("id,campaign_id,title,status,created_at")
+      .select("id,campaign_id,asset_type,title,status,metadata,created_at")
       .eq("account_id", accountId)
-      .eq("asset_type", "search_ad")
+      .in("asset_type", ["search_ad", "facebook_post", "linkedin_post"])
       .order("created_at", { ascending: false })
-      .limit(12),
+      .limit(50),
     supabase
       .from("accounts")
       .select("website_url,primary_cta")
@@ -85,7 +107,11 @@ export default async function AdStudioPage() {
   const campaigns = ((campaignResult.data ?? []) as CampaignRow[])
     .map(campaignOption)
     .filter((item): item is SearchCampaignOption => Boolean(item));
-  const assets = (assetResult.data ?? []) as SearchAssetRow[];
+  const assets = ((assetResult.data ?? []) as AdAssetRow[])
+    .filter(isAdStudioAsset)
+    .slice(0, 16);
+  const searchAssets = assets.filter((asset) => asset.asset_type === "search_ad");
+  const socialAssets = assets.filter((asset) => asset.asset_type !== "search_ad");
   const account = (accountResult.data ?? {}) as Record<string, unknown>;
   const defaultDestinationUrl =
     (typeof account.primary_cta === "string" && account.primary_cta.startsWith("http")
@@ -110,7 +136,7 @@ export default async function AdStudioPage() {
       <WebsiteSection
         eyebrow="Google Search"
         title="Build a responsive-search-ad package"
-        description="Choose an approved campaign and final landing page. Marketing VIP revalidates the campaign Marketing Spine, current Strategy Foundation, approved Market Intelligence, account permissions, and destination before generating anything."
+        description="Generate three distinct Search concepts with headlines, descriptions, keyword themes, negative-keyword guidance, display paths, callouts, sitelinks, final-URL alignment, and CPC attribution."
       >
         <GoogleSearchPackageBuilder
           campaigns={campaigns}
@@ -120,9 +146,21 @@ export default async function AdStudioPage() {
       </WebsiteSection>
 
       <WebsiteSection
+        eyebrow="Paid Social"
+        title="Build Meta or LinkedIn ad concepts"
+        description="Generate four native-feed concepts—direct response, problem aware, credibility led, and educational—with public ad copy, a platform CTA, audience framing, an image creative brief, final-URL alignment, and paid-social attribution."
+      >
+        <PaidSocialPackageBuilder
+          campaigns={campaigns}
+          defaultDestinationUrl={defaultDestinationUrl}
+          canManage={canManage}
+        />
+      </WebsiteSection>
+
+      <WebsiteSection
         eyebrow="Ad operations"
         title="Current advertising workspace"
-        description="Search packages enter the existing asset review workflow. Paid Social, scoring, exports, and platform handoff remain controlled follow-on releases."
+        description="All generated packages enter the existing asset review workflow. Automated scoring, structured exports, campaign-stage completion, and provider publishing remain controlled follow-on releases."
       >
         <div className={websiteStyles.metricsGrid}>
           <WebsiteMetric
@@ -133,30 +171,29 @@ export default async function AdStudioPage() {
           />
           <WebsiteMetric
             label="Search packages"
-            value={assets.length}
+            value={searchAssets.length}
             description="Recent Google Search packages saved in this workspace."
             dot="blue"
           />
           <WebsiteMetric
-            label="Needs review"
-            value={needsReview}
-            description="Generated Search packages awaiting explicit approval."
-            href="/approvals"
-            dot="gold"
+            label="Paid Social packages"
+            value={socialAssets.length}
+            description="Recent Meta and LinkedIn packages saved in this workspace."
+            dot="purple"
           />
           <WebsiteMetric
-            label="Attribution"
-            value="CPC ready"
-            description="Destination and Google CPC taxonomy are stored with each asset."
-            href="/analytics/taxonomy"
-            dot="purple"
+            label="Needs review"
+            value={needsReview}
+            description="Generated ad packages awaiting explicit approval."
+            href="/approvals"
+            dot="gold"
           />
         </div>
       </WebsiteSection>
 
       <WebsiteSection
         eyebrow="Recent work"
-        title="Google Search packages"
+        title="Advertising packages"
         description="Open any package in the existing asset workspace to review, edit, approve, reject, or track its history."
       >
         <div className={websiteStyles.cardGrid}>
@@ -166,7 +203,7 @@ export default async function AdStudioPage() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className={websiteStyles.sectionEyebrow}>
-                      {asset.campaign_id
+                      {platformLabel(asset)} • {asset.campaign_id
                         ? campaignNameById.get(asset.campaign_id) || "Campaign"
                         : "Campaign"}
                     </p>
@@ -182,14 +219,14 @@ export default async function AdStudioPage() {
                     href={`/assets/${asset.id}`}
                     className="inline-flex bg-slate-950 px-4 py-2 text-sm font-black text-white hover:bg-slate-800"
                   >
-                    Open Search Package →
+                    Open Ad Package →
                   </Link>
                 </div>
               </article>
             ))
           ) : (
             <div className="border border-dashed border-slate-300 bg-slate-50 p-6 text-sm leading-6 text-slate-600">
-              No Google Search packages have been generated for this workspace yet.
+              No Ad Studio packages have been generated for this workspace yet.
             </div>
           )}
         </div>
@@ -197,20 +234,20 @@ export default async function AdStudioPage() {
 
       <WebsiteSection
         eyebrow="Next controlled release"
-        title="Paid Social follows Search validation"
-        description="Meta and LinkedIn packages will reuse this same campaign contract, review system, evidence traceability, and paid-social attribution model. Direct advertising-platform publishing remains outside this release."
+        title="Scoring, export, and campaign handoff"
+        description="The next Ad Studio block will evaluate platform fit, clarity, brand alignment, evidence use, CTA strength, destination readiness, and attribution before producing structured export packages."
       >
         <div className="grid gap-4 md:grid-cols-2">
           <div className="border border-slate-200 bg-white p-5">
             <h3 className="text-base font-black text-slate-950">Included now</h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Responsive Search concepts, keyword themes, negative-keyword guidance, display paths, callouts, sitelinks, destination alignment, CPC metadata, and approval-gated asset storage.
+              Google Search, Meta, and LinkedIn generation; approved campaign inheritance; research traceability; character guardrails; final destinations; CPC and paid-social metadata; and approval-gated asset storage.
             </p>
           </div>
           <div className="border border-slate-200 bg-white p-5">
             <h3 className="text-base font-black text-slate-950">Still protected</h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Paid Social generation, automated ad scoring, structured platform exports, campaign Ads-stage completion, and direct provider publishing.
+              Automated ad scoring, downloadable platform files, campaign Ads-stage completion, budget planning, audience targeting exports, and direct advertising-provider publishing.
             </p>
           </div>
         </div>
