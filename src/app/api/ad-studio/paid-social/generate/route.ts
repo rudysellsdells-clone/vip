@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { getAccountAccessForUser } from "@/lib/accounts/account-context";
 import type { AdPackage, PaidSocialAdVariant } from "@/lib/ad-studio/ad-package";
+import {
+  buildAdPackageTrackedUrl,
+  scoreAdPackage,
+} from "@/lib/ad-studio/ad-package-scoring";
 import { isAdStudioEnabled } from "@/lib/ad-studio/feature";
 import { buildCampaignAdPackageDraft } from "@/lib/ad-studio/google-search-campaign-context";
 import { generatePaidSocialAdPackage } from "@/lib/ad-studio/paid-social-generator";
@@ -41,7 +45,11 @@ function renderVariant(variant: PaidSocialAdVariant, index: number) {
   ].join("\n");
 }
 
-function renderPackageContent(adPackage: AdPackage) {
+function renderPackageContent(
+  adPackage: AdPackage,
+  trackedUrl: string,
+  score: ReturnType<typeof scoreAdPackage>,
+) {
   const variants = adPackage.variants.filter(
     (item): item is PaidSocialAdVariant => item.kind === "paid_social",
   );
@@ -53,7 +61,9 @@ function renderPackageContent(adPackage: AdPackage) {
     `Audience: ${adPackage.audience}`,
     `Offer: ${adPackage.offer}`,
     `Final URL: ${adPackage.destinationUrl}`,
+    `Tracked URL: ${trackedUrl}`,
     `UTM source / medium: ${adPackage.attribution.source} / ${adPackage.attribution.medium}`,
+    `Readiness score: ${score.total}/100 (${score.rating.replaceAll("_", " ")})`,
     "",
     ...variants.flatMap((variant, index) => [
       renderVariant(variant, index),
@@ -82,7 +92,12 @@ export async function POST(request: Request) {
     const body = (await request.json()) as Record<string, unknown>;
     const campaignId = text(body.campaignId, 200);
     const destinationUrl = text(body.destinationUrl, 2000);
-    const platform = body.platform === "linkedin" ? "linkedin" : body.platform === "meta" ? "meta" : null;
+    const platform =
+      body.platform === "linkedin"
+        ? "linkedin"
+        : body.platform === "meta"
+          ? "meta"
+          : null;
     if (!campaignId || !destinationUrl || !platform) {
       return NextResponse.json(
         { error: "Campaign, platform, and destination URL are required." },
@@ -119,7 +134,7 @@ export async function POST(request: Request) {
       channel: platform,
     });
     const generated = await generatePaidSocialAdPackage(draft);
-    const adPackage: AdPackage = {
+    const unscoredPackage: AdPackage = {
       ...draft,
       status: "needs_review",
       variants: generated.variants,
@@ -129,7 +144,17 @@ export async function POST(request: Request) {
         generatedAt: generated.generatedAt,
       },
     };
-    const content = renderPackageContent(adPackage);
+    const score = scoreAdPackage(unscoredPackage);
+    const trackedUrl = buildAdPackageTrackedUrl(unscoredPackage);
+    const adPackage: AdPackage = {
+      ...unscoredPackage,
+      metadata: {
+        ...unscoredPackage.metadata,
+        adScore: score,
+        trackedUrl,
+      },
+    };
+    const content = renderPackageContent(adPackage, trackedUrl, score);
 
     const { data: asset, error: insertError } = await supabase
       .from("generated_assets")
@@ -143,10 +168,13 @@ export async function POST(request: Request) {
         status: "needs_review",
         metadata: toJson({
           generatedBy: "ad_studio",
-          workflowVersion: "h1.17c",
+          workflowVersion: "h1.17d",
           adPackage,
+          adScore: score,
+          trackedUrl,
           analytics: {
             destination_url: adPackage.destinationUrl,
+            tracked_url: trackedUrl,
             utm_source: adPackage.attribution.source,
             utm_medium: adPackage.attribution.medium,
             utm_campaign: adPackage.attribution.campaign,
@@ -184,6 +212,8 @@ export async function POST(request: Request) {
         variantCount: generated.variants.length,
         model: generated.model,
         destinationUrl: adPackage.destinationUrl,
+        trackedUrl,
+        adScore: score,
         strategySignature: adPackage.strategy.strategySignature,
         marketIntelligenceSignature:
           adPackage.strategy.marketIntelligenceSignature,
@@ -194,7 +224,9 @@ export async function POST(request: Request) {
       {
         asset,
         adPackage,
-        message: `${generated.variants.length} ${platformLabel} concepts are ready for review.`,
+        score,
+        trackedUrl,
+        message: `${generated.variants.length} ${platformLabel} concepts are ready for review with a ${score.total}/100 readiness score.`,
       },
       { status: 201 },
     );
