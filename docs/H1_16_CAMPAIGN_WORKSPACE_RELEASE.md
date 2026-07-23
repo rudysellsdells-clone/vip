@@ -56,6 +56,7 @@ H1.16 is stacked on H1.15 and should be released after:
 - Confirm published or sent assets complete Execution.
 - Run `npm run test:campaign-workspace`.
 - Run the production build.
+- Preview deployment revalidation was retriggered on July 23, 2026 after the prior Vercel daily deployment limit.
 
 ## Rollback
 
