@@ -21,21 +21,34 @@ export type VideoAdOption = {
   audience: string;
 };
 
+export type VideoProviderAvailability = {
+  luma: boolean;
+  magica: boolean;
+};
+
 type GenerateResponse = {
   message?: string;
   error?: string;
   asset?: { id?: string };
 };
 
+function initialProvider(availability: VideoProviderAvailability): "luma" | "magica" {
+  if (availability.luma) return "luma";
+  if (availability.magica) return "magica";
+  return "luma";
+}
+
 export function VideoPackageBuilder({
   campaigns,
   ads,
   defaultDestinationUrl,
+  providerAvailability,
   canManage,
 }: {
   campaigns: VideoCampaignOption[];
   ads: VideoAdOption[];
   defaultDestinationUrl: string;
+  providerAvailability: VideoProviderAvailability;
   canManage: boolean;
 }) {
   const router = useRouter();
@@ -43,7 +56,9 @@ export function VideoPackageBuilder({
     campaigns.length ? "campaign" : "ad_package",
   );
   const [sourceId, setSourceId] = useState(campaigns[0]?.id ?? ads[0]?.id ?? "");
-  const [provider, setProvider] = useState<"luma" | "magica">("luma");
+  const [provider, setProvider] = useState<"luma" | "magica">(
+    initialProvider(providerAvailability),
+  );
   const [aspectRatio, setAspectRatio] = useState<"16:9" | "9:16" | "1:1">("16:9");
   const [destinationUrl, setDestinationUrl] = useState(defaultDestinationUrl);
   const [busy, setBusy] = useState(false);
@@ -51,6 +66,8 @@ export function VideoPackageBuilder({
   const [error, setError] = useState("");
   const [assetId, setAssetId] = useState("");
 
+  const hasConfiguredProvider = providerAvailability.luma || providerAvailability.magica;
+  const selectedProviderAvailable = providerAvailability[provider];
   const options = useMemo(
     () =>
       sourceType === "campaign"
@@ -111,7 +128,7 @@ export function VideoPackageBuilder({
     return (
       <div className="border border-amber-200 bg-amber-50 p-5 text-sm leading-6 text-amber-950">
         Approve a campaign Marketing Spine or approve an Ad Studio package before creating video.
-        <div className="mt-3 flex flex-wrap gap-4">
+        <div className="mt-3 flex flex-wrap gap-4 max-sm:flex-col">
           <Link href="/campaigns" className="font-black underline">Open Campaigns →</Link>
           <Link href="/ad-studio" className="font-black underline">Open Ad Studio →</Link>
         </div>
@@ -120,26 +137,32 @@ export function VideoPackageBuilder({
   }
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.75fr)]">
-      <div className="border border-slate-200 bg-white p-5">
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
+    <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.75fr)]">
+      <div className="min-w-0 border border-slate-200 bg-white p-5 max-sm:p-4">
+        {!hasConfiguredProvider ? (
+          <div className="mb-5 border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950" role="status">
+            Video package generation is unavailable until Luma or Magica credentials are configured for this deployment.
+          </div>
+        ) : null}
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="min-w-0">
             <label className="block text-xs font-black uppercase tracking-[0.14em] text-slate-500">Source type</label>
             <select
               value={sourceType}
               onChange={(event) => changeSourceType(event.target.value === "ad_package" ? "ad_package" : "campaign")}
-              className="mt-2 w-full border border-slate-300 bg-white px-3 py-3 text-sm font-bold text-slate-950"
+              className="mt-2 min-h-11 w-full min-w-0 border border-slate-300 bg-white px-3 py-3 text-sm font-bold text-slate-950"
             >
               <option value="campaign" disabled={!campaigns.length}>Approved campaign</option>
               <option value="ad_package" disabled={!ads.length}>Approved ad package</option>
             </select>
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="block text-xs font-black uppercase tracking-[0.14em] text-slate-500">Source</label>
             <select
               value={sourceId}
               onChange={(event) => setSourceId(event.target.value)}
-              className="mt-2 w-full border border-slate-300 bg-white px-3 py-3 text-sm font-bold text-slate-950"
+              className="mt-2 min-h-11 w-full min-w-0 border border-slate-300 bg-white px-3 py-3 text-sm font-bold text-slate-950"
             >
               {options.map((option) => (
                 <option key={option.id} value={option.id}>
@@ -148,23 +171,28 @@ export function VideoPackageBuilder({
               ))}
             </select>
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="block text-xs font-black uppercase tracking-[0.14em] text-slate-500">Video provider</label>
             <select
               value={provider}
               onChange={(event) => setProvider(event.target.value === "magica" ? "magica" : "luma")}
-              className="mt-2 w-full border border-slate-300 bg-white px-3 py-3 text-sm font-bold text-slate-950"
+              disabled={!hasConfiguredProvider}
+              className="mt-2 min-h-11 w-full min-w-0 border border-slate-300 bg-white px-3 py-3 text-sm font-bold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
             >
-              <option value="luma">Luma Dream Machine</option>
-              <option value="magica">Magica</option>
+              <option value="luma" disabled={!providerAvailability.luma}>
+                Luma Dream Machine{providerAvailability.luma ? "" : " — unavailable"}
+              </option>
+              <option value="magica" disabled={!providerAvailability.magica}>
+                Magica{providerAvailability.magica ? "" : " — unavailable"}
+              </option>
             </select>
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="block text-xs font-black uppercase tracking-[0.14em] text-slate-500">Aspect ratio</label>
             <select
               value={aspectRatio}
               onChange={(event) => setAspectRatio(event.target.value === "9:16" ? "9:16" : event.target.value === "1:1" ? "1:1" : "16:9")}
-              className="mt-2 w-full border border-slate-300 bg-white px-3 py-3 text-sm font-bold text-slate-950"
+              className="mt-2 min-h-11 w-full min-w-0 border border-slate-300 bg-white px-3 py-3 text-sm font-bold text-slate-950"
             >
               <option value="16:9">16:9 — landscape</option>
               <option value="9:16">9:16 — vertical</option>
@@ -176,31 +204,34 @@ export function VideoPackageBuilder({
         <label className="mt-5 block text-xs font-black uppercase tracking-[0.14em] text-slate-500">Landing-page URL</label>
         <input
           type="url"
+          inputMode="url"
           value={destinationUrl}
           onChange={(event) => setDestinationUrl(event.target.value)}
-          className="mt-2 w-full border border-slate-300 bg-white px-3 py-3 text-sm text-slate-950"
+          className="mt-2 min-h-11 w-full min-w-0 border border-slate-300 bg-white px-3 py-3 text-sm text-slate-950"
           placeholder="https://example.com/service"
         />
 
         <button
           type="button"
           onClick={generate}
-          disabled={!canManage || !sourceId || !destinationUrl || busy}
-          className="mt-5 inline-flex min-h-11 items-center justify-center bg-slate-950 px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!canManage || !sourceId || !destinationUrl || busy || !selectedProviderAvailable}
+          className="mt-5 inline-flex min-h-11 items-center justify-center bg-slate-950 px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50 max-sm:w-full"
         >
           {busy ? "Building Video Package…" : "Generate Video Package"}
         </button>
 
-        {error ? <p className="mt-4 border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-800">{error}</p> : null}
-        {message ? (
-          <div className="mt-4 border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">
-            {message}{" "}
-            {assetId ? <Link href={`/assets/${assetId}`} className="font-black underline">Open package →</Link> : null}
-          </div>
-        ) : null}
+        <div aria-live="polite" aria-atomic="true">
+          {error ? <p className="mt-4 break-words border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-800">{error}</p> : null}
+          {message ? (
+            <div className="mt-4 break-words border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">
+              {message}{" "}
+              {assetId ? <Link href={`/assets/${assetId}`} className="font-black underline">Open package →</Link> : null}
+            </div>
+          ) : null}
+        </div>
       </div>
 
-      <aside className="border border-slate-200 bg-slate-50 p-5">
+      <aside className="min-w-0 border border-slate-200 bg-slate-50 p-5 max-sm:p-4">
         <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">What VIP creates</p>
         <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-700">
           <li><strong>20-second concept</strong> with a fast hook and one CTA.</li>
@@ -209,7 +240,7 @@ export function VideoPackageBuilder({
           <li><strong>Approval gate</strong> before any provider render starts.</li>
         </ul>
         {selected ? (
-          <div className="mt-5 border-t border-slate-200 pt-4 text-xs leading-5 text-slate-500">
+          <div className="mt-5 break-words border-t border-slate-200 pt-4 text-xs leading-5 text-slate-500">
             Source: <strong>{selected.label}</strong>
             {selected.audience ? <> for <strong>{selected.audience}</strong></> : null}
           </div>
