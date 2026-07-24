@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import {
+  useVideoProviderAvailability,
+  type VideoProviderAvailability,
+} from "./useVideoProviderAvailability";
 
 export type VideoWorkflowOption = {
   id: string;
@@ -15,7 +19,7 @@ export function VideoRenderButton({
   status,
   workflows,
   existingRunId,
-  providerAvailable,
+  providerAvailability: initialProviderAvailability,
   canManage,
 }: {
   assetId: string;
@@ -23,10 +27,12 @@ export function VideoRenderButton({
   status: string;
   workflows: VideoWorkflowOption[];
   existingRunId: string | null;
-  providerAvailable: boolean;
+  providerAvailability?: VideoProviderAvailability;
   canManage: boolean;
 }) {
   const router = useRouter();
+  const { availability, loading: providerStatusLoading } =
+    useVideoProviderAvailability(initialProviderAvailability);
   const [workflowId, setWorkflowId] = useState(workflows[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -38,7 +44,10 @@ export function VideoRenderButton({
   if (status !== "approved") {
     return <Link href="/approvals" className="inline-flex text-sm font-black underline max-sm:w-full">Review and approve →</Link>;
   }
-  if (!providerAvailable) {
+  if (providerStatusLoading) {
+    return <p className="mt-4 text-sm font-semibold text-slate-600" role="status">Checking provider availability…</p>;
+  }
+  if (!availability?.[provider]) {
     return (
       <p className="mt-4 break-words border border-amber-200 bg-amber-50 p-3 text-sm font-semibold leading-6 text-amber-950" role="status">
         {provider === "luma" ? "Luma" : "Magica"} credentials are not configured for this deployment.
