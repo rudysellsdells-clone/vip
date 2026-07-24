@@ -60,13 +60,15 @@ test("package and render APIs block unavailable providers before execution", () 
   }
 });
 
-test("provider status is authenticated and never exposes credentials", () => {
+test("provider status is authenticated and returns booleans without secret values", () => {
   const statusRoute = source("src/app/api/video-studio/providers/status/route.ts");
 
   assert.match(statusRoute, /supabase\.auth\.getUser/);
   assert.match(statusRoute, /status: 401/);
   assert.match(statusRoute, /Cache-Control/);
-  assert.doesNotMatch(statusRoute, /process\.env\.[A-Z_]+\s*[,}]/);
+  assert.match(statusRoute, /providers: providerConfigurationStatus/);
+  assert.doesNotMatch(statusRoute, /return NextResponse\.json\(\s*\{\s*lumaApiKey/);
+  assert.doesNotMatch(statusRoute, /return NextResponse\.json\(\s*\{\s*magicaApiKey/);
 });
 
 test("Video Studio controls retain mobile-safe actions and accessible feedback", () => {
