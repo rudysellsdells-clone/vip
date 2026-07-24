@@ -1,0 +1,68 @@
+name: Video Studio Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "src/app/(app)/video-studio/**"
+      - "src/app/(app)/campaigns/[campaignId]/**"
+      - "src/app/api/video-studio/**"
+      - "src/components/video-studio/**"
+      - "src/lib/video-studio/**"
+      - "src/lib/navigation/**"
+      - "tests/video-studio-*.test.ts"
+      - "tests/app-navigation.test.ts"
+      - "package.json"
+      - ".github/workflows/video-studio-validation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --loglevel=error
+
+      - name: Capture TypeScript diagnostics
+        id: typecheck
+        run: |
+          set +e
+          npm run typecheck > video-studio-typecheck.log 2>&1
+          status=$?
+          cat video-studio-typecheck.log
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload TypeScript diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-studio-typecheck-log
+          path: video-studio-typecheck.log
+          retention-days: 7
+
+      - name: Run Video Studio tests
+        run: npm run test:video-studio
+
+      - name: Run navigation regression tests
+        run: npm run test:navigation
+
+      - name: Enforce TypeScript result
+        if: steps.typecheck.outputs.status != '0'
+        run: exit 1
+
+      - name: Build production application
+        run: npm run build

@@ -1,4 +1,5 @@
 import { isAdStudioEnabled } from "../ad-studio/feature";
+import { isVideoStudioEnabled } from "../video-studio/feature";
 
 export const NAVIGATION_FEATURES = {
   marketIntelligence: "market-intelligence",
@@ -27,9 +28,7 @@ function defaultFeatureEnvironment(): NavigationFeatureEnvironment {
       process.env.NEXT_PUBLIC_ENABLE_MARKET_INTELLIGENCE ??
       "true",
     adStudio: isAdStudioEnabled() ? "true" : undefined,
-    videoStudio:
-      process.env.ENABLE_VIDEO_STUDIO ??
-      process.env.NEXT_PUBLIC_ENABLE_VIDEO_STUDIO,
+    videoStudio: isVideoStudioEnabled() ? "true" : undefined,
   };
 }
 
