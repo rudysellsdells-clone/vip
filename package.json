@@ -15,7 +15,7 @@
     "test:market-intelligence": "node --experimental-strip-types --test tests/market-intelligence.test.ts",
     "test:campaign-workspace": "node --experimental-strip-types --test tests/campaign-workspace.test.ts",
     "test:ad-studio": "node --experimental-strip-types --test tests/ad-studio-feature.test.ts tests/ad-studio-package.test.ts tests/ad-studio-google-search.test.ts tests/ad-studio-paid-social.test.ts tests/ad-studio-scoring.test.ts tests/ad-studio-campaign-readiness.test.ts tests/ad-studio-strategy-validation.test.ts",
-    "test:video-studio": "node --experimental-strip-types --test tests/video-studio-feature.test.ts tests/video-studio-contract.test.ts tests/video-studio-provider-registry.test.ts tests/video-studio-generation.test.ts tests/video-studio-asset.test.ts tests/video-studio-readiness.test.ts"
+    "test:video-studio": "node --experimental-strip-types --test tests/video-studio-feature.test.ts tests/video-studio-contract.test.ts tests/video-studio-provider-registry.test.ts tests/video-studio-generation.test.ts tests/video-studio-asset.test.ts tests/video-studio-readiness.test.ts tests/video-studio-release-hardening.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "latest",
