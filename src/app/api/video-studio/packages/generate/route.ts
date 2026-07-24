@@ -5,6 +5,7 @@ import { logActivity } from "@/lib/security/auditLog";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 import { isVideoStudioEnabled } from "@/lib/video-studio/feature";
+import { providerConfigurationStatus } from "@/lib/video-studio/provider-registry";
 import { generateVideoPackage } from "@/lib/video-studio/video-generator";
 import {
   buildAdVideoSourceContext,
@@ -71,6 +72,20 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: "Source and video provider are required." },
         { status: 400 },
+      );
+    }
+
+    const providerStatus = providerConfigurationStatus({
+      lumaApiKey: process.env.LUMA_API_KEY,
+      magicaApiKey: process.env.MAGICA_API_KEY,
+      galaxyAiApiKey: process.env.GALAXYAI_API_KEY,
+    });
+    if (!providerStatus[provider]) {
+      return NextResponse.json(
+        {
+          error: `${provider === "luma" ? "Luma" : "Magica"} is not configured for this deployment.`,
+        },
+        { status: 503 },
       );
     }
 
