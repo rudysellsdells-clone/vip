@@ -21,6 +21,10 @@ import { extractOneOffStrategyGate } from "@/lib/content-generation/one-off-stra
 import { getVipManagedGalaxyWorkflowMetadata } from "@/lib/galaxyai/workflow-metadata";
 import { requireStrategyWorkspace } from "@/lib/strategy/require-strategy-workspace";
 import {
+  buildVideoUsageSummary,
+  videoReviewStatusFromAssetStatus,
+} from "@/lib/video-studio/campaign-video-readiness";
+import {
   adPackageFromMetadata,
   recordValue,
   videoPackageFromMetadata,
@@ -37,6 +41,10 @@ import {
 
 export const dynamic = "force-dynamic";
 
+type PageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
 type CampaignRow = {
   id: string;
   name: string;
@@ -51,6 +59,11 @@ type AssetRow = {
   status: string;
   metadata: unknown;
   created_at: string;
+};
+
+type VideoAsset = {
+  asset: AssetRow;
+  videoPackage: VideoPackage;
 };
 
 type WorkflowRow = {
@@ -104,8 +117,33 @@ function adOption(asset: AssetRow): VideoAdOption | null {
   };
 }
 
-export default async function VideoStudioPage() {
+function metadataRenderRunId(metadata: unknown) {
+  const render = recordValue(recordValue(metadata).render);
+  return typeof render.runId === "string" && render.runId.trim()
+    ? render.runId.trim()
+    : null;
+}
+
+function preferredCampaignOptions(
+  campaigns: VideoCampaignOption[],
+  preferredCampaignId: string,
+) {
+  if (!preferredCampaignId) return campaigns;
+  return [...campaigns].sort((left, right) => {
+    if (left.id === preferredCampaignId) return -1;
+    if (right.id === preferredCampaignId) return 1;
+    return 0;
+  });
+}
+
+export default async function VideoStudioPage({ searchParams }: PageProps) {
   if (!isVideoStudioEnabled()) notFound();
+
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const campaignIdParam = resolvedSearchParams.campaignId;
+  const preferredCampaignId = Array.isArray(campaignIdParam)
+    ? campaignIdParam[0] ?? ""
+    : campaignIdParam ?? "";
 
   const { supabase, accountId, accountName, canManage, isMaster } =
     await requireStrategyWorkspace();
@@ -134,6 +172,7 @@ export default async function VideoStudioPage() {
           "video_script",
           "galaxyai_prompt",
         ])
+        .is("archived_at", null)
         .order("created_at", { ascending: false })
         .limit(100),
       supabase
@@ -150,17 +189,20 @@ export default async function VideoStudioPage() {
     ]);
 
   const campaigns = (campaignResult.data ?? []) as CampaignRow[];
-  const campaignOptions = campaigns
-    .map(campaignOption)
-    .filter((item): item is VideoCampaignOption => Boolean(item));
+  const campaignOptions = preferredCampaignOptions(
+    campaigns
+      .map(campaignOption)
+      .filter((item): item is VideoCampaignOption => Boolean(item)),
+    preferredCampaignId,
+  );
   const assets = (assetResult.data ?? []) as AssetRow[];
   const adOptions = assets
     .map(adOption)
     .filter((item): item is VideoAdOption => Boolean(item));
   const videoAssets = assets
     .map((asset) => ({ asset, videoPackage: videoPackageFromMetadata(asset.metadata) }))
-    .filter((item) => Boolean(item.videoPackage))
-    .slice(0, 24) as Array<{ asset: AssetRow; videoPackage: VideoPackage }>;
+    .filter((item): item is VideoAsset => Boolean(item.videoPackage))
+    .slice(0, 24);
   const workflows = ((workflowResult.data ?? []) as WorkflowRow[])
     .filter((workflow) => {
       const metadata = getVipManagedGalaxyWorkflowMetadata(workflow.metadata);
@@ -180,13 +222,39 @@ export default async function VideoStudioPage() {
         .order("created_at", { ascending: false })
         .limit(40)
     : { data: [] };
-  const runs = [
-    ...((lumaResult.data ?? []) as Array<Record<string, unknown>>).map(normalizeLumaRun),
-    ...((magicaResult.data ?? []) as Array<Record<string, unknown>>).map(normalizeMagicaRun),
-  ]
+  const rawRuns = [
+    ...((lumaResult.data ?? []) as Array<Record<string, unknown>>).map(
+      normalizeLumaRun,
+    ),
+    ...((magicaResult.data ?? []) as Array<Record<string, unknown>>).map(
+      normalizeMagicaRun,
+    ),
+  ];
+  const assetById = new Map(videoAssets.map((item) => [item.asset.id, item]));
+  const assetByRunId = new Map(
+    videoAssets
+      .map((item) => [metadataRenderRunId(item.asset.metadata), item] as const)
+      .filter((entry): entry is readonly [string, VideoAsset] => Boolean(entry[0])),
+  );
+  const runs = rawRuns
+    .map((run): UnifiedVideoRun => {
+      const linkedAsset =
+        (run.sourceAssetId ? assetById.get(run.sourceAssetId) : null) ??
+        assetByRunId.get(run.id) ??
+        null;
+      return {
+        ...run,
+        sourceAssetId: linkedAsset?.asset.id ?? run.sourceAssetId,
+        reviewStatus: linkedAsset
+          ? videoReviewStatusFromAssetStatus(linkedAsset.asset.status)
+          : run.reviewStatus,
+      };
+    })
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     .slice(0, 24);
-  const campaignNameById = new Map(campaigns.map((campaign) => [campaign.id, campaign.name]));
+  const campaignNameById = new Map(
+    campaigns.map((campaign) => [campaign.id, campaign.name]),
+  );
   const providerStatus = providerConfigurationStatus({
     lumaApiKey: process.env.LUMA_API_KEY,
     magicaApiKey: process.env.MAGICA_API_KEY,
@@ -198,9 +266,11 @@ export default async function VideoStudioPage() {
       ? account.primary_cta
       : "") ||
     (typeof account.website_url === "string" ? account.website_url : "");
-  const activeRuns = runs.filter((run) => ["queued", "rendering"].includes(run.renderStatus)).length;
-  const completedRuns = runs.filter((run) => run.renderStatus === "completed").length;
-  const needsReview = videoAssets.filter((item) => item.asset.status === "needs_review").length;
+  const usage = buildVideoUsageSummary(runs);
+  const needsReview = videoAssets.filter(
+    (item) =>
+      videoReviewStatusFromAssetStatus(item.asset.status) === "needs_review",
+  ).length;
 
   return (
     <WebsitePage>
@@ -245,9 +315,9 @@ export default async function VideoStudioPage() {
           dot="gold"
         />
         <WebsiteMetric
-          label="Completed renders"
-          value={completedRuns}
-          description={`${activeRuns} additional render${activeRuns === 1 ? " is" : "s are"} active.`}
+          label="Provider attempts"
+          value={usage.totalAttempts}
+          description={`${usage.completedAttempts} completed, ${usage.activeAttempts} active, and ${usage.failedAttempts} failed.`}
           dot="green"
         />
       </section>
@@ -262,7 +332,9 @@ export default async function VideoStudioPage() {
             {videoAssets.map(({ asset, videoPackage }) => {
               const metadata = recordValue(asset.metadata);
               const render = recordValue(metadata.render);
-              const existingRunId = typeof render.runId === "string" ? render.runId : null;
+              const existingRunId =
+                typeof render.runId === "string" ? render.runId : null;
+              const reviewStatus = videoReviewStatusFromAssetStatus(asset.status);
               return (
                 <article key={asset.id} className={websiteStyles.card}>
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -276,11 +348,15 @@ export default async function VideoStudioPage() {
                   </div>
                   <p className={websiteStyles.cardText}>{videoPackage.hook}</p>
                   <p className={websiteStyles.cardMeta}>
-                    {videoPackage.source.title} • {videoPackage.durationSeconds}s • Created {formatDate(asset.created_at)}
+                    {videoPackage.source.title} • {videoPackage.durationSeconds}s • Review {reviewStatus.replaceAll("_", " ")} • Created {formatDate(asset.created_at)}
                   </p>
                   <div className="mt-4 flex flex-wrap gap-4">
-                    <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>Open package →</Link>
-                    <Link href="/approvals" className={websiteStyles.link}>Open review →</Link>
+                    <Link href={`/assets/${asset.id}`} className={websiteStyles.link}>
+                      Open package →
+                    </Link>
+                    <Link href="/approvals" className={websiteStyles.link}>
+                      Open review →
+                    </Link>
                   </div>
                   <VideoRenderButton
                     assetId={asset.id}
@@ -295,33 +371,58 @@ export default async function VideoStudioPage() {
             })}
           </div>
         ) : (
-          <div className={websiteStyles.empty}>No Video Studio packages have been generated yet.</div>
+          <div className={websiteStyles.empty}>
+            No Video Studio packages have been generated yet.
+          </div>
         )}
       </WebsiteSection>
 
       <WebsiteSection
         eyebrow="Provider history"
         title="Luma and Magica render activity"
-        description="Existing provider-specific records remain intact and are normalized into one operational history."
+        description="Existing provider-specific records remain intact and are normalized into one operational history with linked review decisions and usage counts."
       >
+        <div className="mb-6 flex flex-wrap gap-2">
+          <span className={websiteStyles.badge}>{usage.lumaAttempts} Luma attempt(s)</span>
+          <span className={websiteStyles.badge}>{usage.magicaAttempts} Magica attempt(s)</span>
+          <span className={websiteStyles.badge}>{usage.activeAttempts} active</span>
+          <span className={websiteStyles.badge}>{usage.failedAttempts} failed</span>
+        </div>
         {runs.length ? (
           <div className={websiteStyles.cardGrid}>
             {runs.map((run) => (
               <article key={`${run.provider}-${run.id}`} className={websiteStyles.card}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className={websiteStyles.sectionEyebrow}>{VIDEO_PROVIDER_REGISTRY[run.provider].label}</p>
+                    <p className={websiteStyles.sectionEyebrow}>
+                      {VIDEO_PROVIDER_REGISTRY[run.provider].label}
+                    </p>
                     <h3 className={websiteStyles.cardTitle}>{run.title}</h3>
                   </div>
                   <WebsiteBadge status={runStatus(run)} />
                 </div>
                 <p className={websiteStyles.cardMeta}>
-                  {run.campaignId ? campaignNameById.get(run.campaignId) ?? "Campaign" : "Unassigned source"}
+                  {run.campaignId
+                    ? campaignNameById.get(run.campaignId) ?? "Campaign"
+                    : "Unassigned source"}
+                  {" • "}Review {run.reviewStatus.replaceAll("_", " ")}
                   {" • "}Updated {formatDate(run.updatedAt)}
                 </p>
-                {run.error ? <p className="mt-3 text-sm leading-6 text-red-700">{run.error}</p> : null}
+                {run.sourceAssetId ? (
+                  <Link href={`/assets/${run.sourceAssetId}`} className={websiteStyles.link}>
+                    Open source package →
+                  </Link>
+                ) : null}
+                {run.error ? (
+                  <p className="mt-3 text-sm leading-6 text-red-700">{run.error}</p>
+                ) : null}
                 {run.outputUrl ? (
-                  <a href={run.outputUrl} target="_blank" rel="noreferrer" className={websiteStyles.link}>
+                  <a
+                    href={run.outputUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={websiteStyles.link}
+                  >
                     Open provider output →
                   </a>
                 ) : null}
@@ -329,7 +430,9 @@ export default async function VideoStudioPage() {
             ))}
           </div>
         ) : (
-          <div className={websiteStyles.empty}>No Luma or Magica renders are recorded for this workspace yet.</div>
+          <div className={websiteStyles.empty}>
+            No Luma or Magica renders are recorded for this workspace yet.
+          </div>
         )}
       </WebsiteSection>
 
@@ -339,7 +442,9 @@ export default async function VideoStudioPage() {
           title="Existing provider controls remain available"
           description="Workflow provisioning and provider diagnostics remain separate from the customer-facing Video Studio."
         >
-          <Link href="/galaxyai" className={websiteStyles.link}>Open media provider administration →</Link>
+          <Link href="/galaxyai" className={websiteStyles.link}>
+            Open media provider administration →
+          </Link>
         </WebsiteSection>
       ) : null}
     </WebsitePage>
