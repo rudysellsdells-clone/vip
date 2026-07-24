@@ -1,4 +1,5 @@
 import { CampaignAdLane } from "@/components/ad-studio/CampaignAdLane";
+import { CampaignVideoLane } from "@/components/video-studio/CampaignVideoLane";
 
 type CampaignLayoutProps = {
   children: React.ReactNode;
@@ -15,6 +16,7 @@ export default async function CampaignLayout({
     <>
       {children}
       <CampaignAdLane campaignId={campaignId} />
+      <CampaignVideoLane campaignId={campaignId} />
     </>
   );
 }
