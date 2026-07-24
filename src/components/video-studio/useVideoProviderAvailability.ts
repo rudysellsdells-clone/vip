@@ -11,6 +11,24 @@ type ProviderStatusResponse = {
   providers?: VideoProviderAvailability;
 };
 
+let providerStatusPromise: Promise<VideoProviderAvailability> | null = null;
+
+function loadProviderAvailability() {
+  if (!providerStatusPromise) {
+    providerStatusPromise = fetch("/api/video-studio/providers/status", {
+      cache: "no-store",
+    }).then(async (response) => {
+      const result = (await response.json()) as ProviderStatusResponse;
+      if (!response.ok || !result.providers) {
+        throw new Error("Unable to load video provider status.");
+      }
+      return result.providers;
+    });
+  }
+
+  return providerStatusPromise;
+}
+
 export function useVideoProviderAvailability(
   initialAvailability?: VideoProviderAvailability,
 ) {
@@ -22,15 +40,12 @@ export function useVideoProviderAvailability(
     if (initialAvailability) return;
 
     let active = true;
-    fetch("/api/video-studio/providers/status", { cache: "no-store" })
-      .then(async (response) => {
-        const result = (await response.json()) as ProviderStatusResponse;
-        if (!response.ok || !result.providers) {
-          throw new Error("Unable to load video provider status.");
-        }
-        if (active) setAvailability(result.providers);
+    loadProviderAvailability()
+      .then((providers) => {
+        if (active) setAvailability(providers);
       })
       .catch(() => {
+        providerStatusPromise = null;
         if (active) setAvailability({ luma: false, magica: false });
       });
 
