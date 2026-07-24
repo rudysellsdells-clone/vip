@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  useVideoProviderAvailability,
+  type VideoProviderAvailability,
+} from "./useVideoProviderAvailability";
 
 export type VideoCampaignOption = {
   id: string;
@@ -21,11 +25,6 @@ export type VideoAdOption = {
   audience: string;
 };
 
-export type VideoProviderAvailability = {
-  luma: boolean;
-  magica: boolean;
-};
-
 type GenerateResponse = {
   message?: string;
   error?: string;
@@ -42,22 +41,25 @@ export function VideoPackageBuilder({
   campaigns,
   ads,
   defaultDestinationUrl,
-  providerAvailability,
+  providerAvailability: initialProviderAvailability,
   canManage,
 }: {
   campaigns: VideoCampaignOption[];
   ads: VideoAdOption[];
   defaultDestinationUrl: string;
-  providerAvailability: VideoProviderAvailability;
+  providerAvailability?: VideoProviderAvailability;
   canManage: boolean;
 }) {
   const router = useRouter();
+  const { availability, loading: providerStatusLoading } =
+    useVideoProviderAvailability(initialProviderAvailability);
+  const providerAvailability = availability ?? { luma: false, magica: false };
   const [sourceType, setSourceType] = useState<"campaign" | "ad_package">(
     campaigns.length ? "campaign" : "ad_package",
   );
   const [sourceId, setSourceId] = useState(campaigns[0]?.id ?? ads[0]?.id ?? "");
   const [provider, setProvider] = useState<"luma" | "magica">(
-    initialProvider(providerAvailability),
+    initialProvider(initialProviderAvailability ?? { luma: false, magica: false }),
   );
   const [aspectRatio, setAspectRatio] = useState<"16:9" | "9:16" | "1:1">("16:9");
   const [destinationUrl, setDestinationUrl] = useState(defaultDestinationUrl);
@@ -65,6 +67,11 @@ export function VideoPackageBuilder({
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [assetId, setAssetId] = useState("");
+
+  useEffect(() => {
+    if (!availability || availability[provider]) return;
+    setProvider(initialProvider(availability));
+  }, [availability, provider]);
 
   const hasConfiguredProvider = providerAvailability.luma || providerAvailability.magica;
   const selectedProviderAvailable = providerAvailability[provider];
@@ -139,7 +146,11 @@ export function VideoPackageBuilder({
   return (
     <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.75fr)]">
       <div className="min-w-0 border border-slate-200 bg-white p-5 max-sm:p-4">
-        {!hasConfiguredProvider ? (
+        {providerStatusLoading ? (
+          <div className="mb-5 border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700" role="status">
+            Checking video provider availability…
+          </div>
+        ) : !hasConfiguredProvider ? (
           <div className="mb-5 border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950" role="status">
             Video package generation is unavailable until Luma or Magica credentials are configured for this deployment.
           </div>
@@ -176,7 +187,7 @@ export function VideoPackageBuilder({
             <select
               value={provider}
               onChange={(event) => setProvider(event.target.value === "magica" ? "magica" : "luma")}
-              disabled={!hasConfiguredProvider}
+              disabled={providerStatusLoading || !hasConfiguredProvider}
               className="mt-2 min-h-11 w-full min-w-0 border border-slate-300 bg-white px-3 py-3 text-sm font-bold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
             >
               <option value="luma" disabled={!providerAvailability.luma}>
@@ -214,7 +225,7 @@ export function VideoPackageBuilder({
         <button
           type="button"
           onClick={generate}
-          disabled={!canManage || !sourceId || !destinationUrl || busy || !selectedProviderAvailable}
+          disabled={!canManage || !sourceId || !destinationUrl || busy || providerStatusLoading || !selectedProviderAvailable}
           className="mt-5 inline-flex min-h-11 items-center justify-center bg-slate-950 px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50 max-sm:w-full"
         >
           {busy ? "Building Video Package…" : "Generate Video Package"}
