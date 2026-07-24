@@ -7,6 +7,7 @@ import { logActivity } from "@/lib/security/auditLog";
 import { createClient } from "@/lib/supabase/server";
 import { untypedSupabase } from "@/lib/supabase/untyped";
 import { isVideoStudioEnabled } from "@/lib/video-studio/feature";
+import { providerConfigurationStatus } from "@/lib/video-studio/provider-registry";
 import {
   lumaScenePlanFromPackage,
   recordValue,
@@ -74,6 +75,21 @@ export async function POST(request: Request, context: RouteContext) {
     if (!videoPackage) {
       return NextResponse.json({ error: "This asset is not a Video Studio package." }, { status: 400 });
     }
+
+    const providerStatus = providerConfigurationStatus({
+      lumaApiKey: process.env.LUMA_API_KEY,
+      magicaApiKey: process.env.MAGICA_API_KEY,
+      galaxyAiApiKey: process.env.GALAXYAI_API_KEY,
+    });
+    if (!providerStatus[videoPackage.provider]) {
+      return NextResponse.json(
+        {
+          error: `${videoPackage.provider === "luma" ? "Luma" : "Magica"} is not configured for this deployment.`,
+        },
+        { status: 503 },
+      );
+    }
+
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     const startedAt = new Date().toISOString();
 
